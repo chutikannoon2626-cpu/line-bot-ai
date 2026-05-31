@@ -10,6 +10,7 @@ interface TextMessageEvent {
   type: 'message'
   replyToken: string
   message: { type: 'text'; text: string }
+  [key: string]: unknown
 }
 
 interface WebhookBody {
