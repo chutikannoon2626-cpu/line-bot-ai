@@ -3,7 +3,7 @@ import { buildSystemPrompt } from './prompts'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
-const MODEL = 'gemini-2.0-flash'
+const MODEL = 'gemini-1.5-flash'
 
 const DEFAULT_REPLY =
   'ขออภัยค่ะ น้องใจดีไม่มีข้อมูลในส่วนนี้ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
@@ -33,30 +33,24 @@ export async function generateReply(
 
   const usage = response.usageMetadata
   const finishReason = response.candidates?.[0]?.finishReason
+
   console.log(
     JSON.stringify({
       ts: new Date().toISOString(),
       level: 'info',
       event: 'gemini.reply',
       latencyMs: Date.now() - startTime,
-      finishReason,
+      finishReason: finishReason ?? 'unknown',
+      candidatesCount: response.candidates?.length ?? 0,
+      textLength: response.text?.length ?? 0,
       thoughtsTokenCount: usage?.thoughtsTokenCount ?? 0,
       candidatesTokenCount: usage?.candidatesTokenCount ?? 0,
       totalTokenCount: usage?.totalTokenCount ?? 0,
     })
   )
 
-  // ป้องกัน truncated reply — ถ้า token หมดก่อนจบประโยค ใช้ default แทน
-  if (finishReason === 'MAX_TOKENS') {
-    console.warn('[gemini] truncated · returning default reply', {
-      thoughtsTokenCount: usage?.thoughtsTokenCount,
-      candidatesTokenCount: usage?.candidatesTokenCount,
-    })
-    return DEFAULT_REPLY
-  }
+  if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
 
   const reply = response.text?.trim()
-  if (!reply) throw new Error('gemini_empty_response')
-
-  return reply
+  return reply || DEFAULT_REPLY
 }
