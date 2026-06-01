@@ -1,0 +1,187 @@
+// Catalog Card — แสดงรายการสินค้าวิทยุสื่อสาร
+export function catalogCard(
+  items: { name: string; model?: string; price: number; detail?: string }[]
+) {
+  return {
+    type: 'flex' as const,
+    altText: 'รายการสินค้า Spender Club',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#1A3A5C',
+        contents: [
+          {
+            type: 'text',
+            text: 'รายการสินค้า',
+            weight: 'bold',
+            size: 'xl',
+            color: '#FFFFFF',
+          },
+          {
+            type: 'text',
+            text: 'Spender Club · วิทยุสื่อสาร',
+            size: 'sm',
+            color: '#AACCEE',
+          },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        contents: items.map((item) => ({
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'xs',
+          contents: [
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: item.model ? `${item.name} (${item.model})` : item.name,
+                  size: 'sm',
+                  weight: 'bold',
+                  flex: 3,
+                  wrap: true,
+                },
+                {
+                  type: 'text',
+                  text: `${item.price.toLocaleString()} ฿`,
+                  size: 'sm',
+                  align: 'end',
+                  color: '#1A3A5C',
+                  weight: 'bold',
+                  flex: 2,
+                },
+              ],
+            },
+            ...(item.detail
+              ? [
+                  {
+                    type: 'text' as const,
+                    text: item.detail,
+                    size: 'xs',
+                    color: '#888888',
+                    wrap: true,
+                  },
+                ]
+              : []),
+            { type: 'separator' as const },
+          ],
+        })),
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#1A3A5C',
+            action: {
+              type: 'message',
+              label: 'สนใจสั่งซื้อ',
+              text: 'ขอแอดมินติดต่อกลับ',
+            },
+          },
+        ],
+      },
+    },
+  }
+}
+
+// Contact Card — ข้อมูลติดต่อ Spender Club
+export function contactCard(contact: {
+  phone?: string
+  line?: string
+  address?: string
+  hours?: string
+}) {
+  const rows = []
+
+  if (contact.phone) {
+    rows.push({
+      type: 'box' as const,
+      layout: 'horizontal' as const,
+      spacing: 'sm',
+      contents: [
+        { type: 'text' as const, text: '📞', size: 'sm', flex: 1 },
+        { type: 'text' as const, text: contact.phone, size: 'sm', flex: 4, wrap: true },
+      ],
+    })
+  }
+
+  if (contact.line) {
+    rows.push({
+      type: 'box' as const,
+      layout: 'horizontal' as const,
+      spacing: 'sm',
+      contents: [
+        { type: 'text' as const, text: '💬', size: 'sm', flex: 1 },
+        { type: 'text' as const, text: `LINE: ${contact.line}`, size: 'sm', flex: 4, wrap: true },
+      ],
+    })
+  }
+
+  if (contact.address) {
+    rows.push({
+      type: 'box' as const,
+      layout: 'horizontal' as const,
+      spacing: 'sm',
+      contents: [
+        { type: 'text' as const, text: '📍', size: 'sm', flex: 1 },
+        { type: 'text' as const, text: contact.address, size: 'sm', flex: 4, wrap: true },
+      ],
+    })
+  }
+
+  if (contact.hours) {
+    rows.push({
+      type: 'box' as const,
+      layout: 'horizontal' as const,
+      spacing: 'sm',
+      contents: [
+        { type: 'text' as const, text: '🕐', size: 'sm', flex: 1 },
+        { type: 'text' as const, text: contact.hours, size: 'sm', flex: 4, wrap: true },
+      ],
+    })
+  }
+
+  return {
+    type: 'flex' as const,
+    altText: 'ข้อมูลติดต่อ Spender Club',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#1A3A5C',
+        contents: [
+          {
+            type: 'text',
+            text: 'ติดต่อเรา',
+            weight: 'bold',
+            size: 'xl',
+            color: '#FFFFFF',
+          },
+          {
+            type: 'text',
+            text: 'Spender Club',
+            size: 'sm',
+            color: '#AACCEE',
+          },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        contents: rows,
+      },
+    },
+  }
+}
