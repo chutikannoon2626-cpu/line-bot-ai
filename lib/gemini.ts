@@ -24,9 +24,8 @@ export async function generateReply(
 
   const response = await ai.models.generateContent({
     model: MODEL,
-    contents: userMessage,
+    contents: `${systemPrompt}\n\nคำถามลูกค้า: ${userMessage}`,
     config: {
-      systemInstruction: systemPrompt,
       temperature: 1.0,
       maxOutputTokens: 1024,
     },
