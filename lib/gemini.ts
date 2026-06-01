@@ -1,55 +1,49 @@
-import { GoogleGenAI } from '@google/genai'
-import { buildSystemPrompt } from './prompts'
+body.events.map(async (event) => {
+  if (event.type !== 'message' || !event.message) return
 
-const MODEL = 'gemini-2.5-flash'
-
-const DEFAULT_REPLY =
-  'ขออภัยค่ะ น้องใจดีไม่มีข้อมูลในส่วนนี้ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
-
-export async function generateReply(
-  userMessage: string,
-  faqText: string
-): Promise<string> {
+  const msgType = (event.message as { type: string }).type
+  const replyToken = event.replyToken as string
+  const source = event.source as { type: string; userId?: string }
+  const userId = source.userId ?? 'unknown'
   const startTime = Date.now()
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
 
-  const systemPrompt = buildSystemPrompt(
-    'น้องใจดี',
-    'Spender Club',
-    faqText,
-    DEFAULT_REPLY,
-    'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ'
-  )
-
-  const response = await ai.models.generateContent({
-    model: MODEL,
-    contents: `${systemPrompt}\n\nคำถามลูกค้า: ${userMessage}`,
-    config: {
-      temperature: 1.0,
-      maxOutputTokens: 1024,
-    },
+  const lineClient = new messagingApi.MessagingApiClient({
+    channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
   })
 
-  const usage = response.usageMetadata
-  const finishReason = response.candidates?.[0]?.finishReason
+  // --- TEXT ---
+  if (msgType === 'text') {
+    const userMessage = (event.message as { text: string }).text
+    // ... โค้ดเดิมทั้งหมด ไม่ต้องเปลี่ยน
+  }
 
-  console.log(
-    JSON.stringify({
-      ts: new Date().toISOString(),
-      level: 'info',
-      event: 'gemini.reply',
-      latencyMs: Date.now() - startTime,
-      finishReason: finishReason ?? 'unknown',
-      candidatesCount: response.candidates?.length ?? 0,
-      textLength: response.text?.length ?? 0,
-      thoughtsTokenCount: usage?.thoughtsTokenCount ?? 0,
-      candidatesTokenCount: usage?.candidatesTokenCount ?? 0,
-      totalTokenCount: usage?.totalTokenCount ?? 0,
-    })
-  )
+  // --- IMAGE ---
+  if (msgType === 'image') {
+    const imageId = (event.message as { id: string }).id
+    try {
+      // ดาวน์โหลดรูปจาก Line
+      const stream = await lineClient.getMessageContent(imageId)
+      const chunks: Buffer[] = []
+      for await (const chunk of stream) {
+        chunks.push(Buffer.from(chunk))
+      }
+      const imageBuffer = Buffer.concat(chunks)
+      const base64Image = imageBuffer.toString('base64')
 
-  if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
+      // ส่งให้ Gemini วิเคราะห์พร้อมข้อมูลสินค้าจาก Sheet
+      const faqText = await fetchFAQ()
+      const reply = await generateReplyWithImage(base64Image, faqText)
 
-  const reply = response.text?.trim()
-  return reply || DEFAULT_REPLY
-}
+      await lineClient.replyMessage({
+        replyToken,
+        messages: [{ type: 'text', text: reply }],
+      })
+    } catch (err) {
+      log.error('image.error', { err: (err as Error).message })
+      await lineClient.replyMessage({
+        replyToken,
+        messages: [{ type: 'text', text: DEFAULT_REPLY }],
+      })
+    }
+  }
+})
