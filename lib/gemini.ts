@@ -3,7 +3,7 @@ import { buildSystemPrompt } from './prompts'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
-const MODEL = 'gemini-2.5-flash'
+const MODEL = 'gemini-2.0-flash'
 
 const DEFAULT_REPLY =
   'ขออภัยค่ะ น้องใจดีไม่มีข้อมูลในส่วนนี้ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
