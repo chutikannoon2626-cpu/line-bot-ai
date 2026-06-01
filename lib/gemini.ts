@@ -1,8 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
-
 const MODEL = 'gemini-1.5-flash'
 
 const DEFAULT_REPLY =
@@ -13,6 +11,7 @@ export async function generateReply(
   faqText: string
 ): Promise<string> {
   const startTime = Date.now()
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
 
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',

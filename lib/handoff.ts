@@ -24,11 +24,10 @@ export function shouldHandoff(message: string): boolean {
   return HANDOFF_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
 }
 
-const lineClient = new messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-})
-
 export async function notifyAdmin(userId: string, userMessage: string): Promise<void> {
+  const lineClient = new messagingApi.MessagingApiClient({
+    channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+  })
   const adminGroupId = process.env.ADMIN_GROUP_ID
   if (!adminGroupId) {
     console.warn('[handoff] ADMIN_GROUP_ID not set · skipping admin notify')
