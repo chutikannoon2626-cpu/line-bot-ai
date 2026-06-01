@@ -81,7 +81,10 @@ export async function POST(req: NextRequest) {
         if (msgType === 'image') {
           const imageId = (event.message as { id: string }).id
 
-          const stream = await lineClient.getMessageContent(imageId)
+          const blobClient = new messagingApi.MessagingApiBlobClient({
+            channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+          })
+          const stream = await blobClient.getMessageContent(imageId)
           const chunks: Buffer[] = []
           for await (const chunk of stream) {
             chunks.push(Buffer.from(chunk))
