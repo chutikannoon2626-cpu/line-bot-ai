@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
 
-const MODEL = 'gemini-1.5-flash'
+const MODEL = 'gemini-2.0-flash-lite'
 
 const DEFAULT_REPLY =
   'ขออภัยค่ะ น้องใจดีไม่มีข้อมูลในส่วนนี้ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
