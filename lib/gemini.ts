@@ -109,7 +109,7 @@ export async function generateReplyWithImage(
         role: 'user',
         parts: [
           {
-            text: `${systemPrompt}${webContext}\n\nลูกค้าส่งรูปภาพสินค้ามา อ่านข้อความ/รุ่น/สเปคจากรูปให้ครบ แล้วตอบตามข้อมูลที่มี`,
+            text: `${systemPrompt}${webContext}\n\nลูกค้าส่งรูปภาพสินค้ามา อ่านข้อความ/รุ่น/สเปคจากรูปให้ครบ แล้วตอบโดยใช้ข้อมูลจากรูปและจาก spenderclub.com ที่ให้มาเท่านั้น ห้ามอ้างอิงข้อมูลจากเว็บไซต์อื่นหรือแต่งข้อมูลเพิ่มเติมเอง ถ้าไม่มีข้อมูลให้ตอบ default reply`,
           },
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
         ],
