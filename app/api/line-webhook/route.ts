@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
             await notifyAdmin(userId, userMessage)
             await lineClient.replyMessage({
               replyToken,
-              messages: [{ type: 'text', text: 'ขอแอดมินติดต่อกลับนะคะ 🙏' }],
+              messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏' }],
             })
             log.info('handoff.routed', { userId, latencyMs: Date.now() - startTime })
             return
