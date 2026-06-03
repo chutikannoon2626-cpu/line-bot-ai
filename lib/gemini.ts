@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
+import { searchSpenderClub } from './websearch'
 
 const MODEL = 'gemini-2.5-flash'
 
@@ -60,6 +61,39 @@ export async function generateReplyWithImage(
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
 
+  // ขั้น 1: อ่านรูป — ดึงชื่อรุ่น/รหัส/แบรนด์ออกมา
+  const extractRes = await ai.models.generateContent({
+    model: MODEL,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: 'ดูรูปนี้แล้วระบุข้อมูลสินค้าที่เห็น ตอบเป็น JSON เท่านั้น: {"brand":"...","model":"...","code":"...","detail":"..."} ถ้าไม่มีข้อมูลให้ใส่ ""',
+          },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+        ],
+      },
+    ],
+    config: { maxOutputTokens: 200, temperature: 0 },
+  })
+
+  // ขั้น 2: ค้นหาใน spenderclub.com ด้วยข้อมูลที่อ่านได้
+  let webContext = ''
+  try {
+    const raw = extractRes.text?.trim() ?? ''
+    const json = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    const query = [json.brand, json.model, json.code].filter(Boolean).join(' ')
+    if (query) {
+      const webText = await searchSpenderClub(query)
+      if (webText) webContext = `\n\nข้อมูลจาก spenderclub.com:\n${webText}`
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level: 'info', event: 'image.web_search', query }))
+    }
+  } catch {
+    // ถ้า extract หรือ search ล้มเหลว ข้ามไปตอบจาก FAQ เฉยๆ
+  }
+
+  // ขั้น 3: ตอบลูกค้าโดยใช้ข้อมูลรูป + เว็บ + FAQ
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',
     'Spender Club',
@@ -74,15 +108,14 @@ export async function generateReplyWithImage(
       {
         role: 'user',
         parts: [
-          { text: `${systemPrompt}\n\nลูกค้าส่งรูปภาพมา กรุณาวิเคราะห์ว่าเกี่ยวกับสินค้าหรือปัญหาอะไร แล้วตอบตามข้อมูลใน FAQ` },
+          {
+            text: `${systemPrompt}${webContext}\n\nลูกค้าส่งรูปภาพสินค้ามา อ่านข้อความ/รุ่น/สเปคจากรูปให้ครบ แล้วตอบตามข้อมูลที่มี`,
+          },
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
         ],
       },
     ],
-    config: {
-      temperature: 1.0,
-      maxOutputTokens: 1024,
-    },
+    config: { temperature: 1.0, maxOutputTokens: 1024 },
   })
 
   const finishReason = response.candidates?.[0]?.finishReason
@@ -93,6 +126,7 @@ export async function generateReplyWithImage(
       event: 'gemini.image_reply',
       latencyMs: Date.now() - startTime,
       finishReason: finishReason ?? 'unknown',
+      hasWebContext: !!webContext,
     })
   )
 
