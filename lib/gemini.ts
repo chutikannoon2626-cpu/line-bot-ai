@@ -4,8 +4,13 @@ import { searchSpenderClub } from './websearch'
 
 const MODEL = 'gemini-2.5-flash'
 
+// ใช้เมื่อ Gemini ค้นหาไม่พบ → ให้ถามลูกค้าขอรูปหรือชื่อเต็มก่อน
 const DEFAULT_REPLY =
-  'ขออภัยค่ะ น้องใจดีไม่มีข้อมูลในส่วนนี้ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
+  'รบกวนขอรูปสินค้าหรือชื่อเต็มได้เลยค่ะ จะได้ตรวจสอบและเช็กราคาให้ถูกต้องค่ะ'
+
+// ใช้เมื่อ API error / timeout เท่านั้น
+const API_ERROR_REPLY =
+  'ขออภัยค่ะ น้องใจดีขอตรวจสอบก่อนนะคะ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
 
 export async function generateReply(
   userMessage: string,
@@ -54,10 +59,10 @@ export async function generateReply(
     })
   )
 
-  if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
+  if (finishReason === 'MAX_TOKENS') return API_ERROR_REPLY
 
   const reply = response.text?.trim()
-  return reply || DEFAULT_REPLY
+  return reply || API_ERROR_REPLY
 }
 
 export async function generateReplyWithImage(
@@ -136,8 +141,8 @@ export async function generateReplyWithImage(
     })
   )
 
-  if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
+  if (finishReason === 'MAX_TOKENS') return API_ERROR_REPLY
 
   const reply = response.text?.trim()
-  return reply || DEFAULT_REPLY
+  return reply || API_ERROR_REPLY
 }
