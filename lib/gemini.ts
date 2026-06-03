@@ -14,6 +14,12 @@ export async function generateReply(
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
 
+  // ค้น spenderclub.com ควบคู่กับ FAQ
+  const webText = await searchSpenderClub(userMessage).catch(() => '')
+  const webContext = webText
+    ? `\n\nข้อมูลเพิ่มเติมจาก spenderclub.com (ใช้ได้ถ้าไม่มีใน FAQ):\n${webText}`
+    : ''
+
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',
     'Spender Club',
@@ -24,7 +30,7 @@ export async function generateReply(
 
   const response = await ai.models.generateContent({
     model: MODEL,
-    contents: `${systemPrompt}\n\nคำถามลูกค้า: ${userMessage}`,
+    contents: `${systemPrompt}${webContext}\n\nคำถามลูกค้า: ${userMessage}`,
     config: {
       temperature: 1.0,
       maxOutputTokens: 1024,
