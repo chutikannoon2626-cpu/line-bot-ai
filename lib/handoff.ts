@@ -3,6 +3,7 @@ import { messagingApi } from '@line/bot-sdk'
 const HANDOFF_TRIGGERS = [
   'คุยกับคน',
   'ขอแอดมิน',
+  'ติดต่อแอดมิน',
   'ขอเจ้าของ',
   'ฟ้อง',
   'ร้องเรียน',
