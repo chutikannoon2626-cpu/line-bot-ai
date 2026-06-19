@@ -123,13 +123,19 @@ export async function generateReplyWithImage(
         role: 'user',
         parts: [
           {
-            text: `${systemPrompt}${webContext}\n\nลูกค้าส่งรูปภาพสินค้ามา${userQuestion ? ` พร้อมคำถามว่า: "${userQuestion}"` : ''} อ่านข้อมูลจากรูปและค้นหาคำตอบจาก spenderclub.com ที่ให้มา ตอบเฉพาะสิ่งที่ถามเท่านั้น ห้ามแต่งข้อมูลเพิ่มเอง ถ้าไม่มีข้อมูลให้ตอบ default reply`,
+            text: userQuestion
+              ? `ลูกค้าส่งรูปภาพสินค้ามา พร้อมคำถามว่า: "${userQuestion}" ตอบเฉพาะสิ่งที่ถามเท่านั้น ห้ามแต่งข้อมูลเพิ่มเอง`
+              : 'ลูกค้าส่งรูปภาพสินค้ามา อ่านข้อมูลจากรูปและตอบสิ่งที่เห็น ห้ามแต่งข้อมูลเพิ่มเอง',
           },
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
         ],
       },
     ],
-    config: { temperature: 1.0, maxOutputTokens: 1024 },
+    config: {
+      systemInstruction: `${systemPrompt}${webContext}`,
+      temperature: 1.0,
+      maxOutputTokens: 1024,
+    },
   })
 
   const finishReason = response.candidates?.[0]?.finishReason
