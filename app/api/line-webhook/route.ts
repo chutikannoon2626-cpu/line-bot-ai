@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 30
 
 const DEFAULT_REPLY =
-  'ขออภัยค่ะ น้องใจดีขอตรวจสอบก่อนนะคะ รบกวนถามใหม่อีกครั้ง หรือจะให้แอดมินติดต่อกลับก็ได้เลยค่ะ'
+  'ขออภัยค่ะ น้องใจดีขอตรวจสอบก่อนนะคะ หรือต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
 
 
 export async function GET() {

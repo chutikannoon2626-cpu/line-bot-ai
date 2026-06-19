@@ -10,7 +10,7 @@ const DEFAULT_REPLY =
 
 // ใช้เมื่อ API error / timeout เท่านั้น
 const API_ERROR_REPLY =
-  'ขออภัยค่ะ น้องใจดีขอตรวจสอบก่อนนะคะ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
+  'ขออภัยค่ะ น้องใจดีขอตรวจสอบก่อนนะคะ หรือต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
 
 export async function generateReply(
   userMessage: string,
