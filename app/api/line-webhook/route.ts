@@ -9,7 +9,11 @@ export const runtime = 'nodejs'
 export const maxDuration = 30
 
 const DEFAULT_REPLY =
-  'ขออภัยค่ะ น้องใจดีไม่มีข้อมูลในส่วนนี้ กรุณาติดต่อทีมงานได้โดยตรงค่ะ'
+  'ขออภัยค่ะ น้องใจดีขอตรวจสอบก่อนนะคะ รบกวนถามใหม่อีกครั้ง หรือจะให้แอดมินติดต่อกลับก็ได้เลยค่ะ'
+
+// เก็บ image ID รอคำถามจากลูกค้า (TTL 5 นาที)
+const pendingImages = new Map<string, { imageId: string; ts: number }>()
+const PENDING_IMAGE_TTL_MS = 5 * 60 * 1000
 
 export async function GET() {
   return NextResponse.json({ status: 'ok', ts: new Date().toISOString() })
@@ -56,8 +60,28 @@ export async function POST(req: NextRequest) {
           }
 
           const faqText = await fetchFAQ()
+
+          // ถ้ามีรูปที่รอคำถามอยู่ → ใช้รูป + คำถามนี้ค้น spenderclub.com
+          const pending = pendingImages.get(userId)
+          let replyPromise: Promise<string>
+
+          if (pending && Date.now() - pending.ts < PENDING_IMAGE_TTL_MS) {
+            pendingImages.delete(userId)
+            const blobClient = new messagingApi.MessagingApiBlobClient({
+              channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+            })
+            const stream = await blobClient.getMessageContent(pending.imageId)
+            const chunks: Buffer[] = []
+            for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+            const base64Image = Buffer.concat(chunks).toString('base64')
+            replyPromise = generateReplyWithImage(base64Image, faqText, userMessage)
+            log.info('image.with_question', { userId })
+          } else {
+            replyPromise = generateReply(userMessage, faqText)
+          }
+
           const reply = await Promise.race([
-            generateReply(userMessage, faqText),
+            replyPromise,
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('gemini_timeout')), 8000)
             ),
@@ -80,38 +104,13 @@ export async function POST(req: NextRequest) {
         // --- IMAGE ---
         if (msgType === 'image') {
           const imageId = (event.message as { id: string }).id
-
-          const blobClient = new messagingApi.MessagingApiBlobClient({
-            channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
-          })
-          const stream = await blobClient.getMessageContent(imageId)
-          const chunks: Buffer[] = []
-          for await (const chunk of stream) {
-            chunks.push(Buffer.from(chunk))
-          }
-          const imageBuffer = Buffer.concat(chunks)
-          const base64Image = imageBuffer.toString('base64')
-
-          const faqText = await fetchFAQ()
-          const reply = await Promise.race([
-            generateReplyWithImage(base64Image, faqText),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error('gemini_timeout')), 15000)
-            ),
-          ]).catch((err) => {
-            log.error('gemini.image_failed', { err: (err as Error).message })
-            return DEFAULT_REPLY
-          })
-
+          // เก็บรูปไว้รอคำถาม ไม่ตอบทันที
+          pendingImages.set(userId, { imageId, ts: Date.now() })
           await lineClient.replyMessage({
             replyToken,
-            messages: [{ type: 'text', text: reply }],
+            messages: [{ type: 'text', text: 'ได้รับรูปภาพแล้วค่ะ รบกวนพิมพ์คำถามที่ต้องการทราบด้วยนะคะ' }],
           })
-          log.info('image_reply.sent', {
-            userId,
-            latencyMs: Date.now() - startTime,
-            replyLength: reply.length,
-          })
+          log.info('image.pending', { userId, latencyMs: Date.now() - startTime })
         }
 
       } catch (err) {

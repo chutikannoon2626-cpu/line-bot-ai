@@ -67,7 +67,8 @@ export async function generateReply(
 
 export async function generateReplyWithImage(
   base64Image: string,
-  faqText: string
+  faqText: string,
+  userQuestion?: string
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
@@ -89,12 +90,13 @@ export async function generateReplyWithImage(
     config: { maxOutputTokens: 200, temperature: 0 },
   })
 
-  // ขั้น 2: ค้นหาใน spenderclub.com ด้วยข้อมูลที่อ่านได้
+  // ขั้น 2: ค้นหาใน spenderclub.com — ใช้คำถามลูกค้าก่อน ถ้าไม่มีใช้ข้อมูลจากรูป
   let webContext = ''
   try {
     const raw = extractRes.text?.trim() ?? ''
     const json = JSON.parse(raw.replace(/```json|```/g, '').trim())
-    const query = [json.brand, json.model, json.code].filter(Boolean).join(' ')
+    const imageQuery = [json.brand, json.model, json.code].filter(Boolean).join(' ')
+    const query = userQuestion || imageQuery
     if (query) {
       const webText = await searchSpenderClub(query)
       if (webText) webContext = `\n\nข้อมูลจาก spenderclub.com:\n${webText}`
@@ -120,7 +122,7 @@ export async function generateReplyWithImage(
         role: 'user',
         parts: [
           {
-            text: `${systemPrompt}${webContext}\n\nลูกค้าส่งรูปภาพสินค้ามา อ่านข้อความ/รุ่น/สเปคจากรูปให้ครบ แล้วตอบโดยใช้ข้อมูลจากรูปและจาก spenderclub.com ที่ให้มาเท่านั้น ห้ามอ้างอิงข้อมูลจากเว็บไซต์อื่นหรือแต่งข้อมูลเพิ่มเติมเอง ถ้าไม่มีข้อมูลให้ตอบ default reply`,
+            text: `${systemPrompt}${webContext}\n\nลูกค้าส่งรูปภาพสินค้ามา${userQuestion ? ` พร้อมคำถามว่า: "${userQuestion}"` : ''} อ่านข้อมูลจากรูปและค้นหาคำตอบจาก spenderclub.com ที่ให้มา ตอบเฉพาะสิ่งที่ถามเท่านั้น ห้ามแต่งข้อมูลเพิ่มเอง ถ้าไม่มีข้อมูลให้ตอบ default reply`,
           },
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
         ],
