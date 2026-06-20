@@ -3,7 +3,7 @@ export async function searchSpenderClub(query: string): Promise<string> {
   try {
     const url = `https://www.spenderclub.com/?s=${encodeURIComponent(query)}`
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3000),
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     })
 

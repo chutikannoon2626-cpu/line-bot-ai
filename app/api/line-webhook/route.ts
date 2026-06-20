@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
           const reply = await Promise.race([
             generateReply(userMessage, faqText),
             new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error('gemini_timeout')), 8000)
+              setTimeout(() => reject(new Error('gemini_timeout')), 12000)
             ),
           ]).catch((err) => {
             log.error('gemini.failed', { err: (err as Error).message })
