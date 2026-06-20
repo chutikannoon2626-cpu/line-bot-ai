@@ -32,12 +32,13 @@ export async function fetchFAQ(): Promise<string> {
 
 function csvToFaqText(csv: string): string {
   const rows = parseCsvRows(csv).slice(1) // skip header row
+  // Sheet format: ID | Category | Question | Question Variations | Answer
   return rows
-    .map(([category, question, answer]) => {
+    .map(([_id, category, question, variations, answer]) => {
       if (!question || !answer) return null
-      // Flatten internal newlines so Gemini reads one clean line per answer
       const cleanAnswer = answer.replace(/\r?\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
-      return `[${category}] ${question}\n→ ${cleanAnswer}`
+      const varText = variations ? ` (คำถามที่คล้ายกัน: ${variations.replace(/\\/g, '').replace(/\|/g, ', ')})` : ''
+      return `[${category}] ${question}${varText}\n→ ${cleanAnswer}`
     })
     .filter(Boolean)
     .join('\n\n')
