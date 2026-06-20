@@ -4,9 +4,8 @@ import { searchSpenderClub } from './websearch'
 
 const MODEL = 'gemini-2.5-flash'
 
-// ใช้เมื่อ Gemini ค้นหาไม่พบ → ให้ถามลูกค้าขอรูปหรือชื่อเต็มก่อน
-const DEFAULT_REPLY =
-  'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
+// marker พิเศษ — route.ts จะจัดการ retry logic เอง
+const DEFAULT_REPLY = '[NOT_FOUND]'
 
 // ใช้เมื่อ API error / timeout เท่านั้น
 const API_ERROR_REPLY =

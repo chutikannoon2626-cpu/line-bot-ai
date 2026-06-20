@@ -4,6 +4,10 @@ import { fetchFAQ } from '@/lib/sheet'
 import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoff, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
+import { redis } from '@/lib/redis'
+
+const NOT_FOUND = '[NOT_FOUND]'
+const RETRY_TTL = 600 // 10 นาที
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -66,6 +70,36 @@ export async function POST(req: NextRequest) {
             log.error('gemini.failed', { err: (err as Error).message })
             return DEFAULT_REPLY
           })
+
+          // retry logic — ตอบไม่ได้ครั้งแรก ให้ถามใหม่ / ครั้งสองส่งแอดมิน
+          if (reply === NOT_FOUND) {
+            try {
+              const retryKey = `retry:${userId}`
+              const hasRetried = await redis.get(retryKey)
+              if (hasRetried) {
+                await redis.del(retryKey)
+                await lineClient.replyMessage({
+                  replyToken,
+                  messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏' }],
+                })
+                log.info('retry.admin_routed', { userId })
+              } else {
+                await redis.set(retryKey, '1', { ex: RETRY_TTL })
+                await lineClient.replyMessage({
+                  replyToken,
+                  messages: [{ type: 'text', text: 'ขออภัยค่ะ น้องใจดีหาข้อมูลไม่พบ กรุณาสอบถามใหม่อีกครั้งหรืออธิบายเพิ่มเติมได้เลยค่ะ' }],
+                })
+                log.info('retry.first_attempt', { userId })
+              }
+            } catch {
+              // Redis ล่ม → fallback ส่งแอดมินทันที
+              await lineClient.replyMessage({
+                replyToken,
+                messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏' }],
+              })
+            }
+            return
+          }
 
           await lineClient.replyMessage({
             replyToken,
