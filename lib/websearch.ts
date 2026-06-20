@@ -1,17 +1,47 @@
 export async function searchSpenderClub(query: string): Promise<string> {
+  const startTime = Date.now()
   try {
     const url = `https://www.spenderclub.com/?s=${encodeURIComponent(query)}`
     const res = await fetch(url, {
       signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SpenderBot/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     })
+
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'info',
+      event: 'websearch.result',
+      query,
+      status: res.status,
+      ok: res.ok,
+      latencyMs: Date.now() - startTime,
+    }))
+
     if (!res.ok) return ''
 
     const html = await res.text()
     const text = stripHtml(html)
-    // คืนแค่ 2,000 ตัวอักษรเพื่อไม่ให้ prompt ใหญ่เกิน
-    return text.slice(0, 2000)
-  } catch {
+    const result = text.slice(0, 3000)
+
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'info',
+      event: 'websearch.content',
+      query,
+      contentLength: result.length,
+      hasContent: result.length > 100,
+    }))
+
+    return result
+  } catch (err) {
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'warn',
+      event: 'websearch.failed',
+      query,
+      err: (err as Error).message,
+      latencyMs: Date.now() - startTime,
+    }))
     return ''
   }
 }
