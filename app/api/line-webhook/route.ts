@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // ตรวจ pre-handoff state — ลูกค้าตอบคำถาม "ต้องการอะไร" → route แอดมิน
+          // ตรวจ pre-handoff state — ลูกค้าตอบแล้ว → route แอดมิน
           let pendingTrigger: string | null = null
           try {
             pendingTrigger = await redis.get<string>(`pre_handoff:${userId}`)
@@ -127,26 +127,19 @@ export async function POST(req: NextRequest) {
           }
 
           if (shouldHandoff(userMessage)) {
-            // ถามก่อนว่าต้องการอะไร แล้วค่อย route รอบถัดไป
-            const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
+            // บันทึก state แยกจาก reply — Redis ล้มก็ยังถามได้
             try {
               await redis.set(`pre_handoff:${userId}`, userMessage, { ex: PRE_HANDOFF_TTL })
-              await lineClient.replyMessage({
-                replyToken,
-                messages: [{ type: 'text', text: preHandoffQ }],
-              })
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
-              log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
             } catch {
-              // Redis ล่ม → route ทันทีโดยไม่ถาม
-              try { await notifyAdmin(userId, userMessage) } catch { /* swallow */ }
-              await lineClient.replyMessage({
-                replyToken,
-                messages: [{ type: 'text', text: handoffMsg }],
-              })
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
-              log.info('handoff.routed_fallback', { userId, latencyMs: Date.now() - startTime })
+              log.warn('handoff.pre_handoff_save_failed', { userId })
             }
+            const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
+            await lineClient.replyMessage({
+              replyToken,
+              messages: [{ type: 'text', text: preHandoffQ }],
+            })
+            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+            log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
             return
           }
 
