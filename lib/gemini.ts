@@ -21,9 +21,10 @@ export async function generateReply(
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
 
   // ค้น spenderclub.com ควบคู่กับ FAQ
+  const searchUrl = `https://www.spenderclub.com/?s=${encodeURIComponent(userMessage)}`
   const webText = await searchSpenderClub(userMessage).catch(() => '')
   const webContext = webText
-    ? `\n\nข้อมูลเพิ่มเติมจาก spenderclub.com (ใช้ได้ถ้าไม่มีใน FAQ):\n${webText}`
+    ? `\n\n<web_context>\nข้อมูลจาก spenderclub.com:\n${webText}\nลิงก์อ้างอิง: ${searchUrl}\n</web_context>`
     : ''
 
   const systemPrompt = buildSystemPrompt(

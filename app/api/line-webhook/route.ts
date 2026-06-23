@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
                 log.info('retry.admin_routed', { userId })
               } else {
                 await redis.set(retryKey, '1', { ex: RETRY_TTL })
-                const retryMsg = 'ขออภัยค่ะ น้องใจดีหาข้อมูลไม่พบ กรุณาสอบถามใหม่อีกครั้งหรืออธิบายเพิ่มเติมได้เลยค่ะ'
+                const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ สามารถติดต่อแอดมินหรือช่างเทคนิคได้ในเวลาทำการ 08:00–17:00 น. ค่ะ หรือลองอธิบายเพิ่มเติมได้เลยนะคะ'
                 await lineClient.replyMessage({
                   replyToken,
                   messages: [{ type: 'text', text: retryMsg }],
