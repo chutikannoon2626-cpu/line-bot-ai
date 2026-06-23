@@ -2,7 +2,7 @@
 export function imageIntentCard() {
   return {
     type: 'flex' as const,
-    altText: 'ได้รับรูปภาพแล้ว กรุณาเลือกหัวข้อที่ต้องการ',
+    altText: 'ต้องการให้น้องใจดีช่วยเรื่องอะไรคะ',
     contents: {
       type: 'bubble' as const,
       body: {
@@ -12,14 +12,14 @@ export function imageIntentCard() {
         contents: [
           {
             type: 'text' as const,
-            text: 'ได้รับรูปภาพเรียบร้อยแล้วครับ 📸',
+            text: 'ต้องการให้น้องใจดีช่วยเรื่องอะไรคะ',
             weight: 'bold' as const,
             size: 'md' as const,
             wrap: true,
           },
           {
             type: 'text' as const,
-            text: 'เพื่อความรวดเร็ว รบกวนเลือกหัวข้อด้านล่างนี้เพื่อให้เจ้าหน้าที่หรือระบบดูแลต่อได้เลยครับ 👇',
+            text: 'รบกวนเลือกหัวข้อด้านล่างให้เจ้าหน้าที่หรือระบบดูแลต่อได้เลยค่ะ',
             size: 'sm' as const,
             color: '#666666',
             wrap: true,
