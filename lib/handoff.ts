@@ -18,6 +18,7 @@ const HANDOFF_TRIGGERS = [
   'ตัวแทนจำหน่าย',
   'dealer',
   'ติดต่อสื่อ',
+  'ติดต่อศูนย์บริการ',
 ]
 
 export function shouldHandoff(message: string): boolean {

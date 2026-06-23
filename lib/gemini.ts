@@ -73,29 +73,37 @@ export async function generateReplyWithImage(
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
 
-  // ขั้น 1: อ่านรูป — ดึงชื่อรุ่น/รหัส/แบรนด์ออกมา
-  const extractRes = await ai.models.generateContent({
-    model: MODEL,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: 'ดูรูปนี้แล้วระบุข้อมูลสินค้าที่เห็น ตอบเป็น JSON เท่านั้น: {"brand":"...","model":"...","code":"...","detail":"..."} ถ้าไม่มีข้อมูลให้ใส่ ""',
-          },
-          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-        ],
-      },
-    ],
-    config: { maxOutputTokens: 200, temperature: 0 },
-  })
+  // ขั้น 1: OCR + ดึงข้อมูลสินค้า
+  let ocrText = ''
+  let imageQuery = ''
+  try {
+    const extractRes = await ai.models.generateContent({
+      model: MODEL,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: 'ดูรูปนี้แล้วตอบเป็น JSON เท่านั้น ไม่ต้องอธิบายเพิ่ม:\n{"brand":"...","model":"...","code":"...","ocrText":"..."}\n- brand/model/code: ยี่ห้อ รุ่น รหัสสินค้าที่เห็น\n- ocrText: ข้อความทุกตัวที่อ่านได้จากรูป (เช่น ป้ายราคา ใบเสร็จ สเปค ฉลาก)\nถ้าไม่มีข้อมูลส่วนไหนให้ใส่ ""',
+            },
+            { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+          ],
+        },
+      ],
+      config: { maxOutputTokens: 400, temperature: 0 },
+    })
+
+    const raw = extractRes.text?.trim() ?? ''
+    const json = JSON.parse(raw.replace(/```json|```/g, '').trim())
+    ocrText = json.ocrText ?? ''
+    imageQuery = [json.brand, json.model, json.code].filter(Boolean).join(' ')
+  } catch {
+    // ถ้า extract ล้มเหลว ข้ามไปตอบจาก FAQ เฉยๆ
+  }
 
   // ขั้น 2: ค้นหาใน spenderclub.com — ใช้คำถามลูกค้าก่อน ถ้าไม่มีใช้ข้อมูลจากรูป
   let webContext = ''
   try {
-    const raw = extractRes.text?.trim() ?? ''
-    const json = JSON.parse(raw.replace(/```json|```/g, '').trim())
-    const imageQuery = [json.brand, json.model, json.code].filter(Boolean).join(' ')
     const query = userQuestion || imageQuery
     if (query) {
       const webText = await searchSpenderClub(query)
@@ -103,10 +111,10 @@ export async function generateReplyWithImage(
       console.log(JSON.stringify({ ts: new Date().toISOString(), level: 'info', event: 'image.web_search', query }))
     }
   } catch {
-    // ถ้า extract หรือ search ล้มเหลว ข้ามไปตอบจาก FAQ เฉยๆ
+    // ถ้า search ล้มเหลว ข้ามไป
   }
 
-  // ขั้น 3: ตอบลูกค้าโดยใช้ข้อมูลรูป + เว็บ + FAQ
+  // ขั้น 3: ตอบลูกค้าโดยใช้ข้อมูลรูป + OCR + เว็บ + FAQ
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',
     'Spender Club',
@@ -114,6 +122,10 @@ export async function generateReplyWithImage(
     DEFAULT_REPLY,
     'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ'
   )
+
+  const ocrContext = ocrText
+    ? `\n\nข้อความที่อ่านได้จากรูป (OCR):\n${ocrText}`
+    : ''
 
   const response = await ai.models.generateContent({
     model: MODEL,
@@ -123,15 +135,15 @@ export async function generateReplyWithImage(
         parts: [
           {
             text: userQuestion
-              ? `ลูกค้าส่งรูปภาพสินค้ามา พร้อมคำถามว่า: "${userQuestion}" ตอบเฉพาะสิ่งที่ถามเท่านั้น ห้ามแต่งข้อมูลเพิ่มเอง`
-              : 'ลูกค้าส่งรูปภาพสินค้ามา อ่านข้อมูลจากรูปและตอบสิ่งที่เห็น ห้ามแต่งข้อมูลเพิ่มเอง',
+              ? `ลูกค้าส่งรูปภาพมา พร้อมคำถามว่า: "${userQuestion}" ตอบเฉพาะสิ่งที่ถามเท่านั้น ห้ามแต่งข้อมูลเพิ่มเอง`
+              : 'ลูกค้าส่งรูปภาพมา อ่านข้อมูลจากรูปและตอบสิ่งที่เห็น ห้ามแต่งข้อมูลเพิ่มเอง',
           },
           { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
         ],
       },
     ],
     config: {
-      systemInstruction: `${systemPrompt}${webContext}`,
+      systemInstruction: `${systemPrompt}${webContext}${ocrContext}`,
       temperature: 1.0,
       maxOutputTokens: 1024,
     },
@@ -146,6 +158,8 @@ export async function generateReplyWithImage(
       latencyMs: Date.now() - startTime,
       finishReason: finishReason ?? 'unknown',
       hasWebContext: !!webContext,
+      hasOcrText: !!ocrText,
+      ocrLength: ocrText.length,
     })
   )
 

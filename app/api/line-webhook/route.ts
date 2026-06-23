@@ -5,6 +5,7 @@ import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoff, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
+import { imageIntentCard } from '@/lib/flex-cards'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const RETRY_TTL = 600 // 10 นาที
@@ -49,6 +50,47 @@ export async function POST(req: NextRequest) {
         // --- TEXT ---
         if (msgType === 'text') {
           const userMessage = (event.message as { text: string }).text
+
+          // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard → โหลดรูปที่บันทึกไว้แล้ววิเคราะห์
+          if (userMessage === 'สอบถามสเปก') {
+            let imageId: string | null = null
+            try {
+              imageId = await redis.get<string>(`img:${userId}`)
+              if (imageId) await redis.del(`img:${userId}`)
+            } catch {
+              // Redis ล่ม — ตกลงไป FAQ flow ปกติ
+            }
+
+            if (imageId) {
+              const blobClient = new messagingApi.MessagingApiBlobClient({
+                channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+              })
+              const stream = await blobClient.getMessageContent(imageId)
+              const chunks: Buffer[] = []
+              for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+              const imageBuffer = Buffer.concat(chunks)
+              const base64Image = imageBuffer.toString('base64')
+              log.info('image_spec.downloaded', { userId, sizeBytes: imageBuffer.length })
+
+              const faqText = await fetchFAQ()
+              const reply = await Promise.race([
+                generateReplyWithImage(base64Image, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
+                new Promise<string>((_, reject) =>
+                  setTimeout(() => reject(new Error('gemini_timeout')), 15000)
+                ),
+              ]).catch((err) => {
+                log.error('gemini.image_spec_failed', { err: (err as Error).message, userId })
+                return DEFAULT_REPLY
+              })
+
+              await lineClient.replyMessage({
+                replyToken,
+                messages: [{ type: 'text', text: reply }],
+              })
+              log.info('image_spec_reply.sent', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+          }
 
           if (shouldHandoff(userMessage)) {
             await notifyAdmin(userId, userMessage)
@@ -115,30 +157,18 @@ export async function POST(req: NextRequest) {
         // --- IMAGE ---
         if (msgType === 'image') {
           const imageId = (event.message as { id: string }).id
-          const blobClient = new messagingApi.MessagingApiBlobClient({
-            channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
-          })
-          const stream = await blobClient.getMessageContent(imageId)
-          const chunks: Buffer[] = []
-          for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-          const base64Image = Buffer.concat(chunks).toString('base64')
 
-          const faqText = await fetchFAQ()
-          const reply = await Promise.race([
-            generateReplyWithImage(base64Image, faqText),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error('gemini_timeout')), 15000)
-            ),
-          ]).catch((err) => {
-            log.error('gemini.image_failed', { err: (err as Error).message })
-            return DEFAULT_REPLY
-          })
+          try {
+            await redis.set(`img:${userId}`, imageId, { ex: 300 })
+          } catch {
+            // Redis ล่ม — ยังส่ง card ได้ แต่ปุ่ม "สอบถามสเปก" จะไม่พบรูป
+          }
 
           await lineClient.replyMessage({
             replyToken,
-            messages: [{ type: 'text', text: reply }],
+            messages: [imageIntentCard()],
           })
-          log.info('image_reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
+          log.info('image.intent_card_sent', { userId, imageId })
         }
 
       } catch (err) {

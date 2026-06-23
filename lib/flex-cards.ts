@@ -1,3 +1,85 @@
+// Image Intent Card — แสดงเมื่อลูกค้าส่งรูป
+export function imageIntentCard() {
+  return {
+    type: 'flex' as const,
+    altText: 'ได้รับรูปภาพแล้ว กรุณาเลือกหัวข้อที่ต้องการ',
+    contents: {
+      type: 'bubble' as const,
+      body: {
+        type: 'box' as const,
+        layout: 'vertical' as const,
+        paddingAll: 'lg',
+        contents: [
+          {
+            type: 'text' as const,
+            text: 'ได้รับรูปภาพเรียบร้อยแล้วครับ 📸',
+            weight: 'bold' as const,
+            size: 'md' as const,
+            wrap: true,
+          },
+          {
+            type: 'text' as const,
+            text: 'เพื่อความรวดเร็ว รบกวนเลือกหัวข้อด้านล่างนี้เพื่อให้เจ้าหน้าที่หรือระบบดูแลต่อได้เลยครับ 👇',
+            size: 'sm' as const,
+            color: '#666666',
+            wrap: true,
+            margin: 'sm' as const,
+          },
+        ],
+      },
+      footer: {
+        type: 'box' as const,
+        layout: 'vertical' as const,
+        spacing: 'sm' as const,
+        paddingAll: 'md',
+        contents: [
+          {
+            type: 'button' as const,
+            style: 'primary' as const,
+            color: '#1A3A5C',
+            action: {
+              type: 'message' as const,
+              label: 'สอบถามสเปก/ฟังก์ชัน',
+              text: 'สอบถามสเปก',
+            },
+          },
+          {
+            type: 'button' as const,
+            style: 'secondary' as const,
+            action: {
+              type: 'message' as const,
+              label: 'ติดต่อศูนย์บริการ',
+              text: 'ติดต่อศูนย์บริการ',
+            },
+          },
+          {
+            type: 'button' as const,
+            style: 'secondary' as const,
+            action: {
+              type: 'message' as const,
+              label: 'แจ้งปัญหา/ปรึกษาช่าง',
+              text: 'แจ้งปัญหา',
+            },
+          },
+          {
+            type: 'separator' as const,
+            margin: 'sm' as const,
+          },
+          {
+            type: 'button' as const,
+            style: 'link' as const,
+            action: {
+              type: 'uri' as const,
+              label: '🌐 ดูข้อมูลสินค้าที่ spenderclub.com',
+              uri: 'https://www.spenderclub.com',
+            },
+          },
+        ],
+      },
+    },
+  }
+}
+
 // Catalog Card — แสดงรายการสินค้าวิทยุสื่อสาร
 export function catalogCard(
   items: { name: string; model?: string; price: number; detail?: string }[]
