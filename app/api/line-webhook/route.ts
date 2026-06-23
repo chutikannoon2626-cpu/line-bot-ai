@@ -104,15 +104,15 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // ตรวจ pre-handoff state — ลูกค้าตอบแล้ว → route แอดมิน
+          // ตรวจ pre-handoff state (atomic getdel — ป้องกัน race condition)
           let pendingTrigger: string | null = null
           try {
-            pendingTrigger = await redis.get<string>(`pre_handoff:${userId}`)
+            pendingTrigger = await redis.getdel<string>(`pre_handoff:${userId}`)
           } catch { /* Redis ล่ม — ข้าม */ }
 
           if (pendingTrigger !== null) {
             try {
-              await redis.del(`pre_handoff:${userId}`)
+              await redis.set(`routed:${userId}`, '1', { ex: 300 })
               await notifyAdmin(userId, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
@@ -127,6 +127,22 @@ export async function POST(req: NextRequest) {
           }
 
           if (shouldHandoff(userMessage)) {
+            // ตรวจ cooldown — ป้องกันถามซ้ำหลัง route แล้ว
+            let alreadyRouted = false
+            try {
+              alreadyRouted = !!(await redis.get(`routed:${userId}`))
+            } catch { /* Redis ล่ม */ }
+
+            if (alreadyRouted) {
+              const alreadyMsg = 'ได้ส่งเรื่องถึงแอดมินแล้วค่ะ รอแอดมินติดต่อกลับด้วยนะคะ 🙏'
+              await lineClient.replyMessage({
+                replyToken,
+                messages: [{ type: 'text', text: alreadyMsg }],
+              })
+              log.info('handoff.already_routed', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+
             // บันทึก state แยกจาก reply — Redis ล้มก็ยังถามได้
             try {
               await redis.set(`pre_handoff:${userId}`, userMessage, { ex: PRE_HANDOFF_TTL })
