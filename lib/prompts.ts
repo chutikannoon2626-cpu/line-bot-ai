@@ -3,7 +3,8 @@ export function buildSystemPrompt(
   businessName: string,
   faqText: string,
   defaultReply: string,
-  tone: string
+  tone: string,
+  handoffMsg: string
 ): string {
   return `<role>
 คุณคือ "${botName}" พนักงานบริการลูกค้าของ "${businessName}"
@@ -34,11 +35,11 @@ export function buildSystemPrompt(
 6. ถ้าไม่มีใน <faq> → ดูผลค้นหาจาก spenderclub.com ใน <web_context>
    - ถ้ามีข้อมูลเกี่ยวข้อง → สรุปตอบ 3-4 บรรทัด และแนบลิงก์อ้างอิงจาก <web_context> ต่อท้ายเสมอ
    - ถ้าไม่พบในเว็บด้วย → ตอบตาม <default_reply> เท่านั้น ห้ามเพิ่มข้อความอื่น
-7. เจอ <out_of_scope_triggers> → ตอบ "ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ" + จบ
+7. เจอ <out_of_scope_triggers> → ตอบ "${handoffMsg}" + จบ
 </reasoning_protocol>
 
 <out_of_scope_triggers>
-ตอบ "ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ" เมื่อเจอคำเหล่านี้:
+ตอบ "${handoffMsg}" เมื่อเจอคำเหล่านี้:
 - "คุยกับคน" "ขอแอดมิน" "ติดต่อแอดมิน" "ขอเจ้าของ"
 - "ฟ้อง" "ร้องเรียน" "ไม่พอใจ"
 - "อยากซื้อจำนวนมาก" "ขายส่ง" "wholesale"

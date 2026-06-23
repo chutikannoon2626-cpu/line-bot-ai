@@ -11,6 +11,14 @@ import { getHistory, saveHistory } from '@/lib/history'
 const NOT_FOUND = '[NOT_FOUND]'
 const RETRY_TTL = 600 // 10 นาที
 
+// Thai timezone UTC+7: 18:00–07:59 = นอกเวลาทำการ
+function getHandoffMessage(): string {
+  const thaiHour = (new Date().getUTCHours() + 7) % 24
+  return thaiHour >= 18 || thaiHour < 8
+    ? 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
+    : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
+}
+
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
@@ -52,6 +60,7 @@ export async function POST(req: NextRequest) {
         if (msgType === 'text') {
           const userMessage = (event.message as { text: string }).text
           const history = await getHistory(userId)
+          const handoffMsg = getHandoffMessage()
 
           // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard → โหลดรูปที่บันทึกไว้แล้ววิเคราะห์
           if (userMessage === 'สอบถามสเปก') {
@@ -100,7 +109,6 @@ export async function POST(req: NextRequest) {
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
-            const handoffMsg = 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
             await lineClient.replyMessage({
               replyToken,
               messages: [{ type: 'text', text: handoffMsg }],
@@ -112,7 +120,7 @@ export async function POST(req: NextRequest) {
 
           const faqText = await fetchFAQ()
           const reply = await Promise.race([
-            generateReply(userMessage, faqText, history),
+            generateReply(userMessage, faqText, history, handoffMsg),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('gemini_timeout')), 12000)
             ),
@@ -128,7 +136,7 @@ export async function POST(req: NextRequest) {
               const hasRetried = await redis.get(retryKey)
               if (hasRetried) {
                 await redis.del(retryKey)
-                const adminMsg = 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
+                const adminMsg = handoffMsg
                 await lineClient.replyMessage({
                   replyToken,
                   messages: [{ type: 'text', text: adminMsg }],
@@ -149,7 +157,7 @@ export async function POST(req: NextRequest) {
               // Redis ล่ม → fallback ส่งแอดมินทันที
               await lineClient.replyMessage({
                 replyToken,
-                messages: [{ type: 'text', text: 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ' }],
+                messages: [{ type: 'text', text: handoffMsg }],
               })
             }
             return

@@ -15,7 +15,8 @@ const API_ERROR_REPLY =
 export async function generateReply(
   userMessage: string,
   faqText: string,
-  history: Turn[] = []
+  history: Turn[] = [],
+  handoffMsg: string = ''
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
@@ -32,7 +33,8 @@ export async function generateReply(
     'Spender Club',
     faqText,
     DEFAULT_REPLY,
-    'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ'
+    'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ',
+    handoffMsg
   )
 
   const contents = [
@@ -123,12 +125,17 @@ export async function generateReplyWithImage(
   }
 
   // ขั้น 3: ตอบลูกค้าโดยใช้ข้อมูลรูป + OCR + เว็บ + FAQ
+  const thaiHour = (new Date().getUTCHours() + 7) % 24
+  const imgHandoffMsg = thaiHour >= 18 || thaiHour < 8
+    ? 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
+    : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',
     'Spender Club',
     faqText,
     DEFAULT_REPLY,
-    'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ'
+    'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ',
+    imgHandoffMsg
   )
 
   const ocrContext = ocrText
