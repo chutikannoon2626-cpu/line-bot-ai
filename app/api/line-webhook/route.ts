@@ -95,7 +95,11 @@ export async function POST(req: NextRequest) {
           }
 
           if (shouldHandoff(userMessage)) {
-            await notifyAdmin(userId, userMessage)
+            try {
+              await notifyAdmin(userId, userMessage)
+            } catch (notifyErr) {
+              log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+            }
             const handoffMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏'
             await lineClient.replyMessage({
               replyToken,
