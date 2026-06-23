@@ -9,7 +9,8 @@ import { imageIntentCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 
 const NOT_FOUND = '[NOT_FOUND]'
-const RETRY_TTL = 600 // 10 นาที
+const RETRY_TTL = 600       // 10 นาที
+const PRE_HANDOFF_TTL = 600 // 10 นาที
 
 // Thai timezone UTC+7: 18:00–07:59 = นอกเวลาทำการ
 function getHandoffMessage(): string {
@@ -103,9 +104,16 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          if (shouldHandoff(userMessage)) {
+          // ตรวจ pre-handoff state — ลูกค้าตอบคำถาม "ต้องการอะไร" → route แอดมิน
+          let pendingTrigger: string | null = null
+          try {
+            pendingTrigger = await redis.get<string>(`pre_handoff:${userId}`)
+          } catch { /* Redis ล่ม — ข้าม */ }
+
+          if (pendingTrigger !== null) {
             try {
-              await notifyAdmin(userId, userMessage)
+              await redis.del(`pre_handoff:${userId}`)
+              await notifyAdmin(userId, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
@@ -114,7 +122,31 @@ export async function POST(req: NextRequest) {
               messages: [{ type: 'text', text: handoffMsg }],
             })
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
-            log.info('handoff.routed', { userId, latencyMs: Date.now() - startTime })
+            log.info('handoff.after_pre_handoff', { userId, latencyMs: Date.now() - startTime })
+            return
+          }
+
+          if (shouldHandoff(userMessage)) {
+            // ถามก่อนว่าต้องการอะไร แล้วค่อย route รอบถัดไป
+            const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
+            try {
+              await redis.set(`pre_handoff:${userId}`, userMessage, { ex: PRE_HANDOFF_TTL })
+              await lineClient.replyMessage({
+                replyToken,
+                messages: [{ type: 'text', text: preHandoffQ }],
+              })
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+              log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
+            } catch {
+              // Redis ล่ม → route ทันทีโดยไม่ถาม
+              try { await notifyAdmin(userId, userMessage) } catch { /* swallow */ }
+              await lineClient.replyMessage({
+                replyToken,
+                messages: [{ type: 'text', text: handoffMsg }],
+              })
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+              log.info('handoff.routed_fallback', { userId, latencyMs: Date.now() - startTime })
+            }
             return
           }
 
