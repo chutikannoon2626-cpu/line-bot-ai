@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
-            const handoffMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏'
+            const handoffMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
             await lineClient.replyMessage({
               replyToken,
               messages: [{ type: 'text', text: handoffMsg }],
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
               const hasRetried = await redis.get(retryKey)
               if (hasRetried) {
                 await redis.del(retryKey)
-                const adminMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏'
+                const adminMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
                 await lineClient.replyMessage({
                   replyToken,
                   messages: [{ type: 'text', text: adminMsg }],
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
               // Redis ล่ม → fallback ส่งแอดมินทันที
               await lineClient.replyMessage({
                 replyToken,
-                messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏' }],
+                messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ' }],
               })
             }
             return
