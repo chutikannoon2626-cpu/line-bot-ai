@@ -19,11 +19,23 @@ const HANDOFF_TRIGGERS = [
   'dealer',
   'ติดต่อสื่อ',
   'ติดต่อศูนย์บริการ',
+  // service requests ที่ต้องการแอดมินดำเนินการ
+  'เพิ่มกลุ่ม',
+  'ขอเพิ่มกลุ่ม',
+  'เพิ่มเครื่อง',
+  'ลงทะเบียนกลุ่ม',
+  'เพิ่มอุปกรณ์',
+  'ขอเพิ่มเครื่อง',
 ]
+
+// IMEI = 15 หลักติดกัน — ลูกค้าส่งมาเพื่อขอ service จากแอดมิน
+const IMEI_PATTERN = /\b\d{15}\b/
 
 export function shouldHandoff(message: string): boolean {
   const lower = message.toLowerCase()
-  return HANDOFF_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
+  if (HANDOFF_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))) return true
+  if (IMEI_PATTERN.test(message)) return true
+  return false
 }
 
 export async function notifyAdmin(userId: string, userMessage: string): Promise<void> {
