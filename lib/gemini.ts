@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
 import { searchSpenderClub } from './websearch'
+import type { Turn } from './history'
 
 const MODEL = 'gemini-2.5-flash'
 
@@ -13,7 +14,8 @@ const API_ERROR_REPLY =
 
 export async function generateReply(
   userMessage: string,
-  faqText: string
+  faqText: string,
+  history: Turn[] = []
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
@@ -32,9 +34,14 @@ export async function generateReply(
     'สุภาพ formal ลงท้ายด้วย "ค่ะ" เสมอ'
   )
 
+  const contents = [
+    ...history.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
+    { role: 'user' as const, parts: [{ text: userMessage }] },
+  ]
+
   const response = await ai.models.generateContent({
     model: MODEL,
-    contents: userMessage,
+    contents,
     config: {
       systemInstruction: `${systemPrompt}${webContext}`,
       temperature: 1.0,

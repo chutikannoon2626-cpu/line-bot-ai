@@ -6,6 +6,7 @@ import { shouldHandoff, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
 import { imageIntentCard } from '@/lib/flex-cards'
+import { getHistory, saveHistory } from '@/lib/history'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const RETRY_TTL = 600 // 10 นาที
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
         // --- TEXT ---
         if (msgType === 'text') {
           const userMessage = (event.message as { text: string }).text
+          const history = await getHistory(userId)
 
           // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard → โหลดรูปที่บันทึกไว้แล้ววิเคราะห์
           if (userMessage === 'สอบถามสเปก') {
@@ -94,17 +96,19 @@ export async function POST(req: NextRequest) {
 
           if (shouldHandoff(userMessage)) {
             await notifyAdmin(userId, userMessage)
+            const handoffMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏'
             await lineClient.replyMessage({
               replyToken,
-              messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏' }],
+              messages: [{ type: 'text', text: handoffMsg }],
             })
+            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
             log.info('handoff.routed', { userId, latencyMs: Date.now() - startTime })
             return
           }
 
           const faqText = await fetchFAQ()
           const reply = await Promise.race([
-            generateReply(userMessage, faqText),
+            generateReply(userMessage, faqText, history),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('gemini_timeout')), 12000)
             ),
@@ -120,17 +124,21 @@ export async function POST(req: NextRequest) {
               const hasRetried = await redis.get(retryKey)
               if (hasRetried) {
                 await redis.del(retryKey)
+                const adminMsg = 'รอแอดมินติดต่อกลับนะคะ 🙏'
                 await lineClient.replyMessage({
                   replyToken,
-                  messages: [{ type: 'text', text: 'รอแอดมินติดต่อกลับนะคะ 🙏' }],
+                  messages: [{ type: 'text', text: adminMsg }],
                 })
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: adminMsg }])
                 log.info('retry.admin_routed', { userId })
               } else {
                 await redis.set(retryKey, '1', { ex: RETRY_TTL })
+                const retryMsg = 'ขออภัยค่ะ น้องใจดีหาข้อมูลไม่พบ กรุณาสอบถามใหม่อีกครั้งหรืออธิบายเพิ่มเติมได้เลยค่ะ'
                 await lineClient.replyMessage({
                   replyToken,
-                  messages: [{ type: 'text', text: 'ขออภัยค่ะ น้องใจดีหาข้อมูลไม่พบ กรุณาสอบถามใหม่อีกครั้งหรืออธิบายเพิ่มเติมได้เลยค่ะ' }],
+                  messages: [{ type: 'text', text: retryMsg }],
                 })
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
                 log.info('retry.first_attempt', { userId })
               }
             } catch {
@@ -147,6 +155,7 @@ export async function POST(req: NextRequest) {
             replyToken,
             messages: [{ type: 'text', text: reply }],
           })
+          await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
           log.info('reply.sent', {
             userId,
             latencyMs: Date.now() - startTime,
