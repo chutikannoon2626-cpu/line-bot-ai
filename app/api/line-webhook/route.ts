@@ -11,6 +11,10 @@ import { getHistory, saveHistory } from '@/lib/history'
 const NOT_FOUND = '[NOT_FOUND]'
 const RETRY_TTL = 600       // 10 นาที
 const PRE_HANDOFF_TTL = 600 // 10 นาที
+const OFF_HOURS_TTL = 23 * 3600 // 23 ชั่วโมง — แจ้งซ้ำได้หลัง off-hours รอบถัดไป
+
+const OFF_HOURS_NOTICE =
+  'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
 
 // Thai timezone UTC+7: 18:00–07:59 = นอกเวลาทำการ
 function getHandoffMessage(): string {
@@ -25,7 +29,6 @@ export const maxDuration = 30
 
 const DEFAULT_REPLY =
   'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
-
 
 export async function GET() {
   return NextResponse.json({ status: 'ok', ts: new Date().toISOString() })
@@ -57,6 +60,25 @@ export async function POST(req: NextRequest) {
       })
 
       try {
+        // --- OFF-HOURS NOTICE — แจ้งครั้งแรกต่อ off-hours session ---
+        let offHoursNotice: string | null = null
+        const thaiHour = (new Date().getUTCHours() + 7) % 24
+        if (thaiHour >= 18 || thaiHour < 8) {
+          try {
+            const alreadyNotified = await redis.get(`off_hours:${userId}`)
+            if (!alreadyNotified) {
+              await redis.set(`off_hours:${userId}`, '1', { ex: OFF_HOURS_TTL })
+              offHoursNotice = OFF_HOURS_NOTICE
+            }
+          } catch { /* Redis ล่ม — ข้าม */ }
+        }
+
+        // Helper — prepend off-hours notice เป็น bubble แรก (LINE รองรับ 5 msg/reply)
+        const txt = (text: string): messagingApi.Message[] =>
+          offHoursNotice
+            ? [{ type: 'text', text: offHoursNotice }, { type: 'text', text }]
+            : [{ type: 'text', text }]
+
         // --- TEXT ---
         if (msgType === 'text') {
           const userMessage = (event.message as { text: string }).text
@@ -95,10 +117,7 @@ export async function POST(req: NextRequest) {
                 return DEFAULT_REPLY
               })
 
-              await lineClient.replyMessage({
-                replyToken,
-                messages: [{ type: 'text', text: reply }],
-              })
+              await lineClient.replyMessage({ replyToken, messages: txt(reply) })
               log.info('image_spec_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -117,10 +136,7 @@ export async function POST(req: NextRequest) {
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
-            await lineClient.replyMessage({
-              replyToken,
-              messages: [{ type: 'text', text: handoffMsg }],
-            })
+            await lineClient.replyMessage({ replyToken, messages: txt(handoffMsg) })
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
             log.info('handoff.after_pre_handoff', { userId, latencyMs: Date.now() - startTime })
             return
@@ -135,10 +151,7 @@ export async function POST(req: NextRequest) {
 
             if (alreadyRouted) {
               const alreadyMsg = 'ได้ส่งเรื่องถึงแอดมินแล้วค่ะ รอแอดมินติดต่อกลับด้วยนะคะ 🙏'
-              await lineClient.replyMessage({
-                replyToken,
-                messages: [{ type: 'text', text: alreadyMsg }],
-              })
+              await lineClient.replyMessage({ replyToken, messages: txt(alreadyMsg) })
               log.info('handoff.already_routed', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -150,10 +163,7 @@ export async function POST(req: NextRequest) {
               log.warn('handoff.pre_handoff_save_failed', { userId })
             }
             const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
-            await lineClient.replyMessage({
-              replyToken,
-              messages: [{ type: 'text', text: preHandoffQ }],
-            })
+            await lineClient.replyMessage({ replyToken, messages: txt(preHandoffQ) })
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
             log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
             return
@@ -177,43 +187,25 @@ export async function POST(req: NextRequest) {
               const hasRetried = await redis.get(retryKey)
               if (hasRetried) {
                 await redis.del(retryKey)
-                const adminMsg = handoffMsg
-                await lineClient.replyMessage({
-                  replyToken,
-                  messages: [{ type: 'text', text: adminMsg }],
-                })
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: adminMsg }])
+                await lineClient.replyMessage({ replyToken, messages: txt(handoffMsg) })
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
                 log.info('retry.admin_routed', { userId })
               } else {
                 await redis.set(retryKey, '1', { ex: RETRY_TTL })
                 const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ สามารถติดต่อแอดมินหรือช่างเทคนิคได้ในเวลาทำการ 08:00–17:00 น. ค่ะ หรือลองอธิบายเพิ่มเติมได้เลยนะคะ'
-                await lineClient.replyMessage({
-                  replyToken,
-                  messages: [{ type: 'text', text: retryMsg }],
-                })
+                await lineClient.replyMessage({ replyToken, messages: txt(retryMsg) })
                 await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
                 log.info('retry.first_attempt', { userId })
               }
             } catch {
-              // Redis ล่ม → fallback ส่งแอดมินทันที
-              await lineClient.replyMessage({
-                replyToken,
-                messages: [{ type: 'text', text: handoffMsg }],
-              })
+              await lineClient.replyMessage({ replyToken, messages: txt(handoffMsg) })
             }
             return
           }
 
-          await lineClient.replyMessage({
-            replyToken,
-            messages: [{ type: 'text', text: reply }],
-          })
+          await lineClient.replyMessage({ replyToken, messages: txt(reply) })
           await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
-          log.info('reply.sent', {
-            userId,
-            latencyMs: Date.now() - startTime,
-            replyLength: reply.length,
-          })
+          log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
         }
 
         // --- IMAGE ---
@@ -226,10 +218,11 @@ export async function POST(req: NextRequest) {
             // Redis ล่ม — ยังส่ง card ได้ แต่ปุ่ม "สอบถามสเปก" จะไม่พบรูป
           }
 
-          await lineClient.replyMessage({
-            replyToken,
-            messages: [imageIntentCard()],
-          })
+          const imageMessages: messagingApi.Message[] = offHoursNotice
+            ? [{ type: 'text', text: offHoursNotice }, imageIntentCard()]
+            : [imageIntentCard()]
+
+          await lineClient.replyMessage({ replyToken, messages: imageMessages })
           log.info('image.intent_card_sent', { userId, imageId })
         }
 
