@@ -5,13 +5,14 @@ import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoff, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
-import { imageIntentCard } from '@/lib/flex-cards'
+import { imageIntentCard, greetingCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const RETRY_TTL = 600       // 10 นาที
 const PRE_HANDOFF_TTL = 600 // 10 นาที
 const OFF_HOURS_TTL = 23 * 3600 // 23 ชั่วโมง — แจ้งซ้ำได้หลัง off-hours รอบถัดไป
+const IN_HOURS_TTL = 23 * 3600  // 23 ชั่วโมง — ทักทายซ้ำได้หลัง business hours รอบถัดไป
 
 const OFF_HOURS_NOTICE =
   'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
@@ -60,10 +61,13 @@ export async function POST(req: NextRequest) {
       })
 
       try {
-        // --- OFF-HOURS NOTICE — แจ้งครั้งแรกต่อ off-hours session ---
+        // --- SESSION GREETING — แจ้ง/ทักทายครั้งแรกตามช่วงเวลา ---
         let offHoursNotice: string | null = null
+        let showGreeting = false
         const thaiHour = (new Date().getUTCHours() + 7) % 24
+
         if (thaiHour >= 18 || thaiHour < 8) {
+          // นอกเวลาทำการ — แจ้ง off-hours notice ครั้งแรก
           try {
             const alreadyNotified = await redis.get(`off_hours:${userId}`)
             if (!alreadyNotified) {
@@ -71,13 +75,25 @@ export async function POST(req: NextRequest) {
               offHoursNotice = OFF_HOURS_NOTICE
             }
           } catch { /* Redis ล่ม — ข้าม */ }
+        } else {
+          // ในเวลาทำการ — ทักทายด้วย greeting card ครั้งแรก
+          try {
+            const alreadyGreeted = await redis.get(`in_hours:${userId}`)
+            if (!alreadyGreeted) {
+              await redis.set(`in_hours:${userId}`, '1', { ex: IN_HOURS_TTL })
+              showGreeting = true
+            }
+          } catch { /* Redis ล่ม — ข้าม */ }
         }
 
-        // Helper — prepend off-hours notice เป็น bubble แรก (LINE รองรับ 5 msg/reply)
-        const txt = (text: string): messagingApi.Message[] =>
-          offHoursNotice
-            ? [{ type: 'text', text: offHoursNotice }, { type: 'text', text }]
-            : [{ type: 'text', text }]
+        // Helper — prepend notice/card เป็น bubble แรก (LINE รองรับ 5 msg/reply)
+        const txt = (text: string): messagingApi.Message[] => {
+          const msgs: messagingApi.Message[] = []
+          if (offHoursNotice) msgs.push({ type: 'text', text: offHoursNotice })
+          if (showGreeting) msgs.push(greetingCard() as messagingApi.Message)
+          msgs.push({ type: 'text', text })
+          return msgs
+        }
 
         // --- TEXT ---
         if (msgType === 'text') {
@@ -218,9 +234,10 @@ export async function POST(req: NextRequest) {
             // Redis ล่ม — ยังส่ง card ได้ แต่ปุ่ม "สอบถามสเปก" จะไม่พบรูป
           }
 
-          const imageMessages: messagingApi.Message[] = offHoursNotice
-            ? [{ type: 'text', text: offHoursNotice }, imageIntentCard()]
-            : [imageIntentCard()]
+          const imageMessages: messagingApi.Message[] = []
+          if (offHoursNotice) imageMessages.push({ type: 'text', text: offHoursNotice })
+          if (showGreeting) imageMessages.push(greetingCard() as messagingApi.Message)
+          imageMessages.push(imageIntentCard() as messagingApi.Message)
 
           await lineClient.replyMessage({ replyToken, messages: imageMessages })
           log.info('image.intent_card_sent', { userId, imageId })

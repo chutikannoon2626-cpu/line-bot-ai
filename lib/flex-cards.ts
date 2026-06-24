@@ -1,3 +1,72 @@
+// Greeting Card — แสดงครั้งแรกในช่วงเวลาทำการ 08:00–17:59
+export function greetingCard() {
+  return {
+    type: 'flex' as const,
+    altText: 'Spenderclub ยินดีให้บริการค่ะ',
+    contents: {
+      type: 'bubble' as const,
+      body: {
+        type: 'box' as const,
+        layout: 'vertical' as const,
+        paddingAll: 'lg',
+        contents: [
+          {
+            type: 'text' as const,
+            text: 'Spenderclub ยินดีให้บริการค่ะ',
+            weight: 'bold' as const,
+            size: 'md' as const,
+            wrap: true,
+          },
+          {
+            type: 'text' as const,
+            text: 'มีอะไรให้น้องใจดีช่วยคะ หรือสามารถกดปุ่มเพื่อสอบถามได้เลยค่ะ',
+            size: 'sm' as const,
+            color: '#666666',
+            wrap: true,
+            margin: 'sm' as const,
+          },
+        ],
+      },
+      footer: {
+        type: 'box' as const,
+        layout: 'vertical' as const,
+        spacing: 'sm' as const,
+        paddingAll: 'md',
+        contents: [
+          {
+            type: 'button' as const,
+            style: 'primary' as const,
+            color: '#1A3A5C',
+            action: {
+              type: 'message' as const,
+              label: 'สอบถาม Spendernetwork',
+              text: 'สอบถาม Spendernetwork',
+            },
+          },
+          {
+            type: 'button' as const,
+            style: 'secondary' as const,
+            action: {
+              type: 'message' as const,
+              label: 'วิทยุสื่อสาร/ราคา',
+              text: 'สอบถามการใช้งานและราคา',
+            },
+          },
+          {
+            type: 'button' as const,
+            style: 'secondary' as const,
+            action: {
+              type: 'message' as const,
+              label: 'แจ้งปัญหาการใช้งาน',
+              text: 'แจ้งปัญหาการใช้งาน',
+            },
+          },
+        ],
+      },
+    },
+  }
+}
+
 // Image Intent Card — แสดงเมื่อลูกค้าส่งรูป
 export function imageIntentCard() {
   return {
