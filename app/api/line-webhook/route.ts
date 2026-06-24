@@ -149,6 +149,17 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ข้าม */ }
 
           if (pendingTrigger !== null) {
+            // ตรวจ history ว่าบอทเพิ่งถาม pre-handoff question จริงๆ ไหม
+            // ถ้าไม่ใช่ → key stale → ข้ามไป FAQ (getdel ลบ key ไปแล้ว)
+            const lastBotMsg = [...history].reverse().find(t => t.role === 'model')
+            const isAnsweringPreHandoff = lastBotMsg?.text?.includes('กรุณาแจ้งรายละเอียด')
+            if (!isAnsweringPreHandoff) {
+              log.info('handoff.stale_key_ignored', { userId })
+              pendingTrigger = null
+            }
+          }
+
+          if (pendingTrigger !== null) {
             try {
               await redis.set(`routed:${userId}`, '1', { ex: 300 })
               await notifyAdmin(userId, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
