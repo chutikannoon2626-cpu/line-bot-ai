@@ -9,10 +9,13 @@ import { imageIntentCard, greetingCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 
 const NOT_FOUND = '[NOT_FOUND]'
-const RETRY_TTL = 600       // 10 นาที
-const PRE_HANDOFF_TTL = 600 // 10 นาที
+const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
+const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
+const RETRY_TTL = 600           // 10 นาที
+const PRE_HANDOFF_TTL = 600     // 10 นาที
 const OFF_HOURS_TTL = 23 * 3600 // 23 ชั่วโมง — แจ้งซ้ำได้หลัง off-hours รอบถัดไป
 const IN_HOURS_TTL = 23 * 3600  // 23 ชั่วโมง — ทักทายซ้ำได้หลัง business hours รอบถัดไป
+const OUT_OF_DOMAIN_TTL = 24 * 3600 // 24 ชั่วโมง — ไม่ตอบซ้ำประโยคเดิม
 
 const OFF_HOURS_NOTICE =
   'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
@@ -195,6 +198,24 @@ export async function POST(req: NextRequest) {
             log.error('gemini.failed', { err: (err as Error).message })
             return DEFAULT_REPLY
           })
+
+          // out-of-domain — ตอบครั้งแรกเท่านั้น ไม่ซ้ำ 24 ชม.
+          if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
+            let alreadySentOD = false
+            try {
+              alreadySentOD = !!(await redis.get(`out_of_domain:${userId}`))
+              if (!alreadySentOD) await redis.set(`out_of_domain:${userId}`, '1', { ex: OUT_OF_DOMAIN_TTL })
+            } catch { /* Redis ล่ม */ }
+
+            if (!alreadySentOD) {
+              await lineClient.replyMessage({ replyToken, messages: txt(OUT_OF_DOMAIN_MSG) })
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
+              log.info('reply.out_of_domain', { userId })
+            } else {
+              log.info('reply.out_of_domain_suppressed', { userId })
+            }
+            return
+          }
 
           // retry logic — ตอบไม่ได้ครั้งแรก ให้ถามใหม่ / ครั้งสองส่งแอดมิน
           if (reply === NOT_FOUND) {
