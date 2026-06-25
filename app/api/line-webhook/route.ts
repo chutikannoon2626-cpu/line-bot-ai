@@ -156,8 +156,33 @@ export async function POST(req: NextRequest) {
               log.info('image_text_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
             } else {
-              // เกิน 60 วินาที → แสดง 4-ปุ่ม card
+              // เกิน 60 วินาที → OCR รูปก่อน บันทึก context → แสดง 4-ปุ่ม card
               try { await redis.del(`img_data:${userId}`) } catch { /* */ }
+
+              // ดาวน์โหลดรูปและ OCR เพื่อบันทึก context ลง history
+              try {
+                const blobClient2 = new messagingApi.MessagingApiBlobClient({
+                  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+                })
+                const stream2 = await blobClient2.getMessageContent(imgData.id)
+                const chunks2: Buffer[] = []
+                for await (const chunk of stream2) chunks2.push(Buffer.from(chunk))
+                const b64 = Buffer.concat(chunks2).toString('base64')
+                const { GoogleGenAI } = await import('@google/genai')
+                const ai2 = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
+                const ocrRes = await ai2.models.generateContent({
+                  model: 'gemini-2.5-flash',
+                  contents: [{ role: 'user', parts: [
+                    { text: 'ระบุยี่ห้อและรุ่นสินค้าในรูปนี้ ตอบสั้นๆ เช่น "Spender TC-4M" ถ้าไม่เจอตอบว่า "ไม่ระบุ"' },
+                    { inlineData: { mimeType: 'image/jpeg', data: b64 } },
+                  ]}],
+                  config: { maxOutputTokens: 50, temperature: 0 },
+                })
+                const product = ocrRes.text?.trim() || 'ไม่ระบุ'
+                await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${product}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+                log.info('image.ocr_saved', { userId, product })
+              } catch { /* OCR ล้มเหลว — ข้ามได้ */ }
+
               const cardMsgs: messagingApi.Message[] = []
               if (offHoursNotice) cardMsgs.push({ type: 'text', text: offHoursNotice })
               if (showGreeting) cardMsgs.push(greetingCard() as messagingApi.Message)
