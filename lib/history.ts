@@ -1,7 +1,7 @@
 import { redis } from './redis'
 
 const MAX_TURNS = 6   // เก็บ 3 รอบสนทนา (user+model ×3)
-const HISTORY_TTL = 1800  // 30 นาที
+const HISTORY_TTL = 600   // 10 นาที
 
 export type Turn = { role: 'user' | 'model'; text: string }
 
