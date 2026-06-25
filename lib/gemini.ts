@@ -1,34 +1,12 @@
 import { GoogleGenAI } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
-import { searchSpenderSites, searchSpenderClub } from './websearch'
+import { searchSpenderSites } from './websearch'
 import type { Turn } from './history'
 
 const MODEL = 'gemini-2.5-flash'
 
 const DEFAULT_REPLY = '[NOT_FOUND]'
 const API_ERROR_REPLY = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
-
-// Tool definition — Gemini เรียกเองเมื่อต้องการค้นสเปก/ฟังก์ชัน/คู่มือ
-const SEARCH_TOOL = {
-  functionDeclarations: [
-    {
-      name: 'search_spender_specs',
-      description:
-        'ค้นหาข้อมูลสเปก ฟังก์ชันการทำงาน คู่มือ หรือวิธีแก้ปัญหาวิทยุสื่อสาร SPENDER จาก spenderclub.com และ spendernetwork.com เท่านั้น ห้ามค้นจากแหล่งอื่น',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description:
-              'คำค้นหาที่สกัดจากคำถามลูกค้า เช่น "TC-4M สเปก" หรือ "วิทยุใส่ซิม ฟังก์ชัน PTT"',
-          },
-        },
-        required: ['query'],
-      },
-    },
-  ],
-}
 
 export async function generateReply(
   userMessage: string,
@@ -38,6 +16,25 @@ export async function generateReply(
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
+
+  // ค้นเว็บก่อน Gemini เสมอ — เร็วและน่าเชื่อถือกว่า Function Calling
+  const searchUrl = `https://www.spenderclub.com/?s=${encodeURIComponent(userMessage)}`
+  let webContext = ''
+  try {
+    const { text: webText, url: webUrl } = await searchSpenderSites(userMessage)
+    if (webText) {
+      webContext = `\n\n<web_context>\nข้อมูลจาก spenderclub.com และ spendernetwork.com:\n${webText}\nลิงก์อ้างอิง: ${webUrl || searchUrl}\n</web_context>`
+    }
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(), level: 'info', event: 'websearch.done',
+      hasResult: !!webText, latencyMs: Date.now() - startTime,
+    }))
+  } catch (err) {
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(), level: 'warn', event: 'websearch.failed',
+      err: (err as Error).message,
+    }))
+  }
 
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',
@@ -53,78 +50,15 @@ export async function generateReply(
     { role: 'user' as const, parts: [{ text: userMessage }] },
   ]
 
-  // Call 1 — Gemini ตัดสินใจเองว่าจะเรียก search tool ไหม
   const response = await ai.models.generateContent({
     model: MODEL,
     contents,
     config: {
-      systemInstruction: systemPrompt,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [SEARCH_TOOL] as any,
+      systemInstruction: `${systemPrompt}${webContext}`,
       temperature: 1.0,
       maxOutputTokens: 1024,
     },
   })
-
-  // ตรวจว่า Gemini ต้องการเรียก search_spender_specs
-  const parts = response.candidates?.[0]?.content?.parts ?? []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fcPart = parts.find((p: any) => p.functionCall) as any
-
-  if (fcPart?.functionCall?.name === 'search_spender_specs') {
-    const query = (fcPart.functionCall.args?.query ?? userMessage) as string
-
-    let searchText = ''
-    let searchUrl = ''
-    try {
-      const result = await searchSpenderSites(query)
-      searchText = result.text
-      searchUrl = result.url
-    } catch { /* search ล้มเหลว — Gemini จะตอบจาก FAQ */ }
-
-    console.log(JSON.stringify({
-      ts: new Date().toISOString(), level: 'info', event: 'search_spender_specs',
-      query, hasResult: !!searchText, url: searchUrl,
-    }))
-
-    // Call 2 — ส่งผลค้นหากลับให้ Gemini สรุปตอบ
-    const updatedContents = [
-      ...contents,
-      { role: 'model' as const, parts: [fcPart] },
-      {
-        role: 'user' as const,
-        parts: [{
-          functionResponse: {
-            name: 'search_spender_specs',
-            response: {
-              content: searchText || 'ไม่พบข้อมูลจากการค้นหา',
-              url: searchUrl || '',
-            },
-          },
-        }],
-      },
-    ]
-
-    const finalResponse = await ai.models.generateContent({
-      model: MODEL,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      contents: updatedContents as any,
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 1.0,
-        maxOutputTokens: 1024,
-      },
-    })
-
-    const finishReason2 = finalResponse.candidates?.[0]?.finishReason
-    console.log(JSON.stringify({
-      ts: new Date().toISOString(), level: 'info', event: 'gemini.search_reply',
-      latencyMs: Date.now() - startTime, finishReason: finishReason2, query,
-    }))
-
-    if (finishReason2 === 'MAX_TOKENS') return API_ERROR_REPLY
-    return finalResponse.text?.trim() || API_ERROR_REPLY
-  }
 
   const usage = response.usageMetadata
   const finishReason = response.candidates?.[0]?.finishReason
@@ -133,6 +67,7 @@ export async function generateReply(
     ts: new Date().toISOString(), level: 'info', event: 'gemini.reply',
     latencyMs: Date.now() - startTime, finishReason: finishReason ?? 'unknown',
     textLength: response.text?.length ?? 0,
+    hasWebContext: !!webContext,
     thoughtsTokenCount: usage?.thoughtsTokenCount ?? 0,
     candidatesTokenCount: usage?.candidatesTokenCount ?? 0,
     totalTokenCount: usage?.totalTokenCount ?? 0,
@@ -178,7 +113,7 @@ export async function generateReplyWithImage(
     // extract ล้มเหลว — ข้ามไป
   }
 
-  // ขั้น 2: ค้นหาจาก Serper/scraping
+  // ขั้น 2: ค้นหาจาก Serper
   let webContext = ''
   try {
     const query = userQuestion || imageQuery
