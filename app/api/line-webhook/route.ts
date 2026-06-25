@@ -199,6 +199,21 @@ export async function POST(req: NextRequest) {
             return DEFAULT_REPLY
           })
 
+          // HANDOFF: prefix — Gemini ยืนยัน IMEI แล้ว ส่งสรุปให้แอดมิน
+          if (reply.startsWith('HANDOFF:')) {
+            const summary = reply.replace(/^HANDOFF:\s*/, '')
+            try {
+              await redis.set(`routed:${userId}`, '1', { ex: 300 })
+              await notifyAdmin(userId, `[สรุปคำสั่ง IMEI]: ${summary}`)
+            } catch (notifyErr) {
+              log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+            }
+            await lineClient.replyMessage({ replyToken, messages: txt(handoffMsg) })
+            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+            log.info('handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
+            return
+          }
+
           // out-of-domain — ตอบครั้งแรกเท่านั้น ไม่ซ้ำ 24 ชม.
           if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
             let alreadySentOD = false

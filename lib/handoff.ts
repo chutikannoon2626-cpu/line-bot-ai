@@ -30,14 +30,9 @@ const HANDOFF_TRIGGERS = [
   'handoff',
 ]
 
-// IMEI = 15 หลักติดกัน — ลูกค้าส่งมาเพื่อขอ service จากแอดมิน
-const IMEI_PATTERN = /\b\d{15}\b/
-
 export function shouldHandoff(message: string): boolean {
   const lower = message.toLowerCase()
-  if (HANDOFF_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))) return true
-  if (IMEI_PATTERN.test(message)) return true
-  return false
+  return HANDOFF_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
 }
 
 export async function notifyAdmin(userId: string, userMessage: string): Promise<void> {
