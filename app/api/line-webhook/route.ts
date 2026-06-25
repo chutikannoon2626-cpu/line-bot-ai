@@ -122,6 +122,52 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // ตรวจ pending image — ลูกค้าส่งรูปแล้วพิมพ์ข้อความตามมา
+          let imgData: { id: string; ts: number } | null = null
+          try {
+            const raw = await redis.get<string>(`img_data:${userId}`)
+            if (raw) imgData = JSON.parse(raw) as { id: string; ts: number }
+          } catch { /* Redis ล่ม */ }
+
+          if (imgData) {
+            const elapsed = Date.now() - imgData.ts
+            if (elapsed < 60000) {
+              // ภายใน 60 วินาที → process image + text ด้วยกัน
+              try { await redis.del(`img_data:${userId}`) } catch { /* */ }
+              const blobClient = new messagingApi.MessagingApiBlobClient({
+                channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+              })
+              const stream = await blobClient.getMessageContent(imgData.id)
+              const chunks: Buffer[] = []
+              for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+              const base64Image = Buffer.concat(chunks).toString('base64')
+              const faqText = await fetchFAQ()
+              const reply = await Promise.race([
+                generateReplyWithImage(base64Image, faqText, userMessage),
+                new Promise<string>((_, reject) =>
+                  setTimeout(() => reject(new Error('gemini_timeout')), 15000)
+                ),
+              ]).catch((err) => {
+                log.error('gemini.image_text_failed', { err: (err as Error).message, userId })
+                return DEFAULT_REPLY
+              })
+              await lineClient.replyMessage({ replyToken, messages: txt(reply) })
+              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ] ${userMessage}` }, { role: 'model', text: reply }])
+              log.info('image_text_reply.sent', { userId, latencyMs: Date.now() - startTime })
+              return
+            } else {
+              // เกิน 60 วินาที → แสดง 4-ปุ่ม card
+              try { await redis.del(`img_data:${userId}`) } catch { /* */ }
+              const cardMsgs: messagingApi.Message[] = []
+              if (offHoursNotice) cardMsgs.push({ type: 'text', text: offHoursNotice })
+              if (showGreeting) cardMsgs.push(greetingCard() as messagingApi.Message)
+              cardMsgs.push(imageIntentCard() as messagingApi.Message)
+              await lineClient.replyMessage({ replyToken, messages: cardMsgs })
+              log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
+              return
+            }
+          }
+
           // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard → โหลดรูปที่บันทึกไว้แล้ววิเคราะห์
           if (userMessage === 'สอบถามสเปก') {
             let imageId: string | null = null
@@ -313,18 +359,21 @@ export async function POST(req: NextRequest) {
           const imageId = (event.message as { id: string }).id
 
           try {
-            await redis.set(`img:${userId}`, imageId, { ex: 300 })
+            // บันทึก imageId + timestamp — รอ text จากลูกค้า 60 วินาที
+            await Promise.all([
+              redis.set(`img:${userId}`, imageId, { ex: 300 }),
+              redis.set(`img_data:${userId}`, JSON.stringify({ id: imageId, ts: Date.now() }), { ex: 180 }),
+            ])
+            log.info('image.received_waiting', { userId, imageId })
           } catch {
-            // Redis ล่ม — ยังส่ง card ได้ แต่ปุ่ม "สอบถามสเปก" จะไม่พบรูป
+            // Redis ล่ม — fallback ส่ง card ทันที
+            const fallbackMsgs: messagingApi.Message[] = []
+            if (offHoursNotice) fallbackMsgs.push({ type: 'text', text: offHoursNotice })
+            if (showGreeting) fallbackMsgs.push(greetingCard() as messagingApi.Message)
+            fallbackMsgs.push(imageIntentCard() as messagingApi.Message)
+            await lineClient.replyMessage({ replyToken, messages: fallbackMsgs })
+            log.info('image.intent_card_sent_fallback', { userId, imageId })
           }
-
-          const imageMessages: messagingApi.Message[] = []
-          if (offHoursNotice) imageMessages.push({ type: 'text', text: offHoursNotice })
-          if (showGreeting) imageMessages.push(greetingCard() as messagingApi.Message)
-          imageMessages.push(imageIntentCard() as messagingApi.Message)
-
-          await lineClient.replyMessage({ replyToken, messages: imageMessages })
-          log.info('image.intent_card_sent', { userId, imageId })
         }
 
       } catch (err) {

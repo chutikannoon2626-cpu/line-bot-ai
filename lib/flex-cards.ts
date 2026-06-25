@@ -108,7 +108,16 @@ export function imageIntentCard() {
             color: '#1A3A5C',
             action: {
               type: 'message' as const,
-              label: 'สอบถามสเปก/ฟังก์ชัน',
+              label: 'ราคา',
+              text: 'สอบถามราคาสินค้า',
+            },
+          },
+          {
+            type: 'button' as const,
+            style: 'secondary' as const,
+            action: {
+              type: 'message' as const,
+              label: 'สเปค/ฟังก์ชัน',
               text: 'สอบถามสเปก',
             },
           },
@@ -117,8 +126,8 @@ export function imageIntentCard() {
             style: 'secondary' as const,
             action: {
               type: 'message' as const,
-              label: 'ติดต่อศูนย์บริการ',
-              text: 'ติดต่อศูนย์บริการ',
+              label: 'วิธีสั่งซื้อ',
+              text: 'สอบถามวิธีสั่งซื้อ',
             },
           },
           {
@@ -126,8 +135,8 @@ export function imageIntentCard() {
             style: 'secondary' as const,
             action: {
               type: 'message' as const,
-              label: 'แจ้งปัญหา/ปรึกษาช่าง',
-              text: 'แจ้งปัญหา',
+              label: 'เกี่ยวกับ Spendernetwork',
+              text: 'สอบถาม Spendernetwork',
             },
           },
           {
