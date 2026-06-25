@@ -108,6 +108,20 @@ export async function POST(req: NextRequest) {
           const history = await getHistory(userId)
           const handoffMsg = getHandoffMessage()
 
+          // Admin release takeover: "คืนบอท:{targetUserId}"
+          if (userMessage.startsWith('คืนบอท:')) {
+            const targetId = userMessage.slice('คืนบอท:'.length).trim()
+            if (targetId) {
+              try { await redis.del(`takeover:${targetId}`) } catch { /* Redis ล่ม */ }
+              await lineClient.replyMessage({
+                replyToken,
+                messages: [{ type: 'text', text: `✅ คืนน้องใจดีดูแลลูกค้าแล้วค่ะ (${targetId.slice(-6)})` }],
+              })
+              log.info('takeover.released', { by: userId, target: targetId })
+              return
+            }
+          }
+
           // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard → โหลดรูปที่บันทึกไว้แล้ววิเคราะห์
           if (userMessage === 'สอบถามสเปก') {
             let imageId: string | null = null

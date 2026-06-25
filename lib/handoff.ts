@@ -50,7 +50,7 @@ export async function notifyAdmin(userId: string, userMessage: string): Promise<
     messages: [
       {
         type: 'text',
-        text: `🔔 ลูกค้าต้องการคุยกับแอดมิน\n\nUserID: ${userId}\nข้อความ: ${userMessage}\n\nไปคุยที่: https://manager.line.biz/chats`,
+        text: `🔔 ลูกค้าต้องการคุยกับแอดมิน\n\nUserID: ${userId}\nข้อความ: ${userMessage}\n\nไปคุยที่: https://manager.line.biz/chats\n\n✅ เมื่อดูแลเสร็จ ส่ง:\nคืนบอท:${userId}`,
       },
     ],
   })
