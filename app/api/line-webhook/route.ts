@@ -217,9 +217,9 @@ export async function POST(req: NextRequest) {
             return DEFAULT_REPLY
           })
 
-          // HANDOFF: prefix — Gemini ยืนยัน IMEI แล้ว ส่งสรุปให้แอดมิน
-          if (reply.startsWith('HANDOFF:')) {
-            const summary = reply.replace(/^HANDOFF:\s*/, '')
+          // HANDOFF / HANDOFF: — Gemini ส่งต่อแอดมิน (IMEI confirm หรือ repair/price)
+          if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
+            const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
             try {
               await redis.set(`routed:${userId}`, '1', { ex: 300 })
               await notifyAdmin(userId, `[สรุปคำสั่ง IMEI]: ${summary}`)
