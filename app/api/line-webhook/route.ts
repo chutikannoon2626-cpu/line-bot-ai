@@ -11,7 +11,8 @@ import { getHistory, saveHistory } from '@/lib/history'
 const NOT_FOUND = '[NOT_FOUND]'
 const GREETING_MSG = 'Spenderclub ยินดีให้บริการค่ะ มีอะไรให้น้องใจดีช่วยบอกได้เลยนะคะ'
 const GREETING_KEYWORDS = ['สวัสดี', 'หวัดดี', 'ดีจ้า']
-const GREETING_TTL = 24 * 3600 // 24 ชั่วโมง
+const GREETING_TTL = 24 * 3600   // 24 ชั่วโมง
+const TAKEOVER_TTL = 2 * 3600    // 2 ชั่วโมง — แอดมิน takeover
 const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
 const RETRY_TTL = 600           // 10 นาที
@@ -145,6 +146,15 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // Admin Takeover — เงียบถ้าแอดมินกำลังดูแลอยู่
+          try {
+            const takeover = await redis.get(`takeover:${userId}`)
+            if (takeover) {
+              log.info('reply.takeover_suppressed', { userId })
+              return
+            }
+          } catch { /* Redis ล่ม — ข้าม */ }
+
           // ทักทาย — ตอบครั้งแรกเท่านั้นต่อวัน
           if (GREETING_KEYWORDS.some(kw => userMessage.includes(kw))) {
             let alreadyGreeted = false
@@ -168,7 +178,10 @@ export async function POST(req: NextRequest) {
 
           if (pendingTrigger !== null) {
             try {
-              await redis.set(`routed:${userId}`, '1', { ex: 300 })
+              await Promise.all([
+                redis.set(`routed:${userId}`, '1', { ex: 300 }),
+                redis.set(`takeover:${userId}`, '1', { ex: TAKEOVER_TTL }),
+              ])
               await notifyAdmin(userId, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
@@ -221,8 +234,11 @@ export async function POST(req: NextRequest) {
           if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
             const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
             try {
-              await redis.set(`routed:${userId}`, '1', { ex: 300 })
-              await notifyAdmin(userId, `[สรุปคำสั่ง IMEI]: ${summary}`)
+              await Promise.all([
+                redis.set(`routed:${userId}`, '1', { ex: 300 }),
+                redis.set(`takeover:${userId}`, '1', { ex: TAKEOVER_TTL }),
+              ])
+              await notifyAdmin(userId, `[สรุปคำสั่ง]: ${summary}`)
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
