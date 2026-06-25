@@ -9,6 +9,9 @@ import { imageIntentCard, greetingCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 
 const NOT_FOUND = '[NOT_FOUND]'
+const GREETING_MSG = 'Spenderclub ยินดีให้บริการค่ะ มีอะไรให้น้องใจดีช่วยบอกได้เลยนะคะ'
+const GREETING_KEYWORDS = ['สวัสดี', 'หวัดดี', 'ดีจ้า']
+const GREETING_TTL = 24 * 3600 // 24 ชั่วโมง
 const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
 const RETRY_TTL = 600           // 10 นาที
@@ -138,6 +141,21 @@ export async function POST(req: NextRequest) {
 
               await lineClient.replyMessage({ replyToken, messages: txt(reply) })
               log.info('image_spec_reply.sent', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+          }
+
+          // ทักทาย — ตอบครั้งแรกเท่านั้นต่อวัน
+          if (GREETING_KEYWORDS.some(kw => userMessage.includes(kw))) {
+            let alreadyGreeted = false
+            try {
+              alreadyGreeted = !!(await redis.get(`greeting:${userId}`))
+              if (!alreadyGreeted) await redis.set(`greeting:${userId}`, '1', { ex: GREETING_TTL })
+            } catch { /* Redis ล่ม */ }
+            if (!alreadyGreeted) {
+              await lineClient.replyMessage({ replyToken, messages: txt(GREETING_MSG) })
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: GREETING_MSG }])
+              log.info('reply.greeting', { userId })
               return
             }
           }
