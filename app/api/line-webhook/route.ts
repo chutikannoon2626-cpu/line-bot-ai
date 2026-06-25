@@ -93,10 +93,19 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ข้าม */ }
         }
 
-        // Helper — prepend notice/card เป็น bubble แรก (LINE รองรับ 5 msg/reply)
+        // ข้อความแรกนอกเวลา → ส่งแค่ notice แล้วหยุด (ข้อความถัดไปตอบปกติ)
+        if (offHoursNotice) {
+          await lineClient.replyMessage({
+            replyToken,
+            messages: [{ type: 'text', text: offHoursNotice }],
+          })
+          log.info('off_hours.notice_only', { userId })
+          return
+        }
+
+        // Helper — prepend greeting card เป็น bubble แรก (เฉพาะเวลาทำการ)
         const txt = (text: string): messagingApi.Message[] => {
           const msgs: messagingApi.Message[] = []
-          if (offHoursNotice) msgs.push({ type: 'text', text: offHoursNotice })
           if (showGreeting) msgs.push(greetingCard() as messagingApi.Message)
           msgs.push({ type: 'text', text })
           return msgs
