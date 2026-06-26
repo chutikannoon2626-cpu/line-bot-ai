@@ -1,13 +1,38 @@
+import { redis } from './redis'
+
 export type SearchResult = { text: string; url: string }
 
 type SerperOrganic = { title: string; snippet: string; link: string }
 type SerperResponse = { organic?: SerperOrganic[] }
 
-// ค้นหาจาก spenderclub.com + spendernetwork.com
+const SEARCH_CACHE_TTL = 24 * 3600 // 24 ชั่วโมง
+
+// ค้นหาจาก spenderclub.com + spendernetwork.com (มี Redis cache 24h)
 export async function searchSpenderSites(query: string): Promise<SearchResult> {
+  const cacheKey = `search_cache:${query.slice(0, 120)}`
+
+  // ตรวจ cache ก่อน
+  try {
+    const cached = await redis.get<SearchResult>(cacheKey)
+    if (cached) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level: 'info', event: 'search.cache_hit', query }))
+      return cached
+    }
+  } catch { /* Redis ล่ม — ข้าม */ }
+
   const apiKey = process.env.SERPER_API_KEY
-  if (apiKey) return searchWithSerper(query, apiKey)
-  return searchWithScraping(query)
+  const result = apiKey
+    ? await searchWithSerper(query, apiKey)
+    : await searchWithScraping(query)
+
+  // บันทึก cache ถ้าได้ผลลัพธ์
+  if (result.text) {
+    try {
+      await redis.set(cacheKey, result, { ex: SEARCH_CACHE_TTL })
+    } catch { /* Redis ล่ม — ข้าม */ }
+  }
+
+  return result
 }
 
 // backward compat — ใช้ใน generateReplyWithImage

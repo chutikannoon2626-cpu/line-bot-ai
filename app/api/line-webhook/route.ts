@@ -376,6 +376,13 @@ export async function POST(req: NextRequest) {
                 await lineClient.replyMessage({ replyToken, messages: txt(retryMsg) })
                 await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
                 log.info('retry.first_attempt', { userId })
+                // log คำถามที่ตอบไม่ได้ — สำหรับทีม Marketing เพิ่มใน Sheet
+                try {
+                  await redis.lpush(`unanswered_log`, JSON.stringify({
+                    ts: new Date().toISOString(), userId, question: userMessage,
+                  }))
+                  await redis.ltrim(`unanswered_log`, 0, 499) // เก็บแค่ 500 รายการล่าสุด
+                } catch { /* Redis ล่ม — ข้าม */ }
               }
             } catch {
               await lineClient.replyMessage({ replyToken, messages: txt(handoffMsg) })
