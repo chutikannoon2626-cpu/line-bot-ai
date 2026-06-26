@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
 
           if (imgData) {
             const elapsed = Date.now() - imgData.ts
-            if (elapsed < 60000) {
+            if (elapsed < 300000) {
               // ภายใน 60 วินาที → process image + text ด้วยกัน
               try { await redis.del(`img_data:${userId}`) } catch { /* */ }
               const blobClient = new messagingApi.MessagingApiBlobClient({
@@ -396,7 +396,7 @@ export async function POST(req: NextRequest) {
             // บันทึก imageId + timestamp — รอ text จากลูกค้า 60 วินาที
             await Promise.all([
               redis.set(`img:${userId}`, imageId, { ex: 300 }),
-              redis.set(`img_data:${userId}`, JSON.stringify({ id: imageId, ts: Date.now() }), { ex: 180 }),
+              redis.set(`img_data:${userId}`, JSON.stringify({ id: imageId, ts: Date.now() }), { ex: 360 }),
             ])
             log.info('image.received_waiting', { userId, imageId })
           } catch {
