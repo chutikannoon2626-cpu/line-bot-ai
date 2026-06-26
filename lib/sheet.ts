@@ -32,13 +32,19 @@ export async function fetchFAQ(): Promise<string> {
 
 function csvToFaqText(csv: string): string {
   const rows = parseCsvRows(csv).slice(1) // skip header row
-  // Sheet format: ID | Category | Question | Question Variations | Answer
+  // Sheet format: id, type, category, keywords, answer, url, brand, model_code, price, price_pack, license_required, license_ref
   return rows
-    .map(([_id, category, question, variations, answer]) => {
-      if (!question || !answer) return null
+    .map(([_id, _type, category, keywords, answer, url, brand, model_code, price]) => {
+      if (!keywords || !answer) return null
       const cleanAnswer = answer.replace(/\r?\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
-      const varText = variations ? ` (คำถามที่คล้ายกัน: ${variations.replace(/\\/g, '').replace(/\|/g, ', ')})` : ''
-      return `[${category}] ${question}${varText}\n→ ${cleanAnswer}`
+
+      // ข้อมูลสินค้า (ถ้ามี)
+      const productParts = [brand, model_code].filter(Boolean)
+      const productInfo = productParts.length ? ` [${productParts.join(' ')}]` : ''
+      const priceInfo = price ? ` ราคา: ${price}` : ''
+      const urlInfo = url ? ` ข้อมูลเพิ่มเติม: ${url}` : ''
+
+      return `[${category}]${productInfo}${priceInfo} ${keywords}\n→ ${cleanAnswer}${urlInfo}`
     })
     .filter(Boolean)
     .join('\n\n')
