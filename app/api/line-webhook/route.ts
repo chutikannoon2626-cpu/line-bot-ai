@@ -249,8 +249,8 @@ export async function POST(req: NextRequest) {
             }
           } catch { /* Redis ล่ม — ข้าม */ }
 
-          // ทักทาย — ตอบครั้งแรกเท่านั้นต่อวัน
-          if (GREETING_KEYWORDS.some(kw => userMessage.includes(kw))) {
+          // ทักทาย — ตอบครั้งแรกเท่านั้นต่อวัน (เฉพาะในเวลาทำการ)
+          if ((thaiHour >= 8 && thaiHour < 18) && GREETING_KEYWORDS.some(kw => userMessage.includes(kw))) {
             let alreadyGreeted = false
             try {
               alreadyGreeted = !!(await redis.get(`greeting:${userId}`))
