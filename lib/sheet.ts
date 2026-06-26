@@ -85,11 +85,17 @@ function csvToFaqText(csv: string): string {
 
       if (row.type === 'product') return formatProduct(row, licenseMap)
       if (row.type === 'faq') return formatFaq(row)
-      // license rows are in licenseMap — skip from main text
+      if (row.type === 'license') return formatLicense(row)
       return null
     })
     .filter(Boolean)
     .join('\n\n')
+}
+
+// --- Format License row ---
+function formatLicense(row: Row): string {
+  const urlInfo = row.url ? ` ดูขั้นตอน: ${row.url}` : ''
+  return `[ใบอนุญาต] ${row.keywords}\n→ ${clean(row.answer)}${urlInfo}`
 }
 
 // --- Format FAQ row ---
