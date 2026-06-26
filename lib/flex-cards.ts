@@ -68,7 +68,8 @@ export function greetingCard() {
 }
 
 // Image Intent Card — แสดงเมื่อลูกค้าส่งรูป
-export function imageIntentCard() {
+// product: ชื่อรุ่นจาก OCR — ใช้ผูกปุ่ม ราคา ให้บอทรู้ว่าถามรุ่นไหน
+export function imageIntentCard(product?: string) {
   return {
     type: 'flex' as const,
     altText: 'ต้องการให้น้องใจดีช่วยเรื่องอะไรคะ',
@@ -109,7 +110,7 @@ export function imageIntentCard() {
             action: {
               type: 'message' as const,
               label: 'ราคา',
-              text: 'สอบถามราคาสินค้า',
+              text: product ? `ราคา ${product}` : 'สอบถามราคาสินค้า',
             },
           },
           {

@@ -156,10 +156,11 @@ export async function POST(req: NextRequest) {
               log.info('image_text_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
             } else {
-              // เกิน 60 วินาที → OCR รูปก่อน บันทึก context → แสดง 4-ปุ่ม card
+              // เกิน 5 นาที → OCR รูปก่อน บันทึก context → แสดง card หรือถามชื่อรุ่น
               try { await redis.del(`img_data:${userId}`) } catch { /* */ }
 
-              // ดาวน์โหลดรูปและ OCR เพื่อบันทึก context ลง history
+              let ocrProduct: string | null = null
+
               try {
                 const blobClient2 = new messagingApi.MessagingApiBlobClient({
                   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
@@ -178,15 +179,27 @@ export async function POST(req: NextRequest) {
                   ]}],
                   config: { maxOutputTokens: 50, temperature: 0 },
                 })
-                const product = ocrRes.text?.trim() || 'ไม่ระบุ'
-                await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${product}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
-                log.info('image.ocr_saved', { userId, product })
+                ocrProduct = ocrRes.text?.trim() || 'ไม่ระบุ'
+                await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+                log.info('image.ocr_saved', { userId, product: ocrProduct })
               } catch { /* OCR ล้มเหลว — ข้ามได้ */ }
 
+              // 5.2: OCR ไม่เจอชื่อรุ่น → ถามแทนการแสดง card เปล่า
+              if (ocrProduct === 'ไม่ระบุ') {
+                const askMsgs: messagingApi.Message[] = []
+                if (offHoursNotice) askMsgs.push({ type: 'text', text: offHoursNotice })
+                if (showGreeting) askMsgs.push(greetingCard() as messagingApi.Message)
+                askMsgs.push({ type: 'text', text: 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ' })
+                await lineClient.replyMessage({ replyToken, messages: askMsgs })
+                log.info('image.ocr_not_found', { userId, elapsedMs: elapsed })
+                return
+              }
+
+              // 5.3: เจอรุ่น → ส่ง card พร้อมผูก model ใน ราคา button
               const cardMsgs: messagingApi.Message[] = []
               if (offHoursNotice) cardMsgs.push({ type: 'text', text: offHoursNotice })
               if (showGreeting) cardMsgs.push(greetingCard() as messagingApi.Message)
-              cardMsgs.push(imageIntentCard() as messagingApi.Message)
+              cardMsgs.push(imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message)
               await lineClient.replyMessage({ replyToken, messages: cardMsgs })
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
               return
@@ -389,15 +402,27 @@ export async function POST(req: NextRequest) {
         // --- IMAGE ---
         if (msgType === 'image') {
           const imageId = (event.message as { id: string }).id
+          let savedToRedis = false
 
           try {
-            // บันทึก imageId + timestamp — รอ text จากลูกค้า 60 วินาที
+            // บันทึก imageId + timestamp — รอ text จากลูกค้า 5 นาที
             await Promise.all([
               redis.set(`img:${userId}`, imageId, { ex: 300 }),
               redis.set(`img_data:${userId}`, JSON.stringify({ id: imageId, ts: Date.now() }), { ex: 360 }),
             ])
+            savedToRedis = true
             log.info('image.received_waiting', { userId, imageId })
-          } catch {
+          } catch { /* Redis ล่ม */ }
+
+          if (savedToRedis) {
+            // 5.1: ตอบรับทันที ไม่ปล่อยเงียบ
+            const ackMsgs: messagingApi.Message[] = []
+            if (offHoursNotice) ackMsgs.push({ type: 'text', text: offHoursNotice })
+            if (showGreeting) ackMsgs.push(greetingCard() as messagingApi.Message)
+            ackMsgs.push({ type: 'text', text: 'ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷' })
+            await lineClient.replyMessage({ replyToken, messages: ackMsgs })
+            log.info('image.received_ack', { userId, imageId })
+          } else {
             // Redis ล่ม — fallback ส่ง card ทันที
             const fallbackMsgs: messagingApi.Message[] = []
             if (offHoursNotice) fallbackMsgs.push({ type: 'text', text: offHoursNotice })
