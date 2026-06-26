@@ -328,6 +328,15 @@ export async function POST(req: NextRequest) {
             return DEFAULT_REPLY
           })
 
+          // 6.1: CANCEL_IMEI — ลูกค้ายกเลิก protocol กลางคัน
+          if (reply === 'CANCEL_IMEI') {
+            const cancelMsg = 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ'
+            await lineClient.replyMessage({ replyToken, messages: txt(cancelMsg) })
+            await saveHistory(userId, [])
+            log.info('imei.cancelled', { userId })
+            return
+          }
+
           // HANDOFF / HANDOFF: — Gemini ส่งต่อแอดมิน (IMEI confirm หรือ repair/price)
           if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
             const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
