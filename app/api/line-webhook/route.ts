@@ -19,7 +19,10 @@ const RETRY_TTL = 600           // 10 นาที
 const PRE_HANDOFF_TTL = 600     // 10 นาที
 const OFF_HOURS_TTL = 23 * 3600 // 23 ชั่วโมง — แจ้งซ้ำได้หลัง off-hours รอบถัดไป
 const IN_HOURS_TTL = 23 * 3600  // 23 ชั่วโมง — ทักทายซ้ำได้หลัง business hours รอบถัดไป
-const OUT_OF_DOMAIN_TTL = 24 * 3600 // 24 ชั่วโมง — ไม่ตอบซ้ำประโยคเดิม
+const LAST_ANSWER_TTL = 2 * 60      // 2 นาที — กันตอบซ้ำเป๊ะ (ชั้น 1)
+const MSG_RATE_TTL = 10              // 10 วินาที — rate limit window (ชั้น 2)
+const MSG_RATE_LIMIT = 5             // max ข้อความต่อ 10 วินาที
+const NONSENSE_TTL = 10 * 60        // 10 นาที — นับข้อความไร้สาระ (ชั้น 3)
 
 const OFF_HOURS_NOTICE =
   'ขณะนี้อยู่นอกเวลาทำการ แอดมินจะตอบกลับในเวลาทำการ 08:00–17:00 น. ค่ะ 🙏\nระหว่างนี้น้องใจดีช่วยดูแลก่อนนะคะ'
@@ -121,6 +124,21 @@ export async function POST(req: NextRequest) {
               return
             }
           }
+
+          // ชั้น 2: rate limit — กัน spam ยิงรัว (>5 ข้อความใน 10 วินาที)
+          try {
+            const rate = await redis.incr(`msg_rate:${userId}`)
+            if (rate === 1) await redis.expire(`msg_rate:${userId}`, MSG_RATE_TTL)
+            if (rate > MSG_RATE_LIMIT) {
+              if (rate === MSG_RATE_LIMIT + 1) {
+                await lineClient.replyMessage({ replyToken, messages: [{ type: 'text', text: 'รอสักครู่นะคะ น้องใจดีกำลังอ่านข้อความค่ะ 🙏' }] })
+                log.info('reply.rate_limit_warned', { userId, rate })
+              } else {
+                log.info('reply.rate_limited', { userId, rate })
+              }
+              return
+            }
+          } catch { /* Redis ล่ม — ข้าม */ }
 
           // ตรวจ pending image — ลูกค้าส่งรูปแล้วพิมพ์ข้อความตามมา
           let imgData: { id: string; ts: number } | null = null
@@ -355,20 +373,20 @@ export async function POST(req: NextRequest) {
             return
           }
 
-          // out-of-domain — ตอบครั้งแรกเท่านั้น ไม่ซ้ำ 24 ชม.
+          // ชั้น 3: out-of-domain/nonsense — ตอบครั้งแรก เงียบถ้าซ้ำใน 10 นาที
           if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
-            let alreadySentOD = false
+            let nonsenseCount = 0
             try {
-              alreadySentOD = !!(await redis.get(`out_of_domain:${userId}`))
-              if (!alreadySentOD) await redis.set(`out_of_domain:${userId}`, '1', { ex: OUT_OF_DOMAIN_TTL })
+              nonsenseCount = await redis.incr(`nonsense_count:${userId}`)
+              if (nonsenseCount === 1) await redis.expire(`nonsense_count:${userId}`, NONSENSE_TTL)
             } catch { /* Redis ล่ม */ }
 
-            if (!alreadySentOD) {
+            if (nonsenseCount <= 1) {
               await lineClient.replyMessage({ replyToken, messages: txt(OUT_OF_DOMAIN_MSG) })
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
               log.info('reply.out_of_domain', { userId })
             } else {
-              log.info('reply.out_of_domain_suppressed', { userId })
+              log.info('reply.nonsense_suppressed', { userId, nonsenseCount })
             }
             return
           }
@@ -402,6 +420,19 @@ export async function POST(req: NextRequest) {
             }
             return
           }
+
+          // ชั้น 1: กันตอบซ้ำเป๊ะ — ถ้า reply เหมือนเดิมใน 2 นาที ส่ง reminder สั้นแทน
+          try {
+            const lastAnswer = await redis.get<string>(`last_answer:${userId}`)
+            if (lastAnswer && lastAnswer === reply) {
+              const reminder = 'ข้อมูลเดิมตามที่แจ้งไปแล้วนะคะ มีอะไรให้ช่วยเพิ่มไหมคะ 😊'
+              await lineClient.replyMessage({ replyToken, messages: txt(reminder) })
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+              log.info('reply.duplicate_suppressed', { userId })
+              return
+            }
+            await redis.set(`last_answer:${userId}`, reply, { ex: LAST_ANSWER_TTL })
+          } catch { /* Redis ล่ม — ส่งปกติ */ }
 
           await lineClient.replyMessage({ replyToken, messages: txt(reply) })
           await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
