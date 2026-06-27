@@ -18,7 +18,10 @@ const PRE_HANDOFF_TTL = 600
 const RETRY_TTL = 600
 const OFF_HOURS_TTL = 23 * 3600
 const IN_HOURS_TTL = 23 * 3600
-const OUT_OF_DOMAIN_TTL = 24 * 3600
+const LAST_ANSWER_TTL = 2 * 60
+const MSG_RATE_TTL = 10
+const MSG_RATE_LIMIT = 5
+const NONSENSE_TTL = 10 * 60
 
 const OFF_HOURS_NOTICE = 'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
 
@@ -156,6 +159,23 @@ export async function POST(req: NextRequest) {
             const history = await getHistory(userId)
             const handoffMsg = getHandoffMessage()
 
+            // ชั้น 2: rate limit — กัน spam ยิงรัว
+            try {
+              const [rate] = await redis.pipeline()
+                .incr(`msg_rate:${userId}`)
+                .expire(`msg_rate:${userId}`, MSG_RATE_TTL)
+                .exec() as [number, number]
+              if (rate > MSG_RATE_LIMIT) {
+                if (rate === MSG_RATE_LIMIT + 1) {
+                  await fbSend(psid, 'รอสักครู่นะคะ น้องใจดีกำลังอ่านข้อความค่ะ 🙏')
+                  log.info('fb.reply.rate_limit_warned', { userId, rate })
+                } else {
+                  log.info('fb.reply.rate_limited', { userId, rate })
+                }
+                return
+              }
+            } catch { /* Redis ล่ม — ข้าม */ }
+
             // Off-hours notice (ส่งก่อน reply)
             if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
 
@@ -224,13 +244,32 @@ export async function POST(req: NextRequest) {
               ),
             ]).catch(() => DEFAULT_REPLY)
 
+            // CANCEL_IMEI — ลูกค้ายกเลิก IMEI protocol
+            if (reply === 'CANCEL_IMEI') {
+              const cancelMsg = 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ'
+              await fbSend(psid, cancelMsg)
+              await saveHistory(userId, [])
+              log.info('fb.imei.cancelled', { userId })
+              return
+            }
+
+            // ชั้น 3: out-of-domain/nonsense — ตอบครั้งแรก เงียบถ้าซ้ำใน 10 นาที
             if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
-              let alreadySentOD = false
+              let nonsenseCount = 0
               try {
-                alreadySentOD = !!(await redis.get(`out_of_domain:${userId}`))
-                if (!alreadySentOD) await redis.set(`out_of_domain:${userId}`, '1', { ex: OUT_OF_DOMAIN_TTL })
-              } catch { /* */ }
-              if (!alreadySentOD) await fbSend(psid, OUT_OF_DOMAIN_MSG)
+                const [count] = await redis.pipeline()
+                  .incr(`nonsense_count:${userId}`)
+                  .expire(`nonsense_count:${userId}`, NONSENSE_TTL)
+                  .exec() as [number, number]
+                nonsenseCount = count
+              } catch { /* Redis ล่ม */ }
+              if (nonsenseCount <= 1) {
+                await fbSend(psid, OUT_OF_DOMAIN_MSG)
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
+                log.info('fb.reply.out_of_domain', { userId })
+              } else {
+                log.info('fb.reply.nonsense_suppressed', { userId, nonsenseCount })
+              }
               return
             }
 
@@ -253,6 +292,28 @@ export async function POST(req: NextRequest) {
               }
               return
             }
+
+            // ชั้น 1: กันตอบซ้ำเป๊ะ — ครั้งที่ 2 reminder, ครั้งที่ 3+ เงียบ
+            try {
+              const lastAnswer = await redis.get<string>(`last_answer:${userId}`)
+              if (lastAnswer && lastAnswer === reply) {
+                const [repeatCount] = await redis.pipeline()
+                  .incr(`repeat_count:${userId}`)
+                  .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                  .exec() as [number, number]
+                if (repeatCount === 1) {
+                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                  await fbSend(psid, reminder)
+                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                  log.info('fb.reply.duplicate_reminded', { userId })
+                } else {
+                  log.info('fb.reply.duplicate_suppressed', { userId, repeatCount })
+                }
+                return
+              }
+              await redis.set(`last_answer:${userId}`, reply, { ex: LAST_ANSWER_TTL })
+              await redis.del(`repeat_count:${userId}`)
+            } catch { /* Redis ล่ม — ส่งปกติ */ }
 
             await fbSend(psid, reply)
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
