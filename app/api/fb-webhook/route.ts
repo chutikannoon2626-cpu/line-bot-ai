@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { fetchFAQ } from '@/lib/sheet'
 import { generateReply, generateReplyWithImage } from '@/lib/gemini'
-import { shouldHandoff } from '@/lib/handoff'
+import { shouldHandoff, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
 import { log } from '@/lib/log'
@@ -240,7 +240,10 @@ export async function POST(req: NextRequest) {
             if (pendingTrigger !== null) {
               try {
                 await redis.set(`routed:${userId}`, '1', { ex: 300 })
-              } catch { /* Redis ล่ม */ }
+                await notifyAdminFacebook(psid, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
+              } catch (notifyErr) {
+                log.error('fb.handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+              }
               await fbSend(psid, handoffMsg)
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
               log.info('fb.handoff.after_pre_handoff', { userId, latencyMs: Date.now() - startTime })
@@ -281,6 +284,21 @@ export async function POST(req: NextRequest) {
               await fbSend(psid, cancelMsg)
               await saveHistory(userId, [])
               log.info('fb.imei.cancelled', { userId })
+              return
+            }
+
+            // HANDOFF / HANDOFF: — Gemini ส่งต่อแอดมิน (IMEI confirm หรือ repair)
+            if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
+              const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
+              try {
+                await redis.set(`routed:${userId}`, '1', { ex: 300 })
+                await notifyAdminFacebook(psid, `[สรุปคำสั่ง]: ${summary}`)
+              } catch (notifyErr) {
+                log.error('fb.handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+              }
+              await fbSend(psid, handoffMsg)
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+              log.info('fb.handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
               return
             }
 

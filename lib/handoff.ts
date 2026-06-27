@@ -35,6 +35,27 @@ export function shouldHandoff(message: string): boolean {
   return HANDOFF_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
 }
 
+export async function notifyAdminFacebook(psid: string, userMessage: string): Promise<void> {
+  const lineClient = new messagingApi.MessagingApiClient({
+    channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
+  })
+  const adminGroupId = process.env.ADMIN_GROUP_ID
+  if (!adminGroupId) {
+    console.warn('[handoff] ADMIN_GROUP_ID not set · skipping admin notify')
+    return
+  }
+
+  await lineClient.pushMessage({
+    to: adminGroupId,
+    messages: [
+      {
+        type: 'text',
+        text: `🔔 [Facebook] ลูกค้าต้องการคุยกับแอดมิน\n\nFacebook ID: ${psid}\nข้อความ: ${userMessage}\n\nไปตอบที่: https://business.facebook.com/inbox`,
+      },
+    ],
+  })
+}
+
 export async function notifyAdmin(userId: string, userMessage: string): Promise<void> {
   const lineClient = new messagingApi.MessagingApiClient({
     channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
