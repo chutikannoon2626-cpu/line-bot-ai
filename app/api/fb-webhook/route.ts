@@ -22,7 +22,7 @@ const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
 const NONSENSE_TTL = 10 * 60
-const FB_IMG_TTL = 300
+const FB_IMG_TTL = 600             // 10 นาที
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nรบกวนพิมพ์ใหม่อีกครั้ง แอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
 
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
                   const faqText = await fetchFAQ()
                   const reply = await Promise.race([
                     generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
-                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
                   ]).catch(() => UNAVAILABLE_MSG)
                   await fbSend(psid, reply)
                   await saveHistory(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
