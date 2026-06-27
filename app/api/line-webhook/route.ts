@@ -428,17 +428,27 @@ export async function POST(req: NextRequest) {
             return
           }
 
-          // ชั้น 1: กันตอบซ้ำเป๊ะ — ถ้า reply เหมือนเดิมใน 2 นาที ส่ง reminder สั้นแทน
+          // ชั้น 1: กันตอบซ้ำเป๊ะ — ครั้งที่ 2 reminder, ครั้งที่ 3+ เงียบ, รีเซ็ตเมื่อถามใหม่
           try {
             const lastAnswer = await redis.get<string>(`last_answer:${userId}`)
             if (lastAnswer && lastAnswer === reply) {
-              const reminder = 'ข้อมูลเดิมตามที่แจ้งไปแล้วนะคะ มีอะไรให้ช่วยเพิ่มไหมคะ 😊'
-              await lineClient.replyMessage({ replyToken, messages: txt(reminder) })
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
-              log.info('reply.duplicate_suppressed', { userId })
+              const [repeatCount] = await redis.pipeline()
+                .incr(`repeat_count:${userId}`)
+                .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                .exec() as [number, number]
+              if (repeatCount === 1) {
+                const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                await lineClient.replyMessage({ replyToken, messages: txt(reminder) })
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                log.info('reply.duplicate_reminded', { userId })
+              } else {
+                log.info('reply.duplicate_suppressed', { userId, repeatCount })
+              }
               return
             }
+            // คำถามใหม่ → บันทึก last_answer + reset repeat_count
             await redis.set(`last_answer:${userId}`, reply, { ex: LAST_ANSWER_TTL })
+            await redis.del(`repeat_count:${userId}`)
           } catch { /* Redis ล่ม — ส่งปกติ */ }
 
           await lineClient.replyMessage({ replyToken, messages: txt(reply) })
