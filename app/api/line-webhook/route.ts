@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
               const reply = await Promise.race([
                 generateReplyWithImage(base64Image, faqText, userMessage),
                 new Promise<string>((_, reject) =>
-                  setTimeout(() => reject(new Error('gemini_timeout')), 10000)
+                  setTimeout(() => reject(new Error('gemini_timeout')), 15000)
                 ),
               ]).catch((err) => {
                 log.error('gemini.image_text_failed', { err: (err as Error).message, userId })
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest) {
               const reply = await Promise.race([
                 generateReplyWithImage(base64Image, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
                 new Promise<string>((_, reject) =>
-                  setTimeout(() => reject(new Error('gemini_timeout')), 10000)
+                  setTimeout(() => reject(new Error('gemini_timeout')), 15000)
                 ),
               ]).catch((err) => {
                 log.error('gemini.image_spec_failed', { err: (err as Error).message, userId })

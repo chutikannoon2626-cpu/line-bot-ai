@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
                   const faqText = await fetchFAQ()
                   const reply = await Promise.race([
                     generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
-                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
                   ]).catch(() => UNAVAILABLE_MSG)
                   await fbSend(psid, reply)
                   await saveHistory(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
