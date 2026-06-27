@@ -24,7 +24,7 @@ const MSG_RATE_LIMIT = 5
 const NONSENSE_TTL = 10 * 60
 const FB_IMG_TTL = 300
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
-const UNAVAILABLE_MSG = 'ระบบกำลังประมวลผล รบกวนถามใหม่อีกครั้งนะคะ 🙏'
+const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nรบกวนพิมพ์ใหม่อีกครั้ง แอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
 
 const OFF_HOURS_NOTICE = 'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
 
