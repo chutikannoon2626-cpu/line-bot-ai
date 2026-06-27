@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
             const reply = await Promise.race([
               generateReply(userMessage, faqText, history, handoffMsg),
               new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error('gemini_timeout')), 7000)
+                setTimeout(() => reject(new Error('gemini_timeout')), 10000)
               ),
             ]).catch((err) => {
               log.error('fb.gemini.failed', { err: (err as Error).message, userId })
