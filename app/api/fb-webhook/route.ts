@@ -22,7 +22,9 @@ const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
 const NONSENSE_TTL = 10 * 60
-const FB_IMG_TTL = 300             // 5 นาที — เก็บ URL รูปไว้ให้ spec handler ใช้
+const FB_IMG_TTL = 300
+const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
+const UNAVAILABLE_MSG = 'ระบบกำลังประมวลผล รบกวนถามใหม่อีกครั้งนะคะ 🙏'
 
 const OFF_HOURS_NOTICE = 'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
 
@@ -193,14 +195,14 @@ export async function POST(req: NextRequest) {
                   const faqText = await fetchFAQ()
                   const reply = await Promise.race([
                     generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
-                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
-                  ]).catch(() => DEFAULT_REPLY)
+                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+                  ]).catch(() => UNAVAILABLE_MSG)
                   await fbSend(psid, reply)
                   await saveHistory(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
                   log.info('fb.image_spec.sent', { userId, latencyMs: Date.now() - startTime })
                 } catch (err) {
                   log.error('fb.image_spec.failed', { userId, err: (err as Error).message })
-                  await fbSend(psid, DEFAULT_REPLY)
+                  await fbSend(psid, UNAVAILABLE_MSG)
                 }
                 return
               }
@@ -274,9 +276,19 @@ export async function POST(req: NextRequest) {
             const reply = await Promise.race([
               generateReply(userMessage, faqText, history, handoffMsg),
               new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error('gemini_timeout')), 12000)
+                setTimeout(() => reject(new Error('gemini_timeout')), 7000)
               ),
-            ]).catch(() => DEFAULT_REPLY)
+            ]).catch((err) => {
+              log.error('fb.gemini.failed', { err: (err as Error).message, userId })
+              return GEMINI_UNAVAILABLE
+            })
+
+            // Gemini ไม่ตอบทัน (timeout, 429, 503)
+            if (reply === GEMINI_UNAVAILABLE) {
+              await fbSend(psid, UNAVAILABLE_MSG)
+              log.info('fb.reply.gemini_unavailable', { userId })
+              return
+            }
 
             // CANCEL_IMEI — ลูกค้ายกเลิก IMEI protocol
             if (reply === 'CANCEL_IMEI') {
@@ -417,8 +429,8 @@ export async function POST(req: NextRequest) {
               const faqText = await fetchFAQ()
               const reply = await Promise.race([
                 generateReplyWithImage(b64, faqText, caption),
-                new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
-              ]).catch(() => DEFAULT_REPLY)
+                new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+              ]).catch(() => UNAVAILABLE_MSG)
               await fbSend(psid, reply)
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ] ${caption}` }, { role: 'model', text: reply }])
               log.info('fb.image_caption.sent', { userId, latencyMs: Date.now() - startTime })
@@ -490,11 +502,12 @@ export async function POST(req: NextRequest) {
             const reply = await Promise.race([
               generateReply(queryText, faqText, history, handoffMsg),
               new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error('gemini_timeout')), 12000)
+                setTimeout(() => reject(new Error('gemini_timeout')), 7000)
               ),
-            ]).catch(() => DEFAULT_REPLY)
+            ]).catch(() => GEMINI_UNAVAILABLE)
 
-            const finalReply = reply === NOT_FOUND || reply === OUT_OF_DOMAIN ? DEFAULT_REPLY : reply
+            const finalReply = (reply === NOT_FOUND || reply === OUT_OF_DOMAIN || reply === GEMINI_UNAVAILABLE)
+              ? UNAVAILABLE_MSG : reply
             await fbSend(psid, finalReply)
             await saveHistory(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
             log.info('fb.postback.replied', { userId, payload, latencyMs: Date.now() - startTime })

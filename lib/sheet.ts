@@ -11,7 +11,7 @@ export async function fetchFAQ(): Promise<string> {
 
     const res = await fetch(url, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3000),
     })
     if (!res.ok) throw new Error(`sheet fetch ${res.status}`)
 
