@@ -335,6 +335,10 @@ export async function POST(req: NextRequest) {
                   const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ สามารถติดต่อแอดมินหรือช่างเทคนิคได้ในเวลาทำการ 08:00–17:00 น. ค่ะ'
                   await fbSend(psid, retryMsg)
                   await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
+                  try {
+                    await redis.lpush('unanswered_log', JSON.stringify({ ts: new Date().toISOString(), userId, question: userMessage }))
+                    await redis.ltrim('unanswered_log', 0, 499)
+                  } catch { /* Redis ล่ม — ข้าม */ }
                 }
               } catch {
                 await fbSend(psid, handoffMsg)
