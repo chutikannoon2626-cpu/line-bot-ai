@@ -377,11 +377,15 @@ export async function POST(req: NextRequest) {
           }
 
           // ชั้น 3: out-of-domain/nonsense — ตอบครั้งแรก เงียบถ้าซ้ำใน 10 นาที
+          // pipeline: incr + expire อะตอมิก กันกรณี key ค้างไม่มี TTL
           if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
             let nonsenseCount = 0
             try {
-              nonsenseCount = await redis.incr(`nonsense_count:${userId}`)
-              if (nonsenseCount === 1) await redis.expire(`nonsense_count:${userId}`, NONSENSE_TTL)
+              const [count] = await redis.pipeline()
+                .incr(`nonsense_count:${userId}`)
+                .expire(`nonsense_count:${userId}`, NONSENSE_TTL)
+                .exec() as [number, number]
+              nonsenseCount = count
             } catch { /* Redis ล่ม */ }
 
             if (nonsenseCount <= 1) {
