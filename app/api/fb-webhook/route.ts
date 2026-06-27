@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { fetchFAQ } from '@/lib/sheet'
-import { generateReply } from '@/lib/gemini'
+import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoff } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
@@ -22,6 +22,7 @@ const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
 const NONSENSE_TTL = 10 * 60
+const FB_IMG_TTL = 300             // 5 นาที — เก็บ URL รูปไว้ให้ spec handler ใช้
 
 const OFF_HOURS_NOTICE = 'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
 
@@ -153,8 +154,8 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม */ }
           }
 
-          // --- TEXT ---
-          if (event.message?.text) {
+          // --- TEXT (ข้ามถ้าเป็น image+caption — IMAGE handler จัดการเอง) ---
+          if (event.message?.text && !event.message.attachments?.some(a => a.type === 'image')) {
             const userMessage = event.message.text
             const history = await getHistory(userId)
             const handoffMsg = getHandoffMessage()
@@ -175,6 +176,36 @@ export async function POST(req: NextRequest) {
                 return
               }
             } catch { /* Redis ล่ม — ข้าม */ }
+
+            // ลูกค้ากด [สเปค/ฟังก์ชัน] จาก image quick reply → โหลดรูปที่บันทึกไว้
+            if (userMessage === 'สเปค/ฟังก์ชัน') {
+              let fbImgUrl: string | null = null
+              try {
+                fbImgUrl = await redis.get<string>(`fb_img_url:${userId}`)
+                if (fbImgUrl) await redis.del(`fb_img_url:${userId}`)
+              } catch { /* Redis ล่ม */ }
+
+              if (fbImgUrl) {
+                if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
+                try {
+                  const imgRes = await fetch(fbImgUrl, { signal: AbortSignal.timeout(8000) })
+                  const b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64')
+                  const faqText = await fetchFAQ()
+                  const reply = await Promise.race([
+                    generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
+                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+                  ]).catch(() => DEFAULT_REPLY)
+                  await fbSend(psid, reply)
+                  await saveHistory(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
+                  log.info('fb.image_spec.sent', { userId, latencyMs: Date.now() - startTime })
+                } catch (err) {
+                  log.error('fb.image_spec.failed', { userId, err: (err as Error).message })
+                  await fbSend(psid, DEFAULT_REPLY)
+                }
+                return
+              }
+              // ไม่มีรูปเก็บไว้ → ตกลงไป FAQ flow ปกติ
+            }
 
             // Off-hours notice (ส่งก่อน reply)
             if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
@@ -320,9 +351,12 @@ export async function POST(req: NextRequest) {
             log.info('fb.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
           }
 
-          // --- IMAGE ---
+          // --- IMAGE (รวมกรณีรูป + caption ในข้อความเดียว) ---
           if (event.message?.attachments?.some(a => a.type === 'image')) {
             const history = await getHistory(userId)
+            const imageUrl = event.message?.attachments?.find(a => a.type === 'image')?.payload?.url
+            const caption = event.message?.text
+
             if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
             if (showGreeting) {
               await fbSendQuickReplies(
@@ -335,17 +369,81 @@ export async function POST(req: NextRequest) {
                 ]
               )
             }
+
+            // 5.1: ตอบรับทันที
+            await fbSend(psid, 'ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷')
+
+            if (!imageUrl) {
+              await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
+              log.info('fb.image.no_url', { userId })
+              return
+            }
+
+            // ดาวน์โหลดรูป (Facebook ส่ง URL มาตรงๆ)
+            let b64 = ''
+            try {
+              const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) })
+              b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64')
+            } catch (err) {
+              log.error('fb.image.download_failed', { userId, err: (err as Error).message })
+              await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
+              return
+            }
+
+            // กรณีส่งรูป + caption พร้อมกัน → process ทันที ไม่ต้องรอ
+            if (caption) {
+              const faqText = await fetchFAQ()
+              const reply = await Promise.race([
+                generateReplyWithImage(b64, faqText, caption),
+                new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+              ]).catch(() => DEFAULT_REPLY)
+              await fbSend(psid, reply)
+              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ] ${caption}` }, { role: 'model', text: reply }])
+              log.info('fb.image_caption.sent', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+
+            // OCR — ระบุยี่ห้อ/รุ่น
+            let ocrProduct: string | null = null
+            try {
+              const { GoogleGenAI } = await import('@google/genai')
+              const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
+              const ocrRes = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [{ role: 'user', parts: [
+                  { text: 'ระบุยี่ห้อและรุ่นสินค้าในรูปนี้ ตอบสั้นๆ เช่น "Spender TC-4M" ถ้าไม่เจอตอบว่า "ไม่ระบุ"' },
+                  { inlineData: { mimeType: 'image/jpeg', data: b64 } },
+                ]}],
+                config: { maxOutputTokens: 50, temperature: 0 },
+              })
+              ocrProduct = ocrRes.text?.trim() || 'ไม่ระบุ'
+              await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+              log.info('fb.image.ocr_saved', { userId, product: ocrProduct })
+            } catch { /* OCR ล้มเหลว */ }
+
+            // 5.2: ไม่เจอรุ่น → ถามชื่อรุ่น
+            if (ocrProduct === 'ไม่ระบุ') {
+              await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
+              log.info('fb.image.ocr_not_found', { userId })
+              return
+            }
+
+            // 5.3: เจอรุ่น → บันทึก URL + quick reply ผูก model
+            try {
+              await redis.set(`fb_img_url:${userId}`, imageUrl, { ex: FB_IMG_TTL })
+            } catch { /* Redis ล่ม */ }
+
+            const priceBtn = (`ราคา ${ocrProduct ?? ''}`).slice(0, 20)
             await fbSendQuickReplies(
               psid,
-              'ต้องการให้น้องใจดีช่วยเรื่องอะไรคะ รบกวนเลือกหัวข้อด้านล่างให้เจ้าหน้าที่หรือระบบดูแลต่อได้เลยค่ะ',
+              'ต้องการให้น้องใจดีช่วยเรื่องอะไรคะ',
               [
-                { title: 'สอบถามสเปก/ฟังก์ชัน', payload: 'QUERY_SPEC' },
-                { title: 'ติดต่อศูนย์บริการ', payload: 'CONTACT_SERVICE' },
-                { title: 'แจ้งปัญหา/ปรึกษาช่าง', payload: 'REPORT_ISSUE' },
+                { title: priceBtn, payload: 'IMG_PRICE' },
+                { title: 'สเปค/ฟังก์ชัน', payload: 'QUERY_SPEC' },
+                { title: 'วิธีสั่งซื้อ', payload: 'QUERY_ORDER' },
               ]
             )
-            await saveHistory(userId, [...history, { role: 'user', text: '[รูปภาพ]' }, { role: 'model', text: '[แสดงเมนู]' }])
-            log.info('fb.image.menu_sent', { userId })
+            log.info('fb.image.intent_sent', { userId, product: ocrProduct ?? 'unknown', latencyMs: Date.now() - startTime })
           }
 
           // --- POSTBACK (quick reply tapped) ---
