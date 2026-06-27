@@ -126,9 +126,12 @@ export async function POST(req: NextRequest) {
           }
 
           // ชั้น 2: rate limit — กัน spam ยิงรัว (>5 ข้อความใน 10 วินาที)
+          // pipeline: incr + expire ส่งพร้อมกัน กันกรณี expire fail แล้ว key ไม่มี TTL
           try {
-            const rate = await redis.incr(`msg_rate:${userId}`)
-            if (rate === 1) await redis.expire(`msg_rate:${userId}`, MSG_RATE_TTL)
+            const [rate] = await redis.pipeline()
+              .incr(`msg_rate:${userId}`)
+              .expire(`msg_rate:${userId}`, MSG_RATE_TTL)
+              .exec() as [number, number]
             if (rate > MSG_RATE_LIMIT) {
               if (rate === MSG_RATE_LIMIT + 1) {
                 await lineClient.replyMessage({ replyToken, messages: [{ type: 'text', text: 'รอสักครู่นะคะ น้องใจดีกำลังอ่านข้อความค่ะ 🙏' }] })
