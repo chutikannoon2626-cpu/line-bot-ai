@@ -10,7 +10,7 @@ import { getHistory, saveHistory } from '@/lib/history'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
-const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nรบกวนพิมพ์ใหม่อีกครั้ง แอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
+const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nแอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
 const GREETING_MSG = 'Spenderclub ยินดีให้บริการค่ะ มีอะไรให้น้องใจดีช่วยบอกได้เลยนะคะ'
 const GREETING_KEYWORDS = ['สวัสดี', 'หวัดดี', 'ดีจ้า']
 const GREETING_TTL = 24 * 3600
