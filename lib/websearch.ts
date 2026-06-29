@@ -41,6 +41,16 @@ export async function searchSpenderClub(query: string): Promise<string> {
   return result.text
 }
 
+// ตัด tracking parameters (srsltid, utm_*, gclid, fbclid ฯลฯ) ออกจาก URL
+function cleanUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    return u.origin + u.pathname
+  } catch {
+    return url
+  }
+}
+
 async function searchWithSerper(query: string, apiKey: string): Promise<SearchResult> {
   const startTime = Date.now()
   try {
@@ -68,7 +78,7 @@ async function searchWithSerper(query: string, apiKey: string): Promise<SearchRe
     if (organic.length === 0) return { text: '', url: '' }
 
     const text = organic.map(r => `${r.title}\n${r.snippet}`).join('\n\n').slice(0, 3000)
-    return { text, url: organic[0].link }
+    return { text, url: cleanUrl(organic[0].link) }
   } catch (err) {
     console.log(JSON.stringify({
       ts: new Date().toISOString(), level: 'warn', event: 'serper.failed',
