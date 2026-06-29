@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
             if (showGreeting) {
               await fbSendQuickReplies(
                 psid,
-                'Spenderclub ยินดีให้บริการค่ะ มีอะไรให้น้องใจดีช่วยคะ หรือสามารถกดปุ่มเพื่อสอบถามได้เลยค่ะ',
+                'ขอบคุณที่สนใจวิทยุสื่อสาร Spender Club\n( ขณะนี้อยู่ระหว่างการทดสอบระบบตอบกลับอัตโนมัติค่ะ )\nคุณลูกค้าสนใจสอบถามข้อมูลด้านใด สามารถพิมพ์สอบถาม หรือคลิกที่ปุ่มด้านล่างได้เลยค่ะ 👇',
                 [
                   { title: 'สอบถาม Spendernetwork', payload: 'QUERY_SPENDERNETWORK' },
                   { title: 'วิทยุสื่อสาร/ราคา', payload: 'QUERY_RADIO' },

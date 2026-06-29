@@ -2,7 +2,7 @@
 export function greetingCard() {
   return {
     type: 'flex' as const,
-    altText: 'Spenderclub ยินดีให้บริการค่ะ',
+    altText: 'ขอบคุณที่สนใจวิทยุสื่อสาร Spender Club',
     contents: {
       type: 'bubble' as const,
       body: {
@@ -12,14 +12,14 @@ export function greetingCard() {
         contents: [
           {
             type: 'text' as const,
-            text: 'Spenderclub ยินดีให้บริการค่ะ',
+            text: 'ขอบคุณที่สนใจวิทยุสื่อสาร Spender Club',
             weight: 'bold' as const,
             size: 'md' as const,
             wrap: true,
           },
           {
             type: 'text' as const,
-            text: 'มีอะไรให้น้องใจดีช่วยคะ หรือสามารถกดปุ่มเพื่อสอบถามได้เลยค่ะ',
+            text: '( ขณะนี้อยู่ระหว่างการทดสอบระบบตอบกลับอัตโนมัติค่ะ )\nคุณลูกค้าสนใจสอบถามข้อมูลด้านใด สามารถ พิมพ์สอบถาม หรือคลิกที่ปุ่มด้านล่างได้เลยค่ะ 👇',
             size: 'sm' as const,
             color: '#666666',
             wrap: true,
