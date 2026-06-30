@@ -7,6 +7,7 @@ import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
 import { imageIntentCard, greetingCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
+import { isScheduledOff } from '@/lib/schedule'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
@@ -132,6 +133,12 @@ export async function POST(req: NextRequest) {
               log.info('takeover.released', { by: userId, target: targetId })
               return
             }
+          }
+
+          // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
+          if (await isScheduledOff()) {
+            log.info('reply.scheduled_off', { userId })
+            return
           }
 
           // ชั้น 2: rate limit — pipeline กัน TTL หาย

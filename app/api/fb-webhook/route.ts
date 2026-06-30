@@ -6,6 +6,7 @@ import { shouldHandoff, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
 import { log } from '@/lib/log'
+import { isScheduledOff } from '@/lib/schedule'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -178,6 +179,12 @@ export async function POST(req: NextRequest) {
                 return
               }
             } catch { /* Redis ล่ม — ข้าม */ }
+
+            // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
+            if (await isScheduledOff()) {
+              log.info('fb.reply.scheduled_off', { userId })
+              return
+            }
 
             // ลูกค้ากด [สเปค/ฟังก์ชัน] จาก image quick reply → โหลดรูปที่บันทึกไว้
             if (userMessage === 'สเปค/ฟังก์ชัน') {
