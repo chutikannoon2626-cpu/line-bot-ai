@@ -9,20 +9,23 @@ const SEARCH_CACHE_TTL = 24 * 3600 // 24 ชั่วโมง
 
 // ค้นหาจาก spenderclub.com + spendernetwork.com (มี Redis cache 24h)
 export async function searchSpenderSites(query: string): Promise<SearchResult> {
+  // คู่มือ/แคตตาล็อก → ค้น spenderclub.com โดยตรง ข้าม Serper + ข้าม cache เพื่อหลีกเลี่ยง Google index เก่า
+  const isManualOrCatalog = /คู่มือ|แคตตาล็อก|catalog|manual/i.test(query)
+
   const cacheKey = `search_cache:${query.slice(0, 120)}`
 
-  // ตรวจ cache ก่อน
-  try {
-    const cached = await redis.get<SearchResult>(cacheKey)
-    if (cached) {
-      console.log(JSON.stringify({ ts: new Date().toISOString(), level: 'info', event: 'search.cache_hit', query }))
-      return cached
-    }
-  } catch { /* Redis ล่ม — ข้าม */ }
+  // ตรวจ cache ก่อน (เฉพาะ query ทั่วไป ไม่ใช่คู่มือ/แคตตาล็อก)
+  if (!isManualOrCatalog) {
+    try {
+      const cached = await redis.get<SearchResult>(cacheKey)
+      if (cached) {
+        console.log(JSON.stringify({ ts: new Date().toISOString(), level: 'info', event: 'search.cache_hit', query }))
+        return cached
+      }
+    } catch { /* Redis ล่ม — ข้าม */ }
+  }
 
   const apiKey = process.env.SERPER_API_KEY
-  // คู่มือ/แคตตาล็อก → ค้น spenderclub.com โดยตรง ข้าม Serper เพื่อหลีกเลี่ยง Google index เก่า
-  const isManualOrCatalog = /คู่มือ|แคตตาล็อก|catalog|manual/i.test(query)
   const result = (!isManualOrCatalog && apiKey)
     ? await searchWithSerper(query, apiKey)
     : await searchWithScraping(query)
