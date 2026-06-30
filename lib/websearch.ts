@@ -26,9 +26,14 @@ export async function searchSpenderSites(query: string): Promise<SearchResult> {
   }
 
   const apiKey = process.env.SERPER_API_KEY
-  const result = (!isManualOrCatalog && apiKey)
-    ? await searchWithSerper(query, apiKey)
-    : await searchWithScraping(query)
+  let result: SearchResult
+  if (isManualOrCatalog) {
+    // ค้น spendernetwork.com โดยตรงก่อน (PDF คู่มืออยู่ที่นี่) แล้ว fallback spenderclub.com
+    result = await searchWithScrapingDirect(query, 'spendernetwork.com')
+    if (!result.text) result = await searchWithScraping(query)
+  } else {
+    result = apiKey ? await searchWithSerper(query, apiKey) : await searchWithScraping(query)
+  }
 
   // บันทึก cache ถ้าได้ผลลัพธ์
   if (result.text) {
@@ -93,9 +98,17 @@ async function searchWithSerper(query: string, apiKey: string): Promise<SearchRe
   }
 }
 
+async function searchWithScrapingDirect(query: string, domain: string): Promise<SearchResult> {
+  return searchWithScrapingUrl(`https://www.${domain}/?s=${encodeURIComponent(query)}`)
+}
+
 async function searchWithScraping(query: string): Promise<SearchResult> {
+  return searchWithScrapingUrl(`https://www.spenderclub.com/?s=${encodeURIComponent(query)}`)
+}
+
+async function searchWithScrapingUrl(url: string): Promise<SearchResult> {
   const startTime = Date.now()
-  const url = `https://www.spenderclub.com/?s=${encodeURIComponent(query)}`
+  const domain = new URL(url).hostname
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(3000),
