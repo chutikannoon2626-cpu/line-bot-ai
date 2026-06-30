@@ -21,7 +21,9 @@ export async function searchSpenderSites(query: string): Promise<SearchResult> {
   } catch { /* Redis ล่ม — ข้าม */ }
 
   const apiKey = process.env.SERPER_API_KEY
-  const result = apiKey
+  // คู่มือ/แคตตาล็อก → ค้น spenderclub.com โดยตรง ข้าม Serper เพื่อหลีกเลี่ยง Google index เก่า
+  const isManualOrCatalog = /คู่มือ|แคตตาล็อก|catalog|manual/i.test(query)
+  const result = (!isManualOrCatalog && apiKey)
     ? await searchWithSerper(query, apiKey)
     : await searchWithScraping(query)
 

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: 'TH Sarabun New', Sarabun, sans-serif; font-size: 14pt; margin: 2.5cm; color: #000; line-height: 1.6; }
+  h1 { font-size: 22pt; font-weight: bold; text-align: center; color: #1a3a5c; border-bottom: 3px solid #1a3a5c; padding-bottom: 8px; margin-bottom: 4px; }
+  h2 { font-size: 16pt; font-weight: bold; color: #fff; background: #1a3a5c; padding: 6px 12px; margin-top: 28px; }
+  h3 { font-size: 14pt; font-weight: bold; color: #1a3a5c; margin-top: 16px; border-bottom: 1px dashed #aac; padding-bottom: 3px; }
+  h4 { font-size: 13pt; font-weight: bold; color: #333; margin: 10px 0 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th { background: #1a3a5c; color: white; padding: 8px 10px; text-align: left; }
+  td { border: 1px solid #ccc; padding: 7px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f5f8fc; }
+  .box { border: 1px solid #1a3a5c; border-radius: 4px; padding: 10px 14px; margin: 8px 0; background: #f0f4f8; font-family: monospace; font-size: 12pt; white-space: pre-line; }
+  .msg { border: 1px solid #999; border-radius: 8px; padding: 8px 14px; margin: 6px 0 6px 20px; background: #f9f9f9; font-style: italic; }
+  .note { border-left: 4px solid #e07b00; padding: 6px 10px; color: #555; margin: 8px 0; background: #fff8ee; }
+  .warn { border-left: 4px solid #c00; padding: 6px 10px; color: #c00; margin: 8px 0; background: #fff0f0; }
+  .ok { border-left: 4px solid #0a0; padding: 6px 10px; color: #063; margin: 8px 0; background: #f0fff4; }
+  .step-num { display: inline-block; background: #1a3a5c; color: white; border-radius: 50%; width: 24px; height: 24px; text-align: center; line-height: 24px; font-size: 12pt; margin-right: 6px; font-weight: bold; }
+  .arrow { color: #1a3a5c; font-weight: bold; }
+  ul { margin: 4px 0 4px 24px; }
+  li { margin: 3px 0; }
+  p { margin: 6px 0; }
+  .subtitle { text-align: center; color: #555; font-size: 12pt; margin-bottom: 20px; }
+  .flow-box { border: 2px solid #1a3a5c; border-radius: 6px; padding: 12px 16px; margin: 10px 0; }
+  .indent { margin-left: 30px; }
+  .label { font-weight: bold; color: #1a3a5c; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<h1>น้องใจดี — คู่มือ Flow การตอบ</h1>
+<p class="subtitle">Spender Club · LINE OA &amp; Facebook Inbox · อัปเดต มิถุนายน 2026</p>
+
+<!-- ===== 1. ภาพรวม ===== -->
+<h2>1. ภาพรวมระบบ</h2>
+
+<p>น้องใจดีตอบลูกค้าอัตโนมัติ 24 ชม. ทั้ง LINE OA และ Facebook Inbox โดยใช้ข้อมูลจาก Google Sheet และ AI (Gemini)</p>
+
+<table>
+  <tr><th>ส่วนประกอบ</th><th>หน้าที่</th><th>รายละเอียด</th></tr>
+  <tr><td><strong>Google Sheet</strong></td><td>ฐานข้อมูลสินค้า</td><td>ราคา สเปค ใบอนุญาต FAQ — อัปเดตทุก 60 วินาที</td></tr>
+  <tr><td><strong>Gemini 2.5 Flash</strong></td><td>AI สร้างคำตอบ</td><td>อ่านข้อมูล + เข้าใจคำถาม + ตอบเป็นภาษาไทย</td></tr>
+  <tr><td><strong>การค้นเว็บ</strong></td><td>หาข้อมูลเพิ่มเติม</td><td>ค้น spenderclub.com และ spendernetwork.com เมื่อไม่มีในชีต<br><em>คู่มือ/แคตตาล็อก → ค้น spenderclub.com โดยตรง (ไม่ผ่าน Google)</em></td></tr>
+  <tr><td><strong>Redis (Upstash)</strong></td><td>จำสถานะ</td><td>Session, ประวัติสนทนา, rate limit, admin takeover</td></tr>
+</table>
+
+<div class="note">ข้อมูลสินค้าในชีต: เพิ่มแถวใหม่ในชีต → บอทตอบได้ภายใน 1 นาที โดยไม่ต้องแก้โค้ด</div>
+
+<!-- ===== 2. Flow หลัก ===== -->
+<h2>2. Flow การตอบข้อความ (ตามลำดับ)</h2>
+<p>ทุกข้อความที่เข้ามาจะถูกตรวจตามลำดับนี้ และหยุดที่ขั้นแรกที่ตรงกัน</p>
+
+<h3><span class="step-num">1</span>ตรวจสอบ Rate Limit (กันส่งข้อความรัว)</h3>
+<p><span class="label">เงื่อนไข:</span> ลูกค้าส่ง <strong>เกิน 5 ข้อความใน 10 วินาที</strong></p>
+<table>
+  <tr><th>ข้อความที่</th><th>สิ่งที่เกิดขึ้น</th></tr>
+  <tr><td>1–5</td><td>ผ่านปกติ ไม่มีผลอะไร</td></tr>
+  <tr><td>6</td><td>บอทตอบ: "รอสักครู่นะคะ น้องใจดีกำลังอ่านข้อความค่ะ 🙏" แล้วหยุด</td></tr>
+  <tr><td>7 ขึ้นไป</td><td>บอทเงียบทั้งหมด</td></tr>
+</table>
+<div class="ok">รีเซ็ตอัตโนมัติหลังหยุดส่ง 10 วินาที — ลูกค้าจริงที่ถามช้าๆ ไม่โดนผลกระทบ</div>
+
+<h3><span class="step-num">2</span>ตรวจสอบรูปภาพค้างอยู่</h3>
+<p><span class="label">เงื่อนไข:</span> ลูกค้าเคยส่งรูปมาก่อนหน้า แล้วพิมพ์ข้อความตามมา</p>
+<table>
+  <tr><th>กรณี</th><th>สิ่งที่เกิดขึ้น</th></tr>
+  <tr><td>ภายใน 5 นาทีหลังส่งรูป</td><td>AI วิเคราะห์รูป + ข้อความพร้อมกัน → ตอบคำถามโดยอ้างอิงรูปด้วย</td></tr>
+  <tr><td>เกิน 5 นาที</td><td>AI ทำ OCR รูปก่อน → ถ้าเจอรุ่น: แสดงเมนูตัวเลือก / ถ้าไม่เจอรุ่น: ถามชื่อรุ่น</td></tr>
+</table>
+
+<h3><span class="step-num">3</span>ตรวจสอบ "สอบถามสเปก" (LINE) / "สเปค/ฟังก์ชัน" (Facebook)</h3>
+<p><span class="label">เงื่อนไข:</span> ลูกค้ากดปุ่มนี้จากเมนูหลังส่งรูป</p>
+<div class="flow-box">
+  <p><strong>ขั้น 1 — อ่านรูปด้วย AI (OCR)</strong></p>
+  <p class="indent">AI ดูรูปแล้วดึงข้อมูล: ยี่ห้อ รุ่น รหัสสินค้า ข้อความที่เห็นในรูปทั้งหมด</p>
+  <p><strong>ขั้น 2 — ค้นเว็บ</strong></p>
+  <p class="indent">นำชื่อรุ่นที่ได้จากขั้น 1 ไปค้น spenderclub.com หาสเปค ฟังก์ชัน คุณสมบัติ</p>
+  <p><strong>ขั้น 3 — สรุปคำตอบ</strong></p>
+  <p class="indent">AI รวมข้อมูลจากรูป + ผลค้นเว็บ → ตอบสเปค ฟังก์ชัน วิธีใช้งาน</p>
+</div>
+<div class="note">ต่างจากการค้นเว็บแบบข้อความ: มีขั้น 1 (อ่านรูป) เพิ่มขึ้น ทำให้ใช้เวลามากกว่า (สูงสุด 20 วินาที)</div>
+
+<h3><span class="step-num">4</span>Admin Takeover — บอทเงียบ</h3>
+<p><span class="label">เงื่อนไข:</span> แอดมินกำลังดูแลลูกค้าอยู่ (ถูก set หลัง handoff)</p>
+<ul>
+  <li>บอทเงียบทุกข้อความ — ลูกค้าเห็น "อ่านแล้ว" แต่ไม่มีคำตอบ</li>
+  <li>หมดอัตโนมัติใน <strong>2 ชั่วโมง</strong></li>
+  <li>แอดมินยกเลิกก่อนได้โดยส่ง <strong>คืนบอท:{userId}</strong></li>
+</ul>
+
+<h3><span class="step-num">5</span>ทักทาย (เฉพาะในเวลาทำการ 08:00–17:59)</h3>
+<p><span class="label">เงื่อนไข:</span> ลูกค้าพิมพ์ "สวัสดี" / "หวัดดี" / "ดีจ้า" เป็นครั้งแรกของวัน</p>
+<div class="msg">Spenderclub ยินดีให้บริการค่ะ มีอะไรให้น้องใจดีช่วยบอกได้เลยนะคะ</div>
+<div class="note">ตอบทันทีโดยไม่ต้องรอ AI — ครั้งต่อไปของวันเดิมจะผ่านไปตอบปกติ</div>
+
+<h3><span class="step-num">6</span>ตรวจ Handoff Trigger (ขอคุยกับแอดมิน)</h3>
+<p><span class="label">เงื่อนไข:</span> ลูกค้าพิมพ์คำที่ trigger handoff</p>
+<table>
+  <tr><th>ประเภท</th><th>คำที่ trigger</th></tr>
+  <tr><td>ขอพูดกับคน</td><td>คุยกับคน, ขอแอดมิน, ติดต่อแอดมิน, ขอเจ้าของ</td></tr>
+  <tr><td>ร้องเรียน</td><td>ฟ้อง, ร้องเรียน, ไม่พอใจ</td></tr>
+  <tr><td>ขายส่ง</td><td>ขายส่ง, wholesale, อยากซื้อจำนวนมาก</td></tr>
+  <tr><td>ใบเสนอราคา</td><td>ขอใบเสนอราคา, quotation, ขอ quote</td></tr>
+  <tr><td>ตัวแทน/สื่อ</td><td>ตัวแทนจำหน่าย, dealer, franchise, PR, interview</td></tr>
+</table>
+<p><strong>ขั้นตอนที่เกิดขึ้น:</strong></p>
+<ol>
+  <li>บอทถามรายละเอียด: <em>"กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ"</em></li>
+  <li>ลูกค้าตอบรายละเอียด → บอทส่งแจ้งเตือนไปที่ chat แอดมิน</li>
+  <li>บอทตอบลูกค้า: <em>"รอแอดมินติดต่อกลับนะคะ 🙏"</em></li>
+  <li>บอทหยุดตอบ (Admin Takeover เริ่มทำงาน)</li>
+</ol>
+<div class="note">ถ้า ADMIN_GROUP_ID ไม่ได้ตั้งค่า → บอทเงียบแต่แอดมินไม่รู้ — ต้องตั้งค่าให้ถูกต้อง</div>
+
+<h3><span class="step-num">7</span>ถาม AI (Gemini) — ขั้นตอนหลัก</h3>
+<p>AI อ่านข้อมูลจาก Google Sheet และตัดสินใจตอบ ใช้เวลาสูงสุด 10 วินาที</p>
+
+<div class="flow-box">
+  <p><strong>ขั้น A — ค้น Google Sheet ก่อน</strong></p>
+  <p class="indent">ค้นจาก keywords ในชีต ถ้าเจอ → ตอบทันทีตาม template</p>
+  <br>
+  <p><strong>ขั้น B — ค้นเว็บ (ถ้าไม่เจอในชีต)</strong></p>
+  <p class="indent">→ เจอข้อมูล: ตอบพร้อมแนบ URL</p>
+  <p class="indent">→ ไม่เจอ: แจ้งว่าไม่พบ + แนะนำให้อธิบายเพิ่มหรือรอแอดมิน</p>
+  <table style="margin:8px 0 0 20px; width:calc(100% - 20px)">
+    <tr><th>ประเภทคำถาม</th><th>วิธีค้น</th><th>เหตุผล</th></tr>
+    <tr><td>ทั่วไป (ราคา สเปค)</td><td>ค้นผ่าน Serper/Google (spenderclub.com + spendernetwork.com)</td><td>ผลครอบคลุมทั้งสองเว็บ</td></tr>
+    <tr><td><strong>คู่มือการใช้งาน / แคตตาล็อก</strong></td><td><strong>ค้น spenderclub.com โดยตรง (ไม่ผ่าน Google)</strong></td><td>หลีกเลี่ยง Google index เก่าที่อาจชี้ไฟล์ PDF รุ่นล้าสมัย</td></tr>
+  </table>
+</div>
+
+<p><strong>ผลลัพธ์ที่เป็นไปได้:</strong></p>
+<table>
+  <tr><th>ผลจาก AI</th><th>บอททำ</th><th>ข้อความที่ลูกค้าเห็น</th></tr>
+  <tr><td>ตอบปกติ</td><td>ส่งคำตอบ</td><td>คำตอบจริงจากข้อมูล</td></tr>
+  <tr><td>AI ช้า/ระบบล่ม</td><td>ส่ง fallback</td><td>"ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏 รบกวนพิมพ์ใหม่อีกครั้ง แอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ"</td></tr>
+  <tr><td>HANDOFF: (IMEI/ซ่อม)</td><td>แจ้งแอดมิน + หยุดตอบ</td><td>"รอแอดมินติดต่อกลับนะคะ 🙏"</td></tr>
+  <tr><td>ไม่เกี่ยวกับวิทยุ</td><td>ปฏิเสธ (ครั้งแรก)</td><td>"น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ..."</td></tr>
+  <tr><td>ไม่เกี่ยวกับวิทยุ (ซ้ำ)</td><td>เงียบ 10 นาที</td><td>—</td></tr>
+  <tr><td>ไม่พบข้อมูล (ครั้งที่ 1)</td><td>แจ้งไม่พบ + บันทึก log</td><td>"ขออภัยค่ะ ไม่พบข้อมูลในระบบ..."</td></tr>
+  <tr><td>ไม่พบข้อมูล (ครั้งที่ 2)</td><td>ส่งต่อแอดมิน</td><td>"รอแอดมินติดต่อกลับนะคะ 🙏"</td></tr>
+</table>
+
+<h3><span class="step-num">8</span>กัน Reply ซ้ำ (ชั้น 1)</h3>
+<p><span class="label">เงื่อนไข:</span> ลูกค้าถามคำถามเดิมที่บอทเพิ่งตอบไปภายใน 2 นาที</p>
+<table>
+  <tr><th>ครั้งที่</th><th>ผลลัพธ์</th><th>เหตุผล</th></tr>
+  <tr><td>1</td><td>ตอบเต็มปกติ</td><td>ตอบครั้งแรกเสมอ</td></tr>
+  <tr><td>2 (ภายใน 2 นาที)</td><td>"ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊"</td><td>ลูกค้าอาจไม่เห็นคำตอบแรก</td></tr>
+  <tr><td>3 ขึ้นไป (ภายใน 2 นาที)</td><td>เงียบ</td><td>ป้องกันส่ง spam</td></tr>
+  <tr><td>ถามคำถามใหม่</td><td>ตอบเต็มทันที (รีเซ็ตตัวนับ)</td><td>คำถามใหม่ = ไม่ใช่ซ้ำ</td></tr>
+  <tr><td>หลัง 2 นาที</td><td>ตอบเต็มใหม่ (รีเซ็ตอัตโนมัติ)</td><td>key หมดอายุ</td></tr>
+</table>
+
+<!-- ===== 3. Template ===== -->
+<h2>3. Template คำตอบ</h2>
+
+<h3>3.1 ตอบราคา / ข้อมูลสินค้า</h3>
+<div class="box">{brand} {model_code} ราคา {ราคา} บาทค่ะ 📻
+• {ข้อมูลสินค้า/การใช้งาน}
+• {สถานะใบอนุญาต} รับประกัน 2 ปี
+ดูรายละเอียด/ราคาล่าสุด: {URL}
+ลูกค้าสนใจสั่งเลยไหมคะ?</div>
+
+<table>
+  <tr><th>กรณีพิเศษ</th><th>วิธีตอบ</th><th>ตัวอย่าง</th></tr>
+  <tr><td>ราคาเป็น "-" (ขายแค่แพ็ค)</td><td>ใช้ราคาแพ็คแทน</td><td>"Spender UBC-410T — แพ็คคู่ 2 เครื่อง 2,790 ค่ะ"</td></tr>
+  <tr><td>มีทั้งราคาเดี่ยวและแพ็ค</td><td>แสดงทั้งคู่</td><td>"ราคา 1,590 บาท หรือ แพ็คคู่ 2,790 (โปรโมชั่นสุดคุ้ม)"</td></tr>
+  <tr><td>สินค้าหมด</td><td>แจ้งหมด + URL ดูรุ่นใกล้เคียง</td><td>"ตอนนี้ของหมดชั่วคราวค่ะ 🙏 ดูรุ่นใกล้เคียงได้ที่..."</td></tr>
+  <tr><td>คำถามกำกวม (เช่น "245")</td><td>ถามยืนยันรุ่น</td><td>"มีหลายรุ่นใกล้เคียง: 1) TC-245 2) TC-246H 3) TC-246H Plus แจ้งชื่อรุ่นได้เลยค่ะ"</td></tr>
+</table>
+
+<h3>3.2 ตอบใบอนุญาต</h3>
+<table>
+  <tr><th>กรณี</th><th>Template</th></tr>
+  <tr><td><strong>ต้องขอใบอนุญาต</strong></td><td>
+    {brand} {model_code} รุ่นนี้ต้องทำใบอนุญาตค่ะ 📋<br>
+    เป็น{หมวดสินค้า}<br>
+    • {ค่าธรรมเนียมและรายละเอียด}<br>
+    • ดูขั้นตอน: {URL} หรือสอบถามแอดมินช่วยดำเนินการได้ค่ะ
+  </td></tr>
+  <tr><td><strong>ไม่ต้องขอ</strong></td><td>
+    {brand} {model_code} ไม่ต้องขอใบอนุญาตค่ะ ใช้งานได้ถูกกฎหมายเลย 😊<br>
+    เป็น{หมวดสินค้า} {ข้อมูลเพิ่มเติม}
+  </td></tr>
+</table>
+
+<h3>3.3 ตอบเมื่อค้นเว็บเจอข้อมูล</h3>
+<div class="box">{สรุปข้อมูล 3-4 บรรทัด} ค่ะ 📻
+ดูรายละเอียดเพิ่มเติม: {URL ที่เจอบนเว็บ}
+หากต้องการข้อมูลเพิ่มเติม สอบถามแอดมินได้เลยค่ะ</div>
+
+<h3>3.4 ตอบเมื่อค้นเว็บแล้วไม่เจอ</h3>
+<div class="box">ขออภัยค่ะ ยังไม่พบข้อมูลที่ตรงกับคำถาม 🙏
+รบกวนแจ้งรายละเอียดเพิ่มเติม หรือรอแอดมินติดต่อกลับในเวลาทำการ 08:00–17:00 น. นะคะ</div>
+
+<h3>3.5 ตอบเมื่อระบบ Gemini ช้า/ล่ม</h3>
+<div class="box">ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏
+รบกวนพิมพ์ใหม่อีกครั้ง แอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ</div>
+
+<!-- ===== 4. Repair ===== -->
+<h2>4. Protocol แจ้งซ่อมเครื่อง</h2>
+<p>เมื่อลูกค้าแจ้งว่าวิทยุมีปัญหา บอทจะทำตาม 4 ขั้นตอนเสมอ</p>
+
+<h3>ขั้นที่ 1 — รับข้อมูลเบื้องต้น</h3>
+<p>บอทถาม 3 อย่าง:</p>
+<ul>
+  <li>รุ่นวิทยุที่มีปัญหา</li>
+  <li>อาการที่พบ</li>
+  <li>ซื้อมานานแค่ไหน (เพื่อเช็คประกัน)</li>
+</ul>
+
+<h3>ขั้นที่ 2 — วิเคราะห์อาการและแนะนำแก้เอง</h3>
+<table>
+  <tr><th>อาการ</th><th>วิธีแก้ที่บอทแนะนำ</th></tr>
+  <tr><td>ไม่มีเสียง / เสียงขาดหาย</td><td>เช็ค Channel, CTCSS/DCS, แบต, กด PTT ค้าง 1-2 วินาทีก่อนพูด</td></tr>
+  <tr><td>กดส่งไม่ได้ / ปุ่ม PTT ค้าง</td><td>ดูไฟ TX ที่หน้าจอ, ลอง Speaker Mic แทน</td></tr>
+  <tr><td>แบตหมดเร็ว / ชาร์จไม่เข้า</td><td>เปลี่ยนแท่นชาร์จ, เช็คขั้วแบต, ลองแบตสำรอง (ถ้า &gt;2 ปี แนะนำซื้อใหม่)</td></tr>
+  <tr><td>หลายอาการรวมกัน / ไม่แน่ใจ</td><td>ข้ามขั้นนี้ → แนะนำส่งซ่อมทันที</td></tr>
+</table>
+
+<h3>ขั้นที่ 3 — แนะนำส่งซ่อม (ถ้าแก้เองไม่ได้)</h3>
+<div class="box">แนะนำส่งซ่อมค่ะ:
+1) แพ็คเครื่องให้มิดชิด พร้อมแนบกระดาษระบุอาการ
+2) ส่งพัสดุหรือนำมาส่งเองที่ร้าน
+3) แจ้งชื่อและเบอร์ติดต่อ
+
+ที่อยู่รับซ่อม:
+ศูนย์บริการหลังการขาย บริษัท ที.ซี.เทคโนโลยี
+99 หมู่ 5 ต.บางระกำ อ.บางเลน จ.นครปฐม 73130
+โทร. 089-661-1062
+เวลาทำการ: จันทร์–เสาร์ 08:00–17:00 น.
+ระยะเวลาซ่อม: 3–7 วันทำการ</div>
+
+<h3>ขั้นที่ 4 — ปิดบทสนทนา</h3>
+<p>ถามว่ามีคำถามเพิ่มเติมไหม</p>
+<div class="warn">HANDOFF ทันที (ไม่รอขั้น 2): ลูกค้าถามราคาค่าซ่อม, ต้องการติดตามสถานะซ่อม, อาการซับซ้อนไม่อยู่ในฐานข้อมูล</div>
+
+<!-- ===== 5. IMEI ===== -->
+<h2>5. Protocol IMEI (เพิ่ม/ย้ายกลุ่มวิทยุ)</h2>
+<p>เมื่อข้อความมีตัวเลข 14–16 หลักติดกัน บอทจะเข้าสู่ IMEI protocol ทันที</p>
+
+<table>
+  <tr><th>ขั้น</th><th>บอททำ</th><th>รายละเอียด</th></tr>
+  <tr><td><strong>1</strong></td><td>ตรวจสอบ IMEI</td><td>ต้องครบ 15 หลัก ตัวเลขเท่านั้น — ถ้าไม่ครบ: แจ้งและขอใหม่</td></tr>
+  <tr><td><strong>2</strong></td><td>ถามประเภทคำสั่ง</td><td>เพิ่มเข้ากลุ่ม / ลบออกจากกลุ่ม / ย้ายกลุ่ม / เปลี่ยนกลุ่ม</td></tr>
+  <tr><td><strong>3</strong></td><td>แสดงสรุปยืนยัน</td><td>"ยืนยันการย้ายกลุ่ม IMEI: 863598080691487 จากกลุ่ม A ไปกลุ่ม B ถูกต้องไหมคะ?"</td></tr>
+  <tr><td><strong>4</strong></td><td>รอยืนยัน</td><td>"ใช่" เฉยๆ → ส่งต่อแอดมิน<br>"ใช่ แต่..." / "ใช่ เปลี่ยน..." → กลับขั้น 3 สรุปใหม่ (ห้าม handoff ทันที)</td></tr>
+</table>
+
+<table>
+  <tr><th>กรณีพิเศษ</th><th>บอททำ</th></tr>
+  <tr><td>ลูกค้าพิมพ์ "ยกเลิก"</td><td>ออกจาก protocol ทันที: "ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ"</td></tr>
+  <tr><td>ลูกค้าถามเรื่องอื่นระหว่างทาง</td><td>ออกจาก protocol แล้วตอบคำถามนั้นตามปกติ</td></tr>
+</table>
+
+<!-- ===== 6. Admin ===== -->
+<h2>6. ระบบแจ้งเตือนและ Handoff แอดมิน</h2>
+
+<h3>ข้อความแจ้งเตือนที่แอดมินได้รับ</h3>
+<p>เมื่อ handoff ถูก trigger บอทส่งข้อความมาที่ <strong>chat 1:1 ของแอดมินกับ OA</strong> ทันที:</p>
+<div class="box">🔔 ลูกค้าต้องการคุยกับแอดมิน
+
+UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
+ข้อความ: [เรื่องที่ต้องการ + รายละเอียดที่ลูกค้าส่ง]
+
+ไปคุยที่: https://manager.line.biz/chats
+
+✅ เมื่อดูแลเสร็จ ส่ง:
+คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>
+
+<h3>วิธีส่งต่อให้แอดมินจัดการ (IMEI)</h3>
+<div class="box">HANDOFF: ย้ายกลุ่ม | IMEI: 863598080691487 | A → B</div>
+
+<h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
+<p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
+<div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>
+<p>บอทจะตอบกลับ "✅ คืนน้องใจดีดูแลลูกค้าแล้วค่ะ" และกลับมาทำงานทันที</p>
+<div class="ok">ถ้าไม่ส่ง "คืนบอท:" — บอทจะกลับมาเองอัตโนมัติหลัง 2 ชั่วโมง</div>
+
+<!-- ===== 7. Off Hours ===== -->
+<h2>7. นอกเวลาทำการ (18:00–07:59 น.)</h2>
+
+<h3>ข้อความแรกของช่วงนอกเวลา</h3>
+<p>บอท <strong>prepend notice ก่อนคำตอบ</strong> ในข้อความเดียวกัน:</p>
+<div class="box">ขณะนี้อยู่นอกเวลาทำการ แอดมินจะตอบกลับในเวลาทำการ 08:00–17:00 น. ค่ะ 🙏
+ระหว่างนี้น้องใจดีช่วยดูแลก่อนนะคะ
+
+[คำตอบปกติตามด้านล่าง]</div>
+
+<h3>ข้อความถัดไปในคืนเดียวกัน</h3>
+<p>ตอบปกติ <strong>ไม่ prepend notice ซ้ำ</strong> — ลูกค้าไม่ต้องเห็นประกาศซ้ำทุกข้อความ</p>
+
+<div class="note">บอทยังตอบคำถามสินค้าได้ตามปกติแม้นอกเวลา — แอดมินเพียงไม่ online ตอบแบบ real-time เท่านั้น</div>
+
+<!-- ===== 8. Image ===== -->
+<h2>8. Flow รับรูปภาพ</h2>
+
+<h3>เมื่อลูกค้าส่งรูป</h3>
+<ol>
+  <li>บอทตอบรับทันที: <em>"ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"</em></li>
+  <li>บันทึกรูปไว้รอ 5 นาที (LINE: ใช้ message ID / Facebook: ใช้ URL)</li>
+</ol>
+
+<h3>กรณีต่างๆ หลังรับรูป</h3>
+<table>
+  <tr><th>กรณี</th><th>สิ่งที่เกิดขึ้น</th><th>ผลลัพธ์</th></tr>
+  <tr><td>ลูกค้าพิมพ์คำถามตามมา (ภายใน 5 นาที)</td><td>AI วิเคราะห์รูป + ข้อความพร้อมกัน</td><td>ตอบคำถามโดยอ้างอิงรูปด้วย</td></tr>
+  <tr><td>ลูกค้าพิมพ์คำถาม (เกิน 5 นาที)</td><td>AI ทำ OCR รูปก่อน แล้วแสดงเมนู</td><td>เมนูตัวเลือก [ราคา] [สเปค] [วิธีสั่งซื้อ]</td></tr>
+  <tr><td>OCR ไม่เจอชื่อรุ่น</td><td>ถามลูกค้าโดยตรง</td><td>"รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ"</td></tr>
+  <tr><td>ลูกค้ากด [ราคา {รุ่น}]</td><td>ค้นราคาจาก FAQ</td><td>ตอบราคาพร้อมข้อมูลสินค้า</td></tr>
+  <tr><td>ลูกค้ากด [สเปค/ฟังก์ชัน]</td><td>วิเคราะห์รูปเต็มรูปแบบ (3 ขั้น)</td><td>สเปค ฟังก์ชัน วิธีใช้ + URL</td></tr>
+</table>
+
+<h3>กระบวนการ [สเปค/ฟังก์ชัน] (3 ขั้น)</h3>
+<div class="flow-box">
+  <p><strong>ขั้น 1 — อ่านรูปด้วย AI</strong></p>
+  <p class="indent">AI ดูรูปแล้วดึงข้อมูล: ยี่ห้อ รุ่น รหัสสินค้า ข้อความทุกตัวที่เห็นในรูป</p>
+  <p><strong>ขั้น 2 — ค้นเว็บด้วยชื่อรุ่นที่ได้</strong></p>
+  <p class="indent">นำข้อมูลจากขั้น 1 ไปค้น spenderclub.com หาสเปค ฟังก์ชัน ราคา</p>
+  <p><strong>ขั้น 3 — สรุปคำตอบ</strong></p>
+  <p class="indent">AI รวมข้อมูลจากรูป + เว็บ → ตอบสเปค ฟังก์ชัน วิธีใช้งาน + URL</p>
+</div>
+<div class="note">ใช้เวลาสูงสุด 20 วินาที เพราะทำ 3 ขั้นตอน — ถ้า timeout จะได้รับข้อความ "ระบบกำลังประมวลผล..."</div>
+
+<!-- ===== 9. Unanswered ===== -->
+<h2>9. คำถามที่ตอบไม่ได้ — unanswered_log</h2>
+
+<p>ทุกครั้งที่บอทตอบไม่ได้ (ค้นชีต + เว็บแล้วยังไม่พบ) จะ<strong>บันทึกอัตโนมัติ</strong>ลงใน Redis</p>
+
+<h3>ข้อมูลที่บันทึก</h3>
+<div class="box">{"ts": "2026-06-27T14:30:00.000Z", "userId": "U90fcb65b...", "question": "UBC-410T ราคา"}</div>
+
+<h3>วิธีดู log</h3>
+<p>ทีม Marketing เปิด URL นี้ในเบราว์เซอร์:</p>
+<div class="box">GET https://line-bot-ai-theta.vercel.app/api/admin/unanswered-log?key={LINE_CHANNEL_SECRET}</div>
+<p>ผลที่ได้: รายการคำถาม 500 อันล่าสุด เรียงจากใหม่ไปเก่า</p>
+<div class="ok">นำคำถามที่ตอบไม่ได้ไปเพิ่มในชีต → บอทจะตอบได้ทันทีภายใน 1 นาที</div>
+
+<!-- ===== 10. Summary ===== -->
+<h2>10. สรุปข้อมูลสำคัญ</h2>
+
+<table>
+  <tr><th>หัวข้อ</th><th>รายละเอียด</th></tr>
+  <tr><td>เวลาทำการแอดมิน</td><td>08:00–17:00 น. ทุกวัน (บอทตอบ 24 ชม.)</td></tr>
+  <tr><td>เวลา Gemini ตอบ</td><td>ปกติ 2–8 วินาที / ซับซ้อน (ค้นเว็บ) สูงสุด 10 วินาที / รูปภาพ สูงสุด 20 วินาที</td></tr>
+  <tr><td>ข้อมูลสินค้า</td><td>ดึงจาก Google Sheet ทุก 60 วินาที — แก้ชีตแล้วมีผลใน 1 นาที</td></tr>
+  <tr><td>ประวัติสนทนา</td><td>บอทจำ 6 รอบล่าสุด (หมดอายุใน 10 นาที)</td></tr>
+  <tr><td>Admin Takeover</td><td>หมดอายุอัตโนมัติ 2 ชั่วโมง หรือยกเลิกด้วย "คืนบอท:{userId}"</td></tr>
+  <tr><td>Rate Limit</td><td>5 ข้อความ/10 วินาที (ป้องกัน spam)</td></tr>
+  <tr><td>Anti-dup Reply</td><td>ถามซ้ำในชุดเดิม: ครั้ง 2 = reminder / ครั้ง 3+ = เงียบ 2 นาที</td></tr>
+  <tr><td>Nonsense Filter</td><td>ข้อความไม่เกี่ยว: ตอบ 1 ครั้ง แล้วเงียบ 10 นาที</td></tr>
+  <tr><td>unanswered_log</td><td>เก็บสูงสุด 500 คำถาม — ดูได้ที่ /api/admin/unanswered-log</td></tr>
+</table>
+
+<p style="text-align:center; color:#888; margin-top:40px; font-size:11pt;">— คู่มือน้องใจดี Spender Club · จัดทำโดย Claude Code · มิถุนายน 2026 —</p>
+
+</body>
+</html>
