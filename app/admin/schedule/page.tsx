@@ -1,5 +1,5 @@
 'use client'
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import type { CSSProperties } from 'react'
 
 interface Rule {
@@ -43,9 +43,28 @@ const badge = (on: boolean): CSSProperties => ({
   color: on ? '#2e7d32' : '#999',
 })
 
+function useBangkokTime() {
+  const [now, setNow] = useState('')
+  useEffect(() => {
+    const update = () => {
+      const d = new Date()
+      setNow(d.toLocaleString('th-TH', {
+        timeZone: 'Asia/Bangkok',
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }))
+    }
+    update()
+    const t = setInterval(update, 1000)
+    return () => clearInterval(t)
+  }, [])
+  return now
+}
+
 export default function SchedulePage() {
   const [key, setKey]       = useState('')
   const [authed, setAuthed] = useState(false)
+  const bangkokTime = useBangkokTime()
   const [rules, setRules]   = useState<Rule[]>([])
   const [days, setDays]     = useState<number[]>([])
   const [startTime, setStart] = useState('12:00')
@@ -121,9 +140,12 @@ export default function SchedulePage() {
   return (
     <div style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
       <h2 style={{ color: '#1a3a5c' }}>📅 ตั้งเวลาปิดบอทซ้ำทุกสัปดาห์</h2>
-      <p style={{ color: '#666', fontSize: 13, marginBottom: 24 }}>
+      <p style={{ color: '#666', fontSize: 13, marginBottom: 12 }}>
         ช่วงเวลาที่กำหนด บอทจะไม่ตอบอัตโนมัติ (LINE OA และ Facebook ใช้กฎเดียวกัน)
       </p>
+      <div style={{ background: '#e8f0fe', borderRadius: 8, padding: '8px 14px', marginBottom: 24, fontSize: 13, color: '#1a3a5c' }}>
+        🕐 เวลาปัจจุบัน (Bangkok): <strong>{bangkokTime}</strong>
+      </div>
 
       {/* ฟอร์มเพิ่มกฎ */}
       <form onSubmit={addRule} style={{ background: '#f0f4f8', padding: 16, borderRadius: 8, marginBottom: 28 }}>
