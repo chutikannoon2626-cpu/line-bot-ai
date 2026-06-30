@@ -49,6 +49,55 @@ async function fbSend(psid: string, text: string) {
   ).catch(err => log.error('fb.send_failed', { psid, err: (err as Error).message }))
 }
 
+// ดึง URL สินค้า spenderclub.com จากข้อความ Gemini
+function extractProductUrl(text: string): string | null {
+  const m = text.match(/https?:\/\/(?:www\.)?spenderclub\.com\/\S+/)
+  return m ? m[0].replace(/[).,'"]+$/, '') : null
+}
+
+// ส่ง Generic Template card (มี URL สินค้า)
+async function fbSendProductCard(psid: string, reply: string, url: string) {
+  const clean = reply.replace(url, '').replace(/\n{2,}/g, '\n').trim()
+  const lines = clean.split('\n').map((l: string) => l.trim()).filter(Boolean)
+  const title = (lines[0] ?? 'Spender Club').slice(0, 80)
+  const subtitle = lines.slice(1).join(' ').slice(0, 200) || title
+
+  await fetch(
+    `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient: { id: psid },
+        message: {
+          attachment: {
+            type: 'template',
+            payload: {
+              template_type: 'generic',
+              elements: [{
+                title,
+                subtitle,
+                buttons: [
+                  { type: 'web_url', url, title: 'ดูรายละเอียด/ราคา' },
+                  { type: 'postback', title: 'ติดต่อแอดมิน', payload: 'CONTACT_ADMIN' },
+                ],
+              }],
+            },
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(5000),
+    }
+  ).catch(err => log.error('fb.card_failed', { psid, err: (err as Error).message }))
+}
+
+// ส่ง reply อัตโนมัติ — ถ้ามี URL สินค้า → Generic Template card, ไม่มี → plain text
+async function fbSendReply(psid: string, reply: string) {
+  const url = extractProductUrl(reply)
+  if (url) await fbSendProductCard(psid, reply, url)
+  else await fbSend(psid, reply)
+}
+
 // ส่ง Quick Replies
 async function fbSendQuickReplies(
   psid: string,
@@ -204,7 +253,7 @@ export async function POST(req: NextRequest) {
                     generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
                     new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
                   ]).catch(() => UNAVAILABLE_MSG)
-                  await fbSend(psid, reply)
+                  await fbSendReply(psid, reply)
                   await saveHistory(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
                   log.info('fb.image_spec.sent', { userId, latencyMs: Date.now() - startTime })
                 } catch (err) {
@@ -387,7 +436,7 @@ export async function POST(req: NextRequest) {
               await redis.del(`repeat_count:${userId}`)
             } catch { /* Redis ล่ม — ส่งปกติ */ }
 
-            await fbSend(psid, reply)
+            await fbSendReply(psid, reply)
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
             log.info('fb.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
           }
@@ -515,7 +564,7 @@ export async function POST(req: NextRequest) {
 
             const finalReply = (reply === NOT_FOUND || reply === OUT_OF_DOMAIN || reply === GEMINI_UNAVAILABLE)
               ? UNAVAILABLE_MSG : reply
-            await fbSend(psid, finalReply)
+            await fbSendReply(psid, finalReply)
             await saveHistory(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
             log.info('fb.postback.replied', { userId, payload, latencyMs: Date.now() - startTime })
           }
