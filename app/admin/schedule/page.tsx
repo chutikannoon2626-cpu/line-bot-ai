@@ -85,7 +85,7 @@ export default function SchedulePage() {
   async function addRule(e: FormEvent) {
     e.preventDefault()
     if (days.length === 0) { setError('กรุณาเลือกอย่างน้อย 1 วัน'); return }
-    if (startTime >= endTime) { setError('เวลาเริ่มต้องน้อยกว่าเวลาจบ'); return }
+    if (startTime === endTime) { setError('เวลาเริ่มและเวลาจบต้องไม่เท่ากัน'); return }
     setSaving(true); setError('')
     const res = await fetch(apiUrl(), {
       method: 'POST',

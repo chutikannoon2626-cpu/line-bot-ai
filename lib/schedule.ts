@@ -39,7 +39,10 @@ export async function isScheduledOff(): Promise<boolean> {
       if (!r.days.includes(dow)) return false
       const [sh, sm] = r.startTime.split(':').map(Number)
       const [eh, em] = r.endTime.split(':').map(Number)
-      return cur >= sh * 60 + sm && cur < eh * 60 + em
+      const start = sh * 60 + sm
+      const end   = eh * 60 + em
+      // รองรับช่วงข้ามคืน เช่น 18:00–07:59
+      return start < end ? cur >= start && cur < end : cur >= start || cur < end
     })
   } catch {
     return false  // fail open — ถ้า Redis ล่ม บอทยังทำงานได้ตามปกติ
