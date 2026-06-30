@@ -14,8 +14,10 @@ function formatThai(ts: string): string {
   })
 }
 
-function platform(userId: string): string {
-  return userId.startsWith('fb:') ? 'Facebook' : 'LINE OA'
+function platform(userId: string): 'Facebook' | 'Web' | 'LINE OA' {
+  if (userId.startsWith('fb:'))  return 'Facebook'
+  if (userId.startsWith('web:')) return 'Web'
+  return 'LINE OA'
 }
 
 const btn = (color = '#1a3a5c'): CSSProperties => ({
@@ -35,8 +37,8 @@ const tabStyle = (active: boolean): CSSProperties => ({
 })
 const badge = (text: string): CSSProperties => ({
   fontSize: 11, padding: '2px 7px', borderRadius: 8,
-  background: text === 'Facebook' ? '#e3f2fd' : '#e8f5e9',
-  color: text === 'Facebook' ? '#1565c0' : '#2e7d32',
+  background: text === 'Facebook' ? '#e3f2fd' : text === 'Web' ? '#fff3e0' : '#e8f5e9',
+  color: text === 'Facebook' ? '#1565c0' : text === 'Web' ? '#e65100' : '#2e7d32',
   fontWeight: 'bold',
 })
 
