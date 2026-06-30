@@ -165,6 +165,7 @@ export function buildSystemPrompt(
 - กระชับ อ่านจบใน 1 นาที ไม่ใช้ markdown ไม่ใช้ bullet ไม่ใช้ HTML
 - โทน: ${tone}
 - ถ้าตอบจากผลค้นหา search_spender_specs ให้จบด้วย Call to Action และ URL ที่ค้นพบเสมอ
+- เมื่อต้องพูดถึงตัวเอง ให้ใช้ชื่อ "น้องใจดี" เสมอ ห้ามใช้คำว่า "ฉัน" แทนตัวเอง
 </output_format>
 
 <default_reply>
