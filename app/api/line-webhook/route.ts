@@ -466,6 +466,7 @@ export async function POST(req: NextRequest) {
           await safeReply(txt(reply))
           await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
           log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
+          try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
         }
 
         // --- IMAGE ---
