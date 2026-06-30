@@ -123,13 +123,10 @@
   <p class="indent">ค้นจาก keywords ในชีต ถ้าเจอ → ตอบทันทีตาม template</p>
   <br>
   <p><strong>ขั้น B — ค้นเว็บ (ถ้าไม่เจอในชีต)</strong></p>
-  <p class="indent">ใช้ฟังก์ชันเดียวกันทั้ง LINE OA และ Facebook — flow เหมือนกันทุกขั้นตอน</p>
-  <table style="margin:8px 0 0 20px; width:calc(100% - 20px)">
-    <tr><th>ประเภทคำถาม</th><th>วิธีค้น</th><th>ผลลัพธ์</th></tr>
-    <tr><td>ทั่วไป (ราคา สเปค ฯลฯ)</td><td>ค้นผ่าน Serper/Google<br>(spenderclub.com + spendernetwork.com)</td><td>ตอบพร้อม URL / แจ้งไม่พบ</td></tr>
-    <tr><td><strong>คู่มือการใช้งาน / แคตตาล็อก</strong></td><td><strong>1. ค้น spendernetwork.com โดยตรง (ไม่ผ่าน Google)</strong><br>2. ถ้าไม่เจอ → fallback ค้น spenderclub.com โดยตรง</td><td>ตอบพร้อม URL ล่าสุด<br>/ แจ้งไม่พบ + รอแอดมิน</td></tr>
-  </table>
-  <div class="note" style="margin-left:20px">คู่มือ/แคตตาล็อก ข้าม Google index และข้าม Redis cache เพื่อป้องกันได้ลิงก์ PDF รุ่นล้าสมัย</div>
+  <p class="indent">ค้น spenderclub.com และ spendernetwork.com ผ่าน Serper/Google (ใช้เหมือนกันทุกประเภทคำถาม ทั้ง LINE OA และ Facebook)</p>
+  <p class="indent">→ เจอข้อมูล: ตอบพร้อมแนบ URL</p>
+  <p class="indent">→ ไม่เจอ: แจ้งว่าไม่พบ + แนะนำให้อธิบายเพิ่มหรือรอแอดมิน</p>
+  <div class="note" style="margin-left:20px">คู่มือ/แคตตาล็อกเฉพาะรุ่น: ควรเพิ่มลิงก์ PDF โดยตรงในชีต เพื่อให้บอทตอบได้แม่นยำโดยไม่ต้องผ่านการค้นเว็บ</div>
 </div>
 
 <p><strong>ผลลัพธ์ที่เป็นไปได้:</strong></p>
