@@ -9,6 +9,7 @@ import { imageIntentCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 import { isScheduledOff } from '@/lib/schedule'
 import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
+import { logChat } from '@/lib/chatlog'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
               setTimeout(() => reject(new Error('reply_timeout')), 4000)
             ),
           ])
+          for (const m of messages)
+            if (m.type === 'text' && 'text' in m)
+              logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })
         } catch (err) {
           log.warn('reply.send_failed', { userId, err: (err as Error).message })
         }
@@ -110,6 +114,7 @@ export async function POST(req: NextRequest) {
         // --- TEXT ---
         if (msgType === 'text') {
           const userMessage = (event.message as { text: string }).text
+          logChat({ userId, channel: 'LINE', role: 'user', message: userMessage, ts: Date.now() })
           const history = await getHistory(userId)
           const handoffMsg = getHandoffMessage()
 
@@ -156,6 +161,9 @@ export async function POST(req: NextRequest) {
                   setTimeout(() => reject(new Error('push_timeout')), 4000)
                 ),
               ])
+              for (const m of messages)
+                if (m.type === 'text' && 'text' in m)
+                  logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })
             } catch (err) {
               log.warn('push.send_failed', { userId, err: (err as Error).message })
             }

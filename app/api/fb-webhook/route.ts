@@ -8,6 +8,7 @@ import { getHistory, saveHistory } from '@/lib/history'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
 import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
+import { logChat } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -47,6 +48,7 @@ async function fbSend(psid: string, text: string) {
       signal: AbortSignal.timeout(5000),
     }
   ).catch(err => log.error('fb.send_failed', { psid, err: (err as Error).message }))
+  logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
 }
 
 // ดึง URL สินค้า spenderclub.com จากข้อความ Gemini
@@ -89,6 +91,7 @@ async function fbSendProductCard(psid: string, reply: string, url: string) {
       signal: AbortSignal.timeout(5000),
     }
   ).catch(err => log.error('fb.card_failed', { psid, err: (err as Error).message }))
+  logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: reply, ts: Date.now() })
 }
 
 // ส่ง reply อัตโนมัติ — ถ้ามี URL สินค้า → Generic Template card, ไม่มี → plain text
@@ -202,6 +205,7 @@ export async function POST(req: NextRequest) {
           // --- TEXT (ข้ามถ้าเป็น image+caption — IMAGE handler จัดการเอง) ---
           if (event.message?.text && !event.message.attachments?.some(a => a.type === 'image')) {
             const userMessage = event.message.text
+            logChat({ userId, channel: 'Facebook', role: 'user', message: userMessage, ts: Date.now() })
             const history = await getHistory(userId)
             const handoffMsg = getHandoffMessage()
 

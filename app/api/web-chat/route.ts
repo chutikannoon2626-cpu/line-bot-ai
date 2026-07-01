@@ -5,6 +5,7 @@ import { shouldHandoff } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
+import { logChat } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -150,6 +151,7 @@ export async function POST(req: NextRequest) {
     }
 
     const history = await getHistory(sessionId)
+    logChat({ userId, channel: 'Web', role: 'user', message, ts: Date.now() })
     const faqText = await fetchFAQ()
 
     // shouldHandoff — เว็บไม่มีแอดมิน real-time ตอบครั้งแรกเท่านั้น ครั้งต่อไปเงียบ
@@ -258,6 +260,7 @@ export async function POST(req: NextRequest) {
 
     await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reply }])
     log.info('webchat.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
+    logChat({ userId, channel: 'Web', role: 'bot', message: reply, ts: Date.now() })
     return json({ reply }, cors)
 
   } catch (err) {
