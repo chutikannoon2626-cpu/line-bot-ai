@@ -78,7 +78,7 @@
     '#nj-inp:disabled{background:#f0f0f0;color:#aaa}',
     '#nj-send{width:40px;height:40px;border-radius:50%;background:#0F6E56;',
       'border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;',
-      'flex-shrink:0;transition:background .15s}',
+      'flex-shrink:0;transition:background .15s;font-size:18px;color:#fff;line-height:1}',
     '#nj-send:hover{background:#0a5040}',
     '#nj-send:disabled{background:#ccc;cursor:default}',
 
@@ -114,11 +114,7 @@
       '<div id="nj-msgs"></div>' +
       '<div id="nj-foot">' +
         '<input id="nj-inp" type="text" placeholder="พิมพ์ข้อความ..." maxlength="500" autocomplete="off"/>' +
-        '<button id="nj-send" title="ส่ง">' +
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">' +
-            '<path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>' +
-          '</svg>' +
-        '</button>' +
+        '<button id="nj-send" title="ส่ง">➤</button>' +
       '</div>' +
     '</div>' +
     '<button id="nj-btn" title="แชทกับน้องใจดี">' +
