@@ -19,13 +19,13 @@
   style.textContent = [
     '#nj-widget *{box-sizing:border-box;font-family:"Sarabun",Tahoma,sans-serif}',
     '#nj-btn{position:fixed;bottom:24px;right:24px;z-index:2147483640;',
-      'width:58px;height:58px;border-radius:50%;background:#1a3a5c;color:#fff;',
-      'border:none;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);',
-      'display:flex;align-items:center;justify-content:center;font-size:28px;',
+      'height:50px;padding:0 22px;border-radius:25px;background:#0F6E56;color:#fff;',
+      'border:none;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);',
+      'display:flex;align-items:center;gap:10px;font-size:15px;font-weight:bold;white-space:nowrap;',
       'transition:transform .15s,box-shadow .15s;user-select:none}',
-    '#nj-btn:hover{transform:scale(1.1);box-shadow:0 6px 22px rgba(0,0,0,.35)}',
+    '#nj-btn:hover{transform:scale(1.03);box-shadow:0 6px 22px rgba(0,0,0,.3)}',
 
-    '#nj-tooltip{position:fixed;bottom:94px;right:24px;z-index:2147483639;',
+    '#nj-tooltip{position:fixed;bottom:88px;right:24px;z-index:2147483639;',
       'background:#fff;border-radius:10px;padding:10px 14px 10px 12px;',
       'box-shadow:0 4px 18px rgba(0,0,0,.15);font-size:14px;color:#222;',
       'max-width:220px;line-height:1.5;cursor:pointer;',
@@ -36,7 +36,7 @@
       'font-size:17px;line-height:1;font-weight:bold}',
     '#nj-ttclose:hover{color:#555}',
 
-    '#nj-panel{position:fixed;bottom:94px;right:24px;z-index:2147483638;',
+    '#nj-panel{position:fixed;bottom:88px;right:24px;z-index:2147483638;',
       'width:360px;height:510px;border-radius:14px;background:#fff;',
       'box-shadow:0 8px 36px rgba(0,0,0,.18);',
       'display:none;flex-direction:column;overflow:hidden}',
@@ -85,9 +85,9 @@
     '@keyframes njFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}',
     '@keyframes njSlideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}',
 
-    '@media(max-width:400px){',
-      '#nj-panel{width:calc(100vw - 16px);right:8px;bottom:82px;height:72vh}',
-      '#nj-btn{bottom:16px;right:16px}',
+    '@media(max-width:480px){',
+      '#nj-panel{width:calc(100vw - 16px);right:8px;bottom:80px;height:72vh}',
+      '#nj-btn{bottom:16px;right:12px;font-size:13px;padding:0 14px;height:44px}',
       '#nj-tooltip{right:8px}',
     '}',
   ].join('');
@@ -122,7 +122,12 @@
         '</button>' +
       '</div>' +
     '</div>' +
-    '<button id="nj-btn" title="แชทกับน้องใจดี">💬</button>';
+    '<button id="nj-btn" title="แชทกับน้องใจดี">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
+      '</svg>' +
+      'สอบถามข้อมูลสินค้าเพิ่มเติม' +
+    '</button>';
 
   document.body.appendChild(root);
 
@@ -211,6 +216,7 @@
   function openPanel() {
     isOpen = true;
     panel.classList.add('nj-open');
+    btn.style.display = 'none';
     hideTooltip();
     if (!msgs.children.length) {
       addMsg('สวัสดีค่ะ ยินดีต้อนรับสู่ Spender Club 😊\nมีคำถามเรื่องวิทยุสื่อสารหรืออุปกรณ์สื่อสารอะไรไหมคะ พิมพ์ถามได้เลยนะคะ', 'bot');
@@ -221,6 +227,7 @@
   function closePanel() {
     isOpen = false;
     panel.classList.remove('nj-open');
+    btn.style.display = 'flex';
     // ล้าง history ทันที — เปิดใหม่เริ่มใหม่เสมอ
     msgs.innerHTML = '';
     sessionStorage.removeItem('nj_sid');
