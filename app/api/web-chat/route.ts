@@ -20,7 +20,10 @@ const NONSENSE_TTL    = 10 * 60
 const LAST_ANSWER_TTL = 2 * 60
 const RETRY_TTL       = 10 * 60
 
-const CONTACT_MSG = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูลที่ตรงกับคำถาม 🙏\nรบกวนสอบถามข้อมูลเพิ่มเติมได้ที่\n📱 LINE : @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
+// ใช้เมื่อไม่พบข้อมูล
+const CONTACT_MSG  = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูลที่ตรงกับคำถาม 🙏\nรบกวนสอบถามข้อมูลเพิ่มเติมได้ที่\n📱 LINE : @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
+// ใช้เมื่อลูกค้าขอติดต่อแอดมิน
+const HANDOFF_MSG  = 'สอบถามข้อมูลเพิ่มเติมได้ที่\n📱 LINE : @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
 
 // Anti-spam
 const IP_RATE_LIMIT       = 20
@@ -151,9 +154,9 @@ export async function POST(req: NextRequest) {
 
     // shouldHandoff — เว็บไม่มีแอดมิน real-time ให้บอกช่องทาง LINE แทน
     if (shouldHandoff(message)) {
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: CONTACT_MSG }])
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: HANDOFF_MSG }])
       log.info('webchat.contact_redirect', { userId })
-      return json({ reply: CONTACT_MSG }, cors)
+      return json({ reply: HANDOFF_MSG }, cors)
     }
 
     // Gemini
@@ -172,8 +175,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: CONTACT_MSG }])
-      return json({ reply: CONTACT_MSG }, cors)
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: HANDOFF_MSG }])
+      return json({ reply: HANDOFF_MSG }, cors)
     }
 
     // Out of domain
