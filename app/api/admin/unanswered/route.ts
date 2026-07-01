@@ -11,12 +11,9 @@ type UnansweredEntry = { ts: string; userId: string; question: string }
 export async function GET(req: NextRequest) {
   if (!auth(req)) return new Response('Unauthorized', { status: 401 })
 
-  const [raw, freq] = await Promise.all([
+  const [raw, rawFreq] = await Promise.all([
     redis.lrange('unanswered_log', 0, 99),
-    redis.zrange<{ member: string; score: number }[]>('question_freq', 0, 29, {
-      rev: true,
-      withScores: true,
-    }),
+    redis.zrange('question_freq', 0, 29, { rev: true, withScores: true }),
   ])
 
   const unanswered: UnansweredEntry[] = (raw as string[])
@@ -26,7 +23,21 @@ export async function GET(req: NextRequest) {
     })
     .filter((x): x is UnansweredEntry => x !== null)
 
-  return new Response(JSON.stringify({ unanswered, frequent: freq ?? [] }), {
+  // Upstash v1 คืน flat array [member1, score1, member2, score2, ...]
+  // หรือ structured { member, score }[] ขึ้นอยู่กับ version
+  type FreqEntry = { member: string; score: number }
+  const arr = (rawFreq ?? []) as unknown[]
+  let frequent: FreqEntry[]
+  if (arr.length > 0 && typeof arr[0] === 'object' && arr[0] !== null && 'member' in arr[0]) {
+    frequent = arr as FreqEntry[]
+  } else {
+    frequent = []
+    for (let i = 0; i + 1 < arr.length; i += 2) {
+      frequent.push({ member: String(arr[i]), score: Number(arr[i + 1]) })
+    }
+  }
+
+  return new Response(JSON.stringify({ unanswered, frequent }), {
     headers: { 'Content-Type': 'application/json' },
   })
 }

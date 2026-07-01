@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { CSSProperties } from 'react'
 
 type Tab = 'unanswered' | 'frequent'
@@ -28,6 +28,17 @@ const outBtn = (color = '#c00'): CSSProperties => ({
   padding: '5px 14px', background: '#fff', color,
   border: `1px solid ${color}`, borderRadius: 4, cursor: 'pointer', fontSize: 13,
 })
+
+function exportCSV(filename: string, headers: string[], rows: string[][]): void {
+  const lines = [headers, ...rows].map(r =>
+    r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')
+  ).join('\n')
+  const blob = new Blob(['﻿' + lines], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
 const tabStyle = (active: boolean): CSSProperties => ({
   padding: '8px 24px', cursor: 'pointer', fontWeight: active ? 'bold' : 'normal',
   borderTop: 'none', borderLeft: 'none', borderRight: 'none',
@@ -136,7 +147,18 @@ export default function UnansweredPage() {
       {/* Tab: ตอบไม่ได้ */}
       {tab === 'unanswered' && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
+            <button
+              onClick={() => exportCSV(
+                `unanswered_${new Date().toISOString().slice(0,10)}.csv`,
+                ['เวลา', 'ช่องทาง', 'คำถาม'],
+                unanswered.map(r => [formatThai(r.ts), platform(r.userId), r.question]),
+              )}
+              disabled={unanswered.length === 0}
+              style={outBtn('#1a3a5c')}
+            >
+              ⬇ Export CSV
+            </button>
             <button onClick={() => clearList('unanswered')} disabled={clearing || unanswered.length === 0} style={outBtn()}>
               ล้างทั้งหมด
             </button>
@@ -161,9 +183,22 @@ export default function UnansweredPage() {
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <p style={{ margin: 0, fontSize: 13, color: '#666' }}>นับจากคำถามที่บอทตอบได้สำเร็จ</p>
-            <button onClick={() => clearList('freq')} disabled={clearing || frequent.length === 0} style={outBtn()}>
-              ล้างสถิติ
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => exportCSV(
+                  `frequent_${new Date().toISOString().slice(0,10)}.csv`,
+                  ['อันดับ', 'คำถาม', 'จำนวนครั้ง'],
+                  frequent.map((r, i) => [String(i + 1), r.member, String(r.score)]),
+                )}
+                disabled={frequent.length === 0}
+                style={outBtn('#1a3a5c')}
+              >
+                ⬇ Export CSV
+              </button>
+              <button onClick={() => clearList('freq')} disabled={clearing || frequent.length === 0} style={outBtn()}>
+                ล้างสถิติ
+              </button>
+            </div>
           </div>
           {frequent.length === 0
             ? <p style={{ color: '#999', textAlign: 'center', padding: 40 }}>ยังไม่มีสถิติ</p>
