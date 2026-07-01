@@ -9,16 +9,22 @@ import { isScheduledOff } from '@/lib/schedule'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-const NOT_FOUND        = '[NOT_FOUND]'
-const OUT_OF_DOMAIN    = '[OUT_OF_DOMAIN]'
+const NOT_FOUND          = '[NOT_FOUND]'
+const OUT_OF_DOMAIN      = '[OUT_OF_DOMAIN]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 
-const SESSION_TTL    = 30 * 60   // 30 นาที
-const RATE_TTL       = 10        // วินาที
-const RATE_LIMIT     = 5
-const NONSENSE_TTL   = 10 * 60
+const SESSION_TTL     = 30 * 60
+const RATE_TTL        = 10
+const RATE_LIMIT      = 5
+const NONSENSE_TTL    = 10 * 60
 const LAST_ANSWER_TTL = 2 * 60
-const RETRY_TTL      = 10 * 60
+const RETRY_TTL       = 10 * 60
+
+// Anti-spam
+const IP_RATE_LIMIT       = 20
+const IP_RATE_TTL         = 5 * 60   // 5 นาที
+const BLOCKED_TTL         = 30 * 60  // 30 นาที
+const OOD_BLOCK_THRESHOLD = 5
 
 const ALLOWED_ORIGINS = [
   'https://www.spenderclub.com',
@@ -41,6 +47,18 @@ function json(data: unknown, cors: Record<string, string>, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', ...cors },
   })
+}
+
+function getClientIp(req: NextRequest): string {
+  const xff = req.headers.get('x-forwarded-for')
+  if (xff) return xff.split(',')[0].trim()
+  return req.headers.get('x-real-ip') ?? 'unknown'
+}
+
+function isNonsenseMessage(msg: string): boolean {
+  if (msg.length < 2) return true
+  if (/^(.)\1+$/u.test(msg)) return true  // aaa, ???, 555
+  return false
 }
 
 type History = { role: 'user' | 'model'; text: string }[]
@@ -66,21 +84,43 @@ export async function OPTIONS(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const cors = corsHeaders(req.headers.get('origin'))
 
-  let sessionId: string, message: string
+  let sessionId: string, message: string, hp: string
   try {
-    const body = await req.json() as { sessionId?: string; message?: string }
+    const body = await req.json() as { sessionId?: string; message?: string; _hp?: string }
     sessionId = (body.sessionId ?? '').trim()
     message   = (body.message ?? '').trim()
+    hp        = body._hp ?? ''
   } catch {
     return json({ error: 'invalid body' }, cors, 400)
   }
   if (!sessionId || !message) return json({ error: 'missing fields' }, cors, 400)
 
+  // Honeypot — bot อัตโนมัติจะกรอก field นี้ เงียบเลย
+  if (hp !== '') return json({ reply: '' }, cors)
+
   const userId    = `web:${sessionId}`
   const startTime = Date.now()
 
   try {
-    // Rate limit
+    // IP rate limit — 20 ข้อความต่อ 5 นาที
+    const ip = getClientIp(req)
+    try {
+      const [ipCount] = await redis.pipeline()
+        .incr(`web_ip_rate:${ip}`)
+        .expire(`web_ip_rate:${ip}`, IP_RATE_TTL)
+        .exec() as [number, number]
+      if (ipCount > IP_RATE_LIMIT) {
+        return json({ reply: 'ขออภัยค่ะ ส่งข้อความถี่เกินไปนิดนึง รบกวนรอ 5 นาทีแล้วถามใหม่อีกครั้งนะคะ 🙏' }, cors)
+      }
+    } catch { /* Redis ล่ม — ข้าม */ }
+
+    // Session blocked — OOD เกิน threshold
+    try {
+      const blocked = await redis.get(`web_blocked:${sessionId}`)
+      if (blocked) return json({ reply: '' }, cors)
+    } catch { /* */ }
+
+    // Session rate limit
     try {
       const [rate] = await redis.pipeline()
         .incr(`webchat:rate:${sessionId}`)
@@ -91,7 +131,12 @@ export async function POST(req: NextRequest) {
       }
     } catch { /* Redis ล่ม — ข้าม */ }
 
-    // Schedule check — ถ้าปิดบอท แจ้งลูกค้า (ไม่ใช่แค่เงียบ เพราะไม่มีแอดมินดูแลเว็บ)
+    // Nonsense filter — กรองก่อนส่ง Gemini
+    if (isNonsenseMessage(message)) {
+      return json({ reply: 'มีอะไรให้น้องใจดีช่วยไหมคะ 😊' }, cors)
+    }
+
+    // Schedule check
     if (await isScheduledOff('web')) {
       log.info('webchat.scheduled_off', { userId })
       return json({
@@ -125,7 +170,7 @@ export async function POST(req: NextRequest) {
       return json({ reply: confirmMsg }, cors)
     }
 
-    // shouldHandoff — ลูกค้าแจ้งความต้องการให้แอดมิน
+    // shouldHandoff
     if (shouldHandoff(message)) {
       try { await redis.set(`webchat:pending_contact:${sessionId}`, '1', { ex: SESSION_TTL }) } catch { /* */ }
       const askMsg = 'น้องใจดีจะแจ้งแอดมินให้ติดต่อกลับค่ะ 😊\nขอเบอร์โทรศัพท์หรือ LINE ID ของลูกค้าได้เลยนะคะ'
@@ -166,12 +211,16 @@ export async function POST(req: NextRequest) {
           .exec() as [number, number]
         count = c
       } catch { /* */ }
+      if (count >= OOD_BLOCK_THRESHOLD) {
+        try { await redis.set(`web_blocked:${sessionId}`, '1', { ex: BLOCKED_TTL }) } catch { /* */ }
+        return json({ reply: 'ขออภัยค่ะ น้องใจดีตอบได้เฉพาะเรื่องวิทยุสื่อสารนะคะ 🙏' }, cors)
+      }
       if (count <= 1) {
         const msg = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ มีอะไรให้ช่วยเรื่องวิทยุสื่อสารไหมคะ'
         await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: msg }])
         return json({ reply: msg }, cors)
       }
-      return json({ reply: '' }, cors) // เงียบครั้งที่ 2+
+      return json({ reply: '' }, cors) // เงียบครั้งที่ 2–4
     }
 
     // NOT_FOUND

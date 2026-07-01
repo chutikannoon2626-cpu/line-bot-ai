@@ -110,6 +110,7 @@
         '</div>' +
         '<button id="nj-xbtn" title="ปิด">×</button>' +
       '</div>' +
+      '<input id="nj-hp" type="text" name="_hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:0;width:0;pointer-events:none"/>' +
       '<div id="nj-msgs"></div>' +
       '<div id="nj-foot">' +
         '<input id="nj-inp" type="text" placeholder="พิมพ์ข้อความ..." maxlength="500" autocomplete="off"/>' +
@@ -189,7 +190,7 @@
     fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: sessionId, message: text }),
+      body: JSON.stringify({ sessionId: sessionId, message: text, _hp: (document.getElementById('nj-hp') || {value:''}).value }),
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -220,6 +221,11 @@
   function closePanel() {
     isOpen = false;
     panel.classList.remove('nj-open');
+    // ล้าง history ทันที — เปิดใหม่เริ่มใหม่เสมอ
+    msgs.innerHTML = '';
+    sessionStorage.removeItem('nj_sid');
+    sessionId = 'w-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+    sessionStorage.setItem('nj_sid', sessionId);
   }
 
   // ── Tooltip ──
