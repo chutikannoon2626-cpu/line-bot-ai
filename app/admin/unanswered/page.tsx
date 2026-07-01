@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 type Tab        = 'unanswered' | 'frequent' | 'chat'
@@ -25,10 +25,6 @@ function platform(userId: string): 'Facebook' | 'Web' | 'LINE OA' {
   if (userId.startsWith('web:')) return 'Web'
   return 'LINE OA'
 }
-function shortId(userId: string): string {
-  const id = userId.replace(/^(fb:|web:)/, '')
-  return id.length > 12 ? '...' + id.slice(-10) : id
-}
 
 const btn = (color = '#1a3a5c'): CSSProperties => ({
   padding: '8px 20px', background: color, color: '#fff',
@@ -44,11 +40,21 @@ const tabStyle = (active: boolean): CSSProperties => ({
   borderBottom: active ? '3px solid #1a3a5c' : '3px solid transparent',
   color: active ? '#1a3a5c' : '#666', background: 'none', fontSize: 14,
 })
-const badge = (ch: string): CSSProperties => ({
-  fontSize: 11, padding: '2px 7px', borderRadius: 8, fontWeight: 'bold',
-  background: ch === 'Facebook' ? '#e3f2fd' : ch === 'Web' ? '#fff3e0' : '#e8f5e9',
-  color:      ch === 'Facebook' ? '#1565c0' : ch === 'Web' ? '#e65100' : '#2e7d32',
-})
+
+function ChBadge({ ch }: { ch: string }) {
+  const cfg: Record<string, { bg: string; color: string; label: string }> = {
+    LINE:     { bg: '#06c755', color: '#fff', label: 'LINE' },
+    Facebook: { bg: '#1877f2', color: '#fff', label: 'FB' },
+    Web:      { bg: '#f59e0b', color: '#fff', label: 'Web' },
+    'LINE OA':{ bg: '#06c755', color: '#fff', label: 'LINE' },
+  }
+  const s = cfg[ch] ?? { bg: '#888', color: '#fff', label: ch }
+  return (
+    <span style={{ display: 'inline-block', background: s.bg, color: s.color, fontSize: 11, fontWeight: 'bold', padding: '2px 8px', borderRadius: 4, letterSpacing: 0.3 }}>
+      {s.label}
+    </span>
+  )
+}
 
 function exportCSV(filename: string, headers: string[], rows: string[][]): void {
   const lines = [headers, ...rows].map(r =>
@@ -61,6 +67,26 @@ function exportCSV(filename: string, headers: string[], rows: string[][]): void 
   URL.revokeObjectURL(url)
 }
 
+const TH = ({ children, center, w }: { children: React.ReactNode; center?: boolean; w?: number }) => (
+  <th style={{
+    padding: '10px 14px', textAlign: center ? 'center' : 'left',
+    color: '#888', fontWeight: 600, fontSize: 12,
+    width: w, background: '#f5f7fa',
+    borderBottom: '1px solid #e0e0e0', whiteSpace: 'nowrap',
+  }}>
+    {children}
+  </th>
+)
+const TD = ({ children, center, mono, muted }: { children: React.ReactNode; center?: boolean; mono?: boolean; muted?: boolean }) => (
+  <td style={{
+    padding: '10px 14px', textAlign: center ? 'center' : 'left',
+    fontFamily: mono ? 'monospace' : undefined,
+    color: muted ? '#aaa' : undefined, fontSize: 13, verticalAlign: 'middle',
+  }}>
+    {children}
+  </td>
+)
+
 export default function AdminPage() {
   const [key, setKey]       = useState('')
   const [authed, setAuthed] = useState(false)
@@ -69,11 +95,9 @@ export default function AdminPage() {
   const [clearing, setClearing] = useState(false)
   const [error, setError]       = useState('')
 
-  // tabs 1-2
   const [unanswered, setUnanswered] = useState<UnansweredEntry[]>([])
   const [frequent, setFrequent]     = useState<FreqEntry[]>([])
 
-  // tab 3 — chat history
   const [chatConvs, setChatConvs]     = useState<ConvEntry[]>([])
   const [chatFilter, setChatFilter]   = useState<ChanFilter>('all')
   const [expandedId, setExpandedId]   = useState<string | null>(null)
@@ -81,10 +105,9 @@ export default function AdminPage() {
   const [convLoading, setConvLoading] = useState<string | null>(null)
   const [chatLoading, setChatLoading] = useState(false)
 
-  const apiUrl    = () => `/api/admin/unanswered?key=${encodeURIComponent(key)}`
-  const todayBKK  = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+  const apiUrl   = () => `/api/admin/unanswered?key=${encodeURIComponent(key)}`
+  const todayBKK = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
 
-  // ── Auth & refresh ──
   async function login() {
     setLoading(true); setError('')
     const res = await fetch(apiUrl())
@@ -116,7 +139,6 @@ export default function AdminPage() {
     setClearing(false)
   }
 
-  // ── Chat history ──
   async function loadChatHistory() {
     setChatLoading(true)
     const res = await fetch(`/api/admin/chatlog?key=${encodeURIComponent(key)}`)
@@ -150,7 +172,7 @@ export default function AdminPage() {
 
   const filteredConvs = chatConvs.filter(c => chatFilter === 'all' || c.channel === chatFilter)
 
-  // ── Login screen ──
+  // ── Login ──
   if (!authed) return (
     <div style={{ maxWidth: 400, margin: '100px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
       <h2 style={{ color: '#1a3a5c' }}>🔐 น้องใจดี — Admin</h2>
@@ -168,7 +190,7 @@ export default function AdminPage() {
   )
 
   return (
-    <div style={{ maxWidth: 760, margin: '40px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
+    <div style={{ maxWidth: 820, margin: '40px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -177,7 +199,7 @@ export default function AdminPage() {
           {loading || chatLoading ? 'กำลังโหลด...' : '🔄 รีเฟรช'}
         </button>
       </div>
-      <p style={{ color: '#666', fontSize: 13, marginBottom: 20 }}>LINE OA และ Facebook รวมกัน · แสดง 100 รายการล่าสุด</p>
+      <p style={{ color: '#666', fontSize: 13, marginBottom: 20 }}>LINE OA · Facebook · Web — แสดง 100 รายการล่าสุด</p>
 
       {/* Tab bar */}
       <div style={{ borderBottom: '1px solid #ddd', marginBottom: 20, display: 'flex' }}>
@@ -207,7 +229,7 @@ export default function AdminPage() {
             : unanswered.map((item, i) => (
               <div key={i} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 8, padding: '12px 16px', marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={badge(platform(item.userId))}>{platform(item.userId)}</span>
+                  <ChBadge ch={platform(item.userId)} />
                   <span style={{ fontSize: 12, color: '#999' }}>{formatThai(item.ts)}</span>
                 </div>
                 <p style={{ margin: 0, fontSize: 14, color: '#222' }}>{item.question}</p>
@@ -251,92 +273,147 @@ export default function AdminPage() {
       {tab === 'chat' && (
         <>
           {/* Toolbar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {(['all','LINE','Facebook','Web'] as const).map(f => (
-                <button key={f} onClick={() => setChatFilter(f)} style={{
-                  padding: '4px 12px', fontSize: 12, borderRadius: 20, cursor: 'pointer',
-                  border: chatFilter === f ? '1.5px solid #1a3a5c' : '1px solid #ccc',
-                  background: chatFilter === f ? '#1a3a5c' : '#fff',
-                  color: chatFilter === f ? '#fff' : '#555',
-                  fontWeight: chatFilter === f ? 'bold' : 'normal',
-                }}>
-                  {f === 'all' ? 'ทั้งหมด' : f === 'LINE' ? 'LINE OA' : f}
-                </button>
-              ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <span style={{ fontSize: 15, fontWeight: 'bold', color: '#222' }}>
+              บทสนทนาวันนี้
+              <span style={{ fontSize: 13, fontWeight: 'normal', color: '#888', marginLeft: 6 }}>
+                ({filteredConvs.length} รายการ)
+              </span>
+            </span>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <select
+                value={chatFilter}
+                onChange={e => setChatFilter(e.target.value as ChanFilter)}
+                style={{ padding: '6px 28px 6px 10px', border: '1px solid #ccc', borderRadius: 4, fontSize: 13, cursor: 'pointer', background: '#fff', color: '#333', appearance: 'auto' }}
+              >
+                <option value="all">ทุกช่องทาง</option>
+                <option value="LINE">LINE OA</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Web">Web</option>
+              </select>
+              <button
+                onClick={() => openXlsx(`date=${todayBKK}`)}
+                disabled={chatConvs.length === 0}
+                style={{ ...btn('#1a7c4e'), display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
+              >
+                ⬇ ดาวน์โหลด Excel
+              </button>
             </div>
-            <button onClick={() => openXlsx(`date=${todayBKK}`)} disabled={chatConvs.length === 0} style={outBtn('#1a3a5c')}>
-              ⬇ Export วันนี้ (.xlsx)
-            </button>
           </div>
 
-          {/* States */}
-          {chatLoading && <p style={{ color: '#999', textAlign: 'center', padding: 40 }}>กำลังโหลด...</p>}
+          {/* Loading / empty */}
+          {chatLoading && (
+            <p style={{ color: '#999', textAlign: 'center', padding: 60 }}>กำลังโหลด...</p>
+          )}
           {!chatLoading && filteredConvs.length === 0 && (
-            <p style={{ color: '#999', textAlign: 'center', padding: 40 }}>ยังไม่มีประวัติแชท</p>
+            <p style={{ color: '#999', textAlign: 'center', padding: 60 }}>ยังไม่มีประวัติแชท</p>
           )}
 
-          {/* Conversation rows */}
-          {!chatLoading && filteredConvs.map(conv => {
-            const isExp  = expandedId === conv.userId
-            const isLoad = convLoading === conv.userId
-            const msgs   = convMsgs[conv.userId] ?? []
-            return (
-              <div key={conv.userId} style={{ marginBottom: 6, border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
-
-                {/* Row header */}
-                <div
-                  onClick={() => toggleConv(conv.userId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: isExp ? '#f0f4f8' : '#fff' }}
-                >
-                  <span style={badge(conv.channel)}>{conv.channel === 'LINE' ? 'LINE OA' : conv.channel}</span>
-                  <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#888', flexShrink: 0 }}>{shortId(conv.userId)}</span>
-                  <span style={{ flex: 1, fontSize: 13, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {conv.lastMessage}
-                  </span>
-                  <span style={{ fontSize: 11, color: '#bbb', whiteSpace: 'nowrap' }}>{formatTime(conv.lastTs)}</span>
-                  <span style={{ background: '#e8f0fe', color: '#1a3a5c', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                    {conv.count} ข้อ
-                  </span>
-                  <span style={{ color: '#bbb', fontSize: 11 }}>{isExp ? '▲' : '▼'}</span>
-                </div>
-
-                {/* Expanded thread */}
-                {isExp && (
-                  <div style={{ borderTop: '1px solid #e8e8e8', background: '#fafafa' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px', borderBottom: '1px solid #eee' }}>
-                      <button onClick={() => openXlsx(`userId=${encodeURIComponent(conv.userId)}`)} style={outBtn('#1a3a5c')}>
-                        ⬇ Export บทสนทนานี้ (.xlsx)
-                      </button>
-                    </div>
-                    <div style={{ padding: '12px 16px', maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {isLoad && <p style={{ color: '#aaa', textAlign: 'center' }}>กำลังโหลด...</p>}
-                      {!isLoad && msgs.length === 0 && <p style={{ color: '#aaa', textAlign: 'center' }}>ไม่มีข้อมูล</p>}
-                      {msgs.map((m, mi) => {
-                        const isBot = m.role === 'bot'
-                        return (
-                          <div key={mi} style={{ display: 'flex', flexDirection: 'column', alignItems: isBot ? 'flex-start' : 'flex-end' }}>
-                            <div style={{ fontSize: 10, color: '#bbb', marginBottom: 2 }}>
-                              {formatTime(m.ts)} · {isBot ? 'น้องใจดี' : 'ลูกค้า'}
+          {/* Table */}
+          {!chatLoading && filteredConvs.length > 0 && (
+            <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 90 }} />
+                  <col />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 68 }} />
+                  <col style={{ width: 68 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <TH>ช่องทาง</TH>
+                    <TH>ข้อความล่าสุด</TH>
+                    <TH center>จำนวน</TH>
+                    <TH center>เวลา</TH>
+                    <TH center>ดาวน์โหลด</TH>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredConvs.map(conv => {
+                    const isExp  = expandedId === conv.userId
+                    const isLoad = convLoading === conv.userId
+                    const msgs   = convMsgs[conv.userId] ?? []
+                    return (
+                      <Fragment key={conv.userId}>
+                        {/* Data row */}
+                        <tr
+                          onClick={() => toggleConv(conv.userId)}
+                          style={{
+                            cursor: 'pointer',
+                            background: isExp ? '#f0f4f8' : '#fff',
+                            borderTop: '1px solid #eee',
+                            transition: 'background .1s',
+                          }}
+                        >
+                          <TD>
+                            <ChBadge ch={conv.channel} />
+                          </TD>
+                          <td style={{ padding: '10px 14px', fontSize: 13, verticalAlign: 'middle', overflow: 'hidden' }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#333' }}>
+                              {conv.lastMessage || <span style={{ color: '#ccc', fontStyle: 'italic' }}>ไม่มีข้อความ</span>}
                             </div>
-                            <div style={{
-                              maxWidth: '78%', padding: '8px 12px', fontSize: 13, lineHeight: 1.55,
-                              borderRadius: isBot ? '4px 14px 14px 14px' : '14px 14px 4px 14px',
-                              background: isBot ? '#fff' : '#1a3a5c', color: isBot ? '#222' : '#fff',
-                              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                              boxShadow: '0 1px 3px rgba(0,0,0,.08)',
-                            }}>
-                              {m.message}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                          </td>
+                          <TD center>
+                            <span style={{ color: '#1a3a5c', fontWeight: 'bold' }}>{conv.count}</span>
+                            <span style={{ color: '#aaa', fontSize: 11, marginLeft: 2 }}>ข้อ</span>
+                          </TD>
+                          <TD center muted>{formatTime(conv.lastTs)}</TD>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle' }}
+                              onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => openXlsx(`userId=${encodeURIComponent(conv.userId)}`)}
+                              title="ดาวน์โหลด Excel บทสนทนานี้"
+                              style={{
+                                background: '#f5f7fa', border: '1px solid #ddd', borderRadius: 6,
+                                width: 32, height: 32, cursor: 'pointer', fontSize: 14,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                color: '#555',
+                              }}
+                            >
+                              ⬇
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* Expanded thread row */}
+                        {isExp && (
+                          <tr style={{ background: '#fafafa' }}>
+                            <td colSpan={5} style={{ padding: 0, borderTop: '1px solid #e0e0e0', borderBottom: '1px solid #e0e0e0' }}>
+                              <div style={{ padding: '14px 18px', maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {isLoad && <p style={{ color: '#aaa', textAlign: 'center', margin: 0 }}>กำลังโหลด...</p>}
+                                {!isLoad && msgs.length === 0 && <p style={{ color: '#aaa', textAlign: 'center', margin: 0 }}>ไม่มีข้อมูล</p>}
+                                {msgs.map((m, mi) => {
+                                  const isBot = m.role === 'bot'
+                                  return (
+                                    <div key={mi} style={{ display: 'flex', flexDirection: 'column', alignItems: isBot ? 'flex-start' : 'flex-end' }}>
+                                      <div style={{ fontSize: 10, color: '#bbb', marginBottom: 3 }}>
+                                        {formatTime(m.ts)} · {isBot ? 'น้องใจดี' : 'ลูกค้า'}
+                                      </div>
+                                      <div style={{
+                                        maxWidth: '76%', padding: '8px 12px', fontSize: 13, lineHeight: 1.6,
+                                        borderRadius: isBot ? '4px 14px 14px 14px' : '14px 14px 4px 14px',
+                                        background: isBot ? '#fff' : '#1a3a5c',
+                                        color: isBot ? '#222' : '#fff',
+                                        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,.08)',
+                                      }}>
+                                        {m.message}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>
