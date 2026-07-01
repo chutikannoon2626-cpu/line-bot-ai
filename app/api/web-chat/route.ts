@@ -20,7 +20,7 @@ const NONSENSE_TTL    = 10 * 60
 const LAST_ANSWER_TTL = 2 * 60
 const RETRY_TTL       = 10 * 60
 
-const CONTACT_MSG = 'ขออภัยค่ะ ไม่พบข้อมูลที่ตรงกับคำถาม 🙏\nสอบถามเพิ่มเติมได้ที่\n📱 LINE OA: @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
+const CONTACT_MSG = 'ขออภัยค่ะ ไม่พบข้อมูลที่ตรงกับคำถาม 🙏\nสอบถามเพิ่มเติมได้ที่\n📱 LINE OA: @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์) ค่ะ'
 
 // Anti-spam
 const IP_RATE_LIMIT       = 20
