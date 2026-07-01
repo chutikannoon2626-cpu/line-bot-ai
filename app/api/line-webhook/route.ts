@@ -5,23 +5,20 @@ import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoff, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
-import { imageIntentCard, greetingCard } from '@/lib/flex-cards'
+import { imageIntentCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 import { isScheduledOff } from '@/lib/schedule'
+import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nแอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
-const GREETING_MSG = 'Spenderclub ยินดีให้บริการค่ะ มีอะไรให้น้องใจดีช่วยบอกได้เลยนะคะ'
-const GREETING_KEYWORDS = ['สวัสดี', 'หวัดดี', 'ดีจ้า']
-const GREETING_TTL = 24 * 3600
 const TAKEOVER_TTL = 2 * 3600
 const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
 const RETRY_TTL = 600
 const PRE_HANDOFF_TTL = 600
 const OFF_HOURS_TTL = 23 * 3600
-const IN_HOURS_TTL = 23 * 3600
 const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
@@ -87,9 +84,8 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        // --- SESSION GREETING — แจ้ง/ทักทายครั้งแรกตามช่วงเวลา ---
+        // --- SESSION GREETING — off-hours notice + ทักทายครั้งแรก (24h) ---
         let offHoursNotice: string | null = null
-        let showGreeting = false
         const thaiHour = (new Date().getUTCHours() + 7) % 24
 
         if (thaiHour >= 18 || thaiHour < 8) {
@@ -100,20 +96,14 @@ export async function POST(req: NextRequest) {
               offHoursNotice = OFF_HOURS_NOTICE
             }
           } catch { /* Redis ล่ม — ข้าม */ }
-        } else {
-          try {
-            const alreadyGreeted = await redis.get(`in_hours:${userId}`)
-            if (!alreadyGreeted) {
-              await redis.set(`in_hours:${userId}`, '1', { ex: IN_HOURS_TTL })
-              showGreeting = true
-            }
-          } catch { /* Redis ล่ม — ข้าม */ }
         }
+
+        const greetFirst = await shouldGreet(userId)
 
         const txt = (text: string): messagingApi.Message[] => {
           const msgs: messagingApi.Message[] = []
           if (offHoursNotice) msgs.push({ type: 'text', text: offHoursNotice })
-          if (showGreeting) msgs.push(greetingCard() as messagingApi.Message)
+          if (greetFirst) msgs.push({ type: 'text', text: WELCOME_MSG })
           msgs.push({ type: 'text', text })
           return msgs
         }
@@ -222,7 +212,7 @@ export async function POST(req: NextRequest) {
               if (ocrProduct === 'ไม่ระบุ') {
                 const askMsgs: messagingApi.Message[] = []
                 if (offHoursNotice) askMsgs.push({ type: 'text', text: offHoursNotice })
-                if (showGreeting) askMsgs.push(greetingCard() as messagingApi.Message)
+                if (greetFirst) askMsgs.push({ type: 'text', text: WELCOME_MSG })
                 askMsgs.push({ type: 'text', text: 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ' })
                 await safeReply(askMsgs)
                 log.info('image.ocr_not_found', { userId, elapsedMs: elapsed })
@@ -231,7 +221,7 @@ export async function POST(req: NextRequest) {
 
               const cardMsgs: messagingApi.Message[] = []
               if (offHoursNotice) cardMsgs.push({ type: 'text', text: offHoursNotice })
-              if (showGreeting) cardMsgs.push(greetingCard() as messagingApi.Message)
+              if (greetFirst) cardMsgs.push({ type: 'text', text: WELCOME_MSG })
               cardMsgs.push(imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message)
               await safeReply(cardMsgs)
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
@@ -283,21 +273,6 @@ export async function POST(req: NextRequest) {
               return
             }
           } catch { /* Redis ล่ม — ข้าม */ }
-
-          // ทักทาย
-          if ((thaiHour >= 8 && thaiHour < 18) && GREETING_KEYWORDS.some(kw => userMessage.includes(kw))) {
-            let alreadyGreeted = false
-            try {
-              alreadyGreeted = !!(await redis.get(`greeting:${userId}`))
-              if (!alreadyGreeted) await redis.set(`greeting:${userId}`, '1', { ex: GREETING_TTL })
-            } catch { /* Redis ล่ม */ }
-            if (!alreadyGreeted) {
-              await safeReply(txt(GREETING_MSG))
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: GREETING_MSG }])
-              log.info('reply.greeting', { userId })
-              return
-            }
-          }
 
           // ตรวจ pre-handoff state
           let pendingTrigger: string | null = null
@@ -497,14 +472,14 @@ export async function POST(req: NextRequest) {
           if (savedToRedis) {
             const ackMsgs: messagingApi.Message[] = []
             if (offHoursNotice) ackMsgs.push({ type: 'text', text: offHoursNotice })
-            if (showGreeting) ackMsgs.push(greetingCard() as messagingApi.Message)
+            if (greetFirst) ackMsgs.push({ type: 'text', text: WELCOME_MSG })
             ackMsgs.push({ type: 'text', text: 'ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷' })
             await safeReply(ackMsgs)
             log.info('image.received_ack', { userId, imageId })
           } else {
             const fallbackMsgs: messagingApi.Message[] = []
             if (offHoursNotice) fallbackMsgs.push({ type: 'text', text: offHoursNotice })
-            if (showGreeting) fallbackMsgs.push(greetingCard() as messagingApi.Message)
+            if (greetFirst) fallbackMsgs.push({ type: 'text', text: WELCOME_MSG })
             fallbackMsgs.push(imageIntentCard() as messagingApi.Message)
             await safeReply(fallbackMsgs)
             log.info('image.intent_card_sent_fallback', { userId, imageId })
