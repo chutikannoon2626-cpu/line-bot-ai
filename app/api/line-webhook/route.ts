@@ -102,8 +102,7 @@ export async function POST(req: NextRequest) {
 
         const txt = (text: string): messagingApi.Message[] => {
           const msgs: messagingApi.Message[] = []
-          if (offHoursNotice) msgs.push({ type: 'text', text: offHoursNotice })
-          if (greetFirst) msgs.push({ type: 'text', text: WELCOME_MSG })
+          if (offHoursNotice && !greetFirst) msgs.push({ type: 'text', text: offHoursNotice })
           msgs.push({ type: 'text', text })
           return msgs
         }
@@ -148,6 +147,35 @@ export async function POST(req: NextRequest) {
             }
           } catch { /* Redis ล่ม — ข้าม */ }
 
+          // ── ans: ส่ง greeting แยกก่อน (replyToken) แล้ว push คำตอบทีหลัง ──
+          const safePush = async (messages: messagingApi.Message[]): Promise<void> => {
+            try {
+              await Promise.race([
+                lineClient.pushMessage({ to: userId, messages }),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('push_timeout')), 4000)
+                ),
+              ])
+            } catch (err) {
+              log.warn('push.send_failed', { userId, err: (err as Error).message })
+            }
+          }
+          let greetReplied = false
+          const ans = async (msgs: messagingApi.Message[]): Promise<void> => {
+            if (greetFirst && !greetReplied) {
+              const gm: messagingApi.Message[] = []
+              if (offHoursNotice) gm.push({ type: 'text', text: offHoursNotice })
+              gm.push({ type: 'text', text: WELCOME_MSG })
+              await safeReply(gm)
+              greetReplied = true
+              await safePush(msgs)
+            } else if (greetFirst) {
+              await safePush(msgs)
+            } else {
+              await safeReply(msgs)
+            }
+          }
+
           // ตรวจ pending image — ลูกค้าส่งรูปแล้วพิมพ์ข้อความตามมา
           let imgData: { id: string; ts: number } | null = null
           try {
@@ -176,7 +204,7 @@ export async function POST(req: NextRequest) {
                 log.error('gemini.image_text_failed', { err: (err as Error).message, userId })
                 return UNAVAILABLE_MSG
               })
-              await safeReply(txt(reply))
+              await ans(txt(reply))
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ] ${userMessage}` }, { role: 'model', text: reply }])
               log.info('image_text_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
@@ -210,20 +238,15 @@ export async function POST(req: NextRequest) {
               } catch { /* OCR ล้มเหลว — ข้ามได้ */ }
 
               if (ocrProduct === 'ไม่ระบุ') {
-                const askMsgs: messagingApi.Message[] = []
-                if (offHoursNotice) askMsgs.push({ type: 'text', text: offHoursNotice })
-                if (greetFirst) askMsgs.push({ type: 'text', text: WELCOME_MSG })
-                askMsgs.push({ type: 'text', text: 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ' })
-                await safeReply(askMsgs)
+                await ans(txt('รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ'))
                 log.info('image.ocr_not_found', { userId, elapsedMs: elapsed })
                 return
               }
 
-              const cardMsgs: messagingApi.Message[] = []
-              if (offHoursNotice) cardMsgs.push({ type: 'text', text: offHoursNotice })
-              if (greetFirst) cardMsgs.push({ type: 'text', text: WELCOME_MSG })
-              cardMsgs.push(imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message)
-              await safeReply(cardMsgs)
+              await ans([
+                ...(offHoursNotice && !greetFirst ? [{ type: 'text' as const, text: offHoursNotice }] : []),
+                imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message,
+              ])
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
               return
             }
@@ -259,7 +282,7 @@ export async function POST(req: NextRequest) {
                 return UNAVAILABLE_MSG
               })
 
-              await safeReply(txt(reply))
+              await ans(txt(reply))
               log.info('image_spec_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -291,7 +314,7 @@ export async function POST(req: NextRequest) {
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
-            await safeReply(txt(handoffMsg))
+            await ans(txt(handoffMsg))
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
             log.info('handoff.after_pre_handoff', { userId, latencyMs: Date.now() - startTime })
             return
@@ -310,7 +333,7 @@ export async function POST(req: NextRequest) {
                   .expire(`handoff_notified:${userId}`, 10 * 60)
                   .exec() as [number, number]
                 if (count === 1) {
-                  await safeReply(txt('แอดมินจะติดต่อกลับในเวลาทำการนะคะ 🙏\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์)'))
+                  await ans(txt('แอดมินจะติดต่อกลับในเวลาทำการนะคะ 🙏\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์)'))
                   log.info('handoff.already_routed_ack', { userId })
                 } else {
                   log.info('handoff.already_routed_silent', { userId, count })
@@ -325,7 +348,7 @@ export async function POST(req: NextRequest) {
               log.warn('handoff.pre_handoff_save_failed', { userId })
             }
             const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
-            await safeReply(txt(preHandoffQ))
+            await ans(txt(preHandoffQ))
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
             log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
             return
@@ -344,7 +367,7 @@ export async function POST(req: NextRequest) {
 
           // Gemini ไม่ตอบทัน (timeout, 429, 503) — แจ้งลูกค้าให้ถามใหม่
           if (reply === GEMINI_UNAVAILABLE) {
-            await safeReply(txt(UNAVAILABLE_MSG))
+            await ans(txt(UNAVAILABLE_MSG))
             log.info('reply.gemini_unavailable', { userId })
             return
           }
@@ -352,7 +375,7 @@ export async function POST(req: NextRequest) {
           // CANCEL_IMEI
           if (reply === 'CANCEL_IMEI') {
             const cancelMsg = 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ'
-            await safeReply(txt(cancelMsg))
+            await ans(txt(cancelMsg))
             await saveHistory(userId, [])
             log.info('imei.cancelled', { userId })
             return
@@ -371,7 +394,7 @@ export async function POST(req: NextRequest) {
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
-            await safeReply(txt(handoffMsg))
+            await ans(txt(handoffMsg))
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
             log.info('handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
             return
@@ -389,7 +412,7 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม */ }
 
             if (nonsenseCount <= 1) {
-              await safeReply(txt(OUT_OF_DOMAIN_MSG))
+              await ans(txt(OUT_OF_DOMAIN_MSG))
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
               log.info('reply.out_of_domain', { userId })
             } else {
@@ -405,13 +428,13 @@ export async function POST(req: NextRequest) {
               const hasRetried = await redis.get(retryKey)
               if (hasRetried) {
                 await redis.del(retryKey)
-                await safeReply(txt(handoffMsg))
+                await ans(txt(handoffMsg))
                 await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
                 log.info('retry.admin_routed', { userId })
               } else {
                 await redis.set(retryKey, '1', { ex: RETRY_TTL })
                 const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ สามารถติดต่อแอดมินหรือช่างเทคนิคได้ในเวลาทำการ 08:00–17:00 น. ค่ะ หรือลองอธิบายเพิ่มเติมได้เลยนะคะ'
-                await safeReply(txt(retryMsg))
+                await ans(txt(retryMsg))
                 await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
                 log.info('retry.first_attempt', { userId })
                 try {
@@ -422,7 +445,7 @@ export async function POST(req: NextRequest) {
                 } catch { /* Redis ล่ม — ข้าม */ }
               }
             } catch {
-              await safeReply(txt(handoffMsg))
+              await ans(txt(handoffMsg))
             }
             return
           }
@@ -437,7 +460,7 @@ export async function POST(req: NextRequest) {
                 .exec() as [number, number]
               if (repeatCount === 1) {
                 const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-                await safeReply(txt(reminder))
+                await ans(txt(reminder))
                 await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
                 log.info('reply.duplicate_reminded', { userId })
               } else {
@@ -449,7 +472,7 @@ export async function POST(req: NextRequest) {
             await redis.del(`repeat_count:${userId}`)
           } catch { /* Redis ล่ม — ส่งปกติ */ }
 
-          await safeReply(txt(reply))
+          await ans(txt(reply))
           await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
           log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
           try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
