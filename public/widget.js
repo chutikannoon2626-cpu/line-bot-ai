@@ -76,10 +76,10 @@
       'background:#f8f9fb;transition:border-color .15s}',
     '#nj-inp:focus{border-color:#1a3a5c;background:#fff}',
     '#nj-inp:disabled{background:#f0f0f0;color:#aaa}',
-    '#nj-send{width:40px;height:40px;border-radius:50%;background:#1a3a5c;',
+    '#nj-send{width:40px;height:40px;border-radius:50%;background:#0F6E56;',
       'border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;',
       'flex-shrink:0;transition:background .15s}',
-    '#nj-send:hover{background:#2d5a8c}',
+    '#nj-send:hover{background:#0a5040}',
     '#nj-send:disabled{background:#ccc;cursor:default}',
 
     '@keyframes njFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}',
@@ -115,7 +115,7 @@
       '<div id="nj-foot">' +
         '<input id="nj-inp" type="text" placeholder="พิมพ์ข้อความ..." maxlength="500" autocomplete="off"/>' +
         '<button id="nj-send" title="ส่ง">' +
-          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
             '<line x1="22" y1="2" x2="11" y2="13"/>' +
             '<polygon points="22 2 15 22 11 13 2 9 22 2"/>' +
           '</svg>' +
