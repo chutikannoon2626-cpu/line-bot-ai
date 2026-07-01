@@ -2,6 +2,8 @@
 import { useState, useEffect, FormEvent } from 'react'
 import type { CSSProperties } from 'react'
 
+type Channel = 'line' | 'fb' | 'web'
+
 interface Rule {
   id: string
   days: number[]
@@ -12,6 +14,12 @@ interface Rule {
 
 const DAY_SHORT = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
 const DAY_FULL  = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์']
+
+const CHANNELS: { id: Channel; label: string; icon: string; color: string }[] = [
+  { id: 'line', label: 'LINE OA',    icon: '💚', color: '#00b900' },
+  { id: 'fb',   label: 'Facebook',   icon: '💙', color: '#1877f2' },
+  { id: 'web',  label: 'Web Chat',   icon: '🟠', color: '#e65100' },
+]
 
 function formatDays(days: number[]): string {
   return [...days].sort((a, b) => a - b).map(d => DAY_FULL[d]).join(', ')
@@ -42,6 +50,12 @@ const badge = (on: boolean): CSSProperties => ({
   background: on ? '#e8f5e9' : '#eee',
   color: on ? '#2e7d32' : '#999',
 })
+const tabStyle = (active: boolean, color: string): CSSProperties => ({
+  padding: '8px 20px', cursor: 'pointer', fontWeight: active ? 'bold' : 'normal',
+  borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+  borderBottom: active ? `3px solid ${color}` : '3px solid transparent',
+  color: active ? color : '#666', background: 'none', fontSize: 14,
+})
 
 function useBangkokTime() {
   const [now, setNow] = useState('')
@@ -62,24 +76,37 @@ function useBangkokTime() {
 }
 
 export default function SchedulePage() {
-  const [key, setKey]       = useState('')
-  const [authed, setAuthed] = useState(false)
+  const [key, setKey]         = useState('')
+  const [authed, setAuthed]   = useState(false)
   const bangkokTime = useBangkokTime()
-  const [rules, setRules]   = useState<Rule[]>([])
-  const [days, setDays]     = useState<number[]>([])
+  const [channel, setChannel] = useState<Channel>('line')
+  const [rules, setRules]     = useState<Rule[]>([])
+  const [days, setDays]       = useState<number[]>([])
   const [startTime, setStart] = useState('12:00')
   const [endTime, setEnd]     = useState('13:00')
-  const [error, setError]   = useState('')
-  const [saving, setSaving] = useState(false)
+  const [error, setError]     = useState('')
+  const [saving, setSaving]   = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const apiUrl = () => `/api/admin/schedule?key=${encodeURIComponent(key)}`
+  function apiUrl(ch: Channel = channel) {
+    return `/api/admin/schedule?key=${encodeURIComponent(key)}&channel=${ch}`
+  }
 
   async function login() {
     setSaving(true); setError('')
-    const res = await fetch(apiUrl())
+    const res = await fetch(apiUrl('line'))
     if (res.ok) { setRules(await res.json()); setAuthed(true) }
     else setError('รหัสผ่านไม่ถูกต้อง')
     setSaving(false)
+  }
+
+  async function switchChannel(ch: Channel) {
+    setChannel(ch)
+    setError('')
+    setLoading(true)
+    const res = await fetch(apiUrl(ch))
+    if (res.ok) setRules(await res.json())
+    setLoading(false)
   }
 
   async function addRule(e: FormEvent) {
@@ -118,6 +145,8 @@ export default function SchedulePage() {
     setRules(r => r.filter(x => x.id !== id))
   }
 
+  const activeChannel = CHANNELS.find(c => c.id === channel)!
+
   if (!authed) {
     return (
       <div style={{ maxWidth: 400, margin: '100px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
@@ -138,85 +167,115 @@ export default function SchedulePage() {
   }
 
   return (
-    <div style={{ maxWidth: 600, margin: '40px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
+    <div style={{ maxWidth: 620, margin: '40px auto', fontFamily: 'Sarabun, sans-serif', padding: 24 }}>
       <h2 style={{ color: '#1a3a5c' }}>📅 ตั้งเวลาปิดบอทซ้ำทุกสัปดาห์</h2>
       <p style={{ color: '#666', fontSize: 13, marginBottom: 12 }}>
-        ช่วงเวลาที่กำหนด บอทจะไม่ตอบอัตโนมัติ (LINE OA และ Facebook ใช้กฎเดียวกัน)
+        แต่ละช่องทางตั้งเวลาแยกกันได้อิสระ
       </p>
-      <div style={{ background: '#e8f0fe', borderRadius: 8, padding: '8px 14px', marginBottom: 24, fontSize: 13, color: '#1a3a5c' }}>
+      <div style={{ background: '#e8f0fe', borderRadius: 8, padding: '8px 14px', marginBottom: 20, fontSize: 13, color: '#1a3a5c' }}>
         🕐 เวลาปัจจุบัน (Bangkok): <strong>{bangkokTime}</strong>
       </div>
 
-      {/* ฟอร์มเพิ่มกฎ */}
-      <form onSubmit={addRule} style={{ background: '#f0f4f8', padding: 16, borderRadius: 8, marginBottom: 28 }}>
-        <h3 style={{ margin: '0 0 14px', color: '#1a3a5c' }}>เพิ่มกฎใหม่</h3>
+      {/* Channel Tabs */}
+      <div style={{ borderBottom: '1px solid #ddd', marginBottom: 24, display: 'flex' }}>
+        {CHANNELS.map(ch => (
+          <button key={ch.id} style={tabStyle(channel === ch.id, ch.color)}
+            onClick={() => switchChannel(ch.id)}>
+            {ch.icon} {ch.label}
+          </button>
+        ))}
+      </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontWeight: 'bold', display: 'block', marginBottom: 6 }}>วันในสัปดาห์</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {DAY_SHORT.map((name, i) => (
-              <label key={i} style={pill(days.includes(i))}>
-                <input type="checkbox" style={{ display: 'none' }}
-                  checked={days.includes(i)}
-                  onChange={e => setDays(d => e.target.checked ? [...d, i] : d.filter(x => x !== i))}
-                />
-                {name}
-              </label>
-            ))}
-          </div>
-          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-            <button type="button" style={outBtn()} onClick={() => setDays([1,2,3,4,5])}>จ–ศ</button>
-            <button type="button" style={outBtn()} onClick={() => setDays([0,6])}>เสาร์–อาทิตย์</button>
-            <button type="button" style={outBtn()} onClick={() => setDays([0,1,2,3,4,5,6])}>ทุกวัน</button>
-          </div>
+      {/* Web Chat note */}
+      {channel === 'web' && (
+        <div style={{ background: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#7b4200' }}>
+          💡 <strong>ถ้าไม่มีกฎ = Web Chat ตอบ 24 ชม.</strong> ไม่ต้องตั้งกฎก็ได้ถ้าต้องการให้ตอบตลอดเวลา
         </div>
+      )}
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 14, alignItems: 'flex-end' }}>
-          <div>
-            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: 4 }}>เวลาเริ่ม</label>
-            <input type="time" value={startTime} onChange={e => setStart(e.target.value)}
-              style={{ padding: 8, fontSize: 14, borderRadius: 4, border: '1px solid #ccc' }} />
-          </div>
-          <span style={{ paddingBottom: 8 }}>—</span>
-          <div>
-            <label style={{ fontWeight: 'bold', display: 'block', marginBottom: 4 }}>เวลาจบ</label>
-            <input type="time" value={endTime} onChange={e => setEnd(e.target.value)}
-              style={{ padding: 8, fontSize: 14, borderRadius: 4, border: '1px solid #ccc' }} />
-          </div>
-        </div>
+      {loading
+        ? <p style={{ color: '#999', textAlign: 'center', padding: 32 }}>กำลังโหลด...</p>
+        : (
+        <>
+          {/* ฟอร์มเพิ่มกฎ */}
+          <form onSubmit={addRule} style={{ background: '#f0f4f8', padding: 16, borderRadius: 8, marginBottom: 28 }}>
+            <h3 style={{ margin: '0 0 14px', color: activeChannel.color }}>
+              {activeChannel.icon} เพิ่มกฎ {activeChannel.label}
+            </h3>
 
-        {error && <p style={{ color: 'red', margin: '0 0 12px' }}>{error}</p>}
-        <button type="submit" disabled={saving} style={btn()}>
-          {saving ? 'กำลังบันทึก...' : '+ บันทึกกฎ'}
-        </button>
-      </form>
-
-      {/* รายการกฎ */}
-      <h3 style={{ color: '#1a3a5c', marginBottom: 10 }}>กฎที่ตั้งไว้ ({rules.length})</h3>
-      {rules.length === 0
-        ? <p style={{ color: '#999' }}>ยังไม่มีกฎ — บอทตอบตลอดเวลา</p>
-        : rules.map(rule => (
-          <div key={rule.id} style={card(rule.enabled)}>
-            <div>
-              <span style={{ fontWeight: 'bold', color: rule.enabled ? '#1a3a5c' : '#999' }}>
-                {formatDays(rule.days)}
-              </span>
-              <span style={{ margin: '0 8px', color: '#555' }}>
-                {rule.startTime} – {rule.endTime}
-              </span>
-              <span style={badge(rule.enabled)}>
-                {rule.enabled ? 'เปิดใช้งาน' : 'ปิดชั่วคราว'}
-              </span>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontWeight: 'bold', display: 'block', marginBottom: 6 }}>วันในสัปดาห์</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {DAY_SHORT.map((name, i) => (
+                  <label key={i} style={pill(days.includes(i))}>
+                    <input type="checkbox" style={{ display: 'none' }}
+                      checked={days.includes(i)}
+                      onChange={e => setDays(d => e.target.checked ? [...d, i] : d.filter(x => x !== i))}
+                    />
+                    {name}
+                  </label>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                <button type="button" style={outBtn()} onClick={() => setDays([1,2,3,4,5])}>จ–ศ</button>
+                <button type="button" style={outBtn()} onClick={() => setDays([0,6])}>เสาร์–อาทิตย์</button>
+                <button type="button" style={outBtn()} onClick={() => setDays([0,1,2,3,4,5,6])}>ทุกวัน</button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button style={outBtn()} onClick={() => toggle(rule.id, !rule.enabled)}>
-                {rule.enabled ? 'ปิดชั่วคราว' : 'เปิดใหม่'}
-              </button>
-              <button style={outBtn('#c00')} onClick={() => remove(rule.id)}>ลบ</button>
+
+            <div style={{ display: 'flex', gap: 16, marginBottom: 14, alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: 4 }}>เวลาเริ่ม</label>
+                <input type="time" value={startTime} onChange={e => setStart(e.target.value)}
+                  style={{ padding: 8, fontSize: 14, borderRadius: 4, border: '1px solid #ccc' }} />
+              </div>
+              <span style={{ paddingBottom: 8 }}>—</span>
+              <div>
+                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: 4 }}>เวลาจบ</label>
+                <input type="time" value={endTime} onChange={e => setEnd(e.target.value)}
+                  style={{ padding: 8, fontSize: 14, borderRadius: 4, border: '1px solid #ccc' }} />
+              </div>
             </div>
-          </div>
-        ))
-      }
+
+            {error && <p style={{ color: 'red', margin: '0 0 12px' }}>{error}</p>}
+            <button type="submit" disabled={saving} style={btn(activeChannel.color)}>
+              {saving ? 'กำลังบันทึก...' : '+ บันทึกกฎ'}
+            </button>
+          </form>
+
+          {/* รายการกฎ */}
+          <h3 style={{ color: '#1a3a5c', marginBottom: 10 }}>
+            กฎ {activeChannel.label} ({rules.length})
+          </h3>
+          {rules.length === 0
+            ? <p style={{ color: '#999' }}>
+                ยังไม่มีกฎ —{' '}
+                {channel === 'web' ? 'Web Chat ตอบ 24 ชม.' : 'บอทตอบตลอดเวลา'}
+              </p>
+            : rules.map(rule => (
+              <div key={rule.id} style={card(rule.enabled)}>
+                <div>
+                  <span style={{ fontWeight: 'bold', color: rule.enabled ? '#1a3a5c' : '#999' }}>
+                    {formatDays(rule.days)}
+                  </span>
+                  <span style={{ margin: '0 8px', color: '#555' }}>
+                    {rule.startTime} – {rule.endTime}
+                  </span>
+                  <span style={badge(rule.enabled)}>
+                    {rule.enabled ? 'เปิดใช้งาน' : 'ปิดชั่วคราว'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button style={outBtn()} onClick={() => toggle(rule.id, !rule.enabled)}>
+                    {rule.enabled ? 'ปิดชั่วคราว' : 'เปิดใหม่'}
+                  </button>
+                  <button style={outBtn('#c00')} onClick={() => remove(rule.id)}>ลบ</button>
+                </div>
+              </div>
+            ))
+          }
+        </>
+      )}
     </div>
   )
 }

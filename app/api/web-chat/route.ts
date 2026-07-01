@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     } catch { /* Redis ล่ม — ข้าม */ }
 
     // Schedule check — ถ้าปิดบอท แจ้งลูกค้า (ไม่ใช่แค่เงียบ เพราะไม่มีแอดมินดูแลเว็บ)
-    if (await isScheduledOff()) {
+    if (await isScheduledOff('web')) {
       log.info('webchat.scheduled_off', { userId })
       return json({
         reply: 'ขณะนี้อยู่นอกเวลาทำการค่ะ น้องใจดีจะกลับมาให้บริการในเวลาทำการนะคะ 🙏\nหากต้องการติดต่อด่วน สามารถ inbox Facebook Spender Club ได้เลยค่ะ',

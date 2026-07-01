@@ -1,5 +1,7 @@
 import { redis } from './redis'
 
+export type Channel = 'line' | 'fb' | 'web'
+
 export interface ScheduleRule {
   id: string
   days: number[]     // 0=อาทิตย์ 1=จันทร์ ... 6=เสาร์
@@ -8,24 +10,24 @@ export interface ScheduleRule {
   enabled: boolean
 }
 
-const KEY = 'schedule:rules'
+function key(channel: Channel) { return `schedule:rules:${channel}` }
 
-export async function getRules(): Promise<ScheduleRule[]> {
+export async function getRules(channel: Channel): Promise<ScheduleRule[]> {
   try {
-    return (await redis.get<ScheduleRule[]>(KEY)) ?? []
+    return (await redis.get<ScheduleRule[]>(key(channel))) ?? []
   } catch {
     return []
   }
 }
 
-export async function saveRules(rules: ScheduleRule[]): Promise<void> {
-  await redis.set(KEY, rules)
+export async function saveRules(channel: Channel, rules: ScheduleRule[]): Promise<void> {
+  await redis.set(key(channel), rules)
 }
 
 // คืนค่า true ถ้าเวลาปัจจุบัน (Thai timezone) ตรงกับกฎที่เปิดใช้งานอยู่
-export async function isScheduledOff(): Promise<boolean> {
+export async function isScheduledOff(channel: Channel): Promise<boolean> {
   try {
-    const rules = await getRules()
+    const rules = await getRules(channel)
     if (rules.length === 0) return false
 
     const bangkokNow = new Date(

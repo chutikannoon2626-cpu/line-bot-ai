@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม — ข้าม */ }
 
             // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
-            if (await isScheduledOff()) {
+            if (await isScheduledOff('fb')) {
               log.info('fb.reply.scheduled_off', { userId })
               return
             }

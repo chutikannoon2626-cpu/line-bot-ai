@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
           }
 
           // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
-          if (await isScheduledOff()) {
+          if (await isScheduledOff('line')) {
             log.info('reply.scheduled_off', { userId })
             return
           }
