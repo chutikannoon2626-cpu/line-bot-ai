@@ -7,6 +7,81 @@ type SerperResponse = { organic?: SerperOrganic[] }
 
 const SEARCH_CACHE_TTL = 24 * 3600 // 24 ชั่วโมง
 
+// ส่ง query ตรงๆ โดยไม่เพิ่ม site restriction (ใช้สำหรับ recommend 4 แหล่ง)
+async function fetchSerperRaw(fullQuery: string, apiKey: string): Promise<SerperResponse> {
+  try {
+    const res = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: fullQuery, num: 3, gl: 'th', hl: 'th' }),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return {}
+    return res.json() as Promise<SerperResponse>
+  } catch { return {} }
+}
+
+// ตัด tracking parameters (srsltid, utm_*, gclid, fbclid ฯลฯ) ออกจาก URL
+function cleanUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    return u.origin + u.pathname
+  } catch {
+    return url
+  }
+}
+
+// ค้น 4 แหล่ง spenderclub.com พร้อมกัน สำหรับคำถามแนะนำ/เปรียบเทียบ
+export async function searchSpenderRecommend(query: string): Promise<SearchResult> {
+  const cacheKey = `search_rec:${query.slice(0, 100)}`
+  try {
+    const cached = await redis.get<SearchResult>(cacheKey)
+    if (cached) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level: 'info', event: 'search.rec_cache_hit', query }))
+      return cached
+    }
+  } catch { /* Redis ล่ม — ข้าม */ }
+
+  const apiKey = process.env.SERPER_API_KEY
+  if (!apiKey) return searchSpenderSites(query) // fallback ถ้าไม่มี key
+
+  const startTime = Date.now()
+  const queries = [
+    `site:spenderclub.com/product/ ${query}`,
+    `site:spenderclub.com/blog/ ${query}`,
+    `site:spenderclub.com/downlods_hub/ ${query}`,
+    `site:spendernetwork.com ${query}`,
+  ]
+
+  const settled = await Promise.allSettled(
+    queries.map(q => fetchSerperRaw(q, apiKey))
+  )
+
+  const all: SerperOrganic[] = []
+  const urls: string[] = []
+  for (const r of settled) {
+    if (r.status === 'fulfilled' && r.value.organic?.length) {
+      all.push(...r.value.organic.slice(0, 2))
+      const link = r.value.organic[0]?.link
+      if (link) urls.push(cleanUrl(link))
+    }
+  }
+
+  console.log(JSON.stringify({
+    ts: new Date().toISOString(), level: 'info', event: 'search.recommend',
+    query, sources: urls.length, latencyMs: Date.now() - startTime,
+  }))
+
+  if (!all.length) return { text: '', url: '' }
+
+  const urlLines = urls.length > 1 ? `\n\nลิงก์อ้างอิง:\n${urls.join('\n')}` : ''
+  const text = all.map(r => `${r.title}\n${r.snippet}`).join('\n\n').slice(0, 4000) + urlLines
+  const result: SearchResult = { text, url: urls[0] ?? '' }
+
+  try { await redis.set(cacheKey, result, { ex: SEARCH_CACHE_TTL }) } catch { /* Redis ล่ม */ }
+  return result
+}
+
 // ค้นหาจาก spenderclub.com + spendernetwork.com (มี Redis cache 24h)
 export async function searchSpenderSites(query: string): Promise<SearchResult> {
   const cacheKey = `search_cache:${query.slice(0, 120)}`
@@ -39,16 +114,6 @@ export async function searchSpenderSites(query: string): Promise<SearchResult> {
 export async function searchSpenderClub(query: string): Promise<string> {
   const result = await searchSpenderSites(query)
   return result.text
-}
-
-// ตัด tracking parameters (srsltid, utm_*, gclid, fbclid ฯลฯ) ออกจาก URL
-function cleanUrl(url: string): string {
-  try {
-    const u = new URL(url)
-    return u.origin + u.pathname
-  } catch {
-    return url
-  }
 }
 
 async function searchWithSerper(query: string, apiKey: string): Promise<SearchResult> {

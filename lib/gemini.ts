@@ -1,9 +1,15 @@
 import { GoogleGenAI } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
-import { searchSpenderSites } from './websearch'
+import { searchSpenderSites, searchSpenderRecommend } from './websearch'
 import type { Turn } from './history'
 
 const MODEL = 'gemini-2.5-flash'
+
+const RECOMMEND_RE = /รุ่นไหนดี|แนะนำ|เหมาะก[ับ]|เปรียบเทียบ|ต่างกัน|เหมือนกัน|ดีกว่า|ราคาถูกกว่า|ราคาไม่เกิน|งบ.{0,15}บาท|ซื้อรุ่นไหน|เลือกรุ่น|เหมาะสำหรับ|ใช้กับอะไร|เหมาะกับงาน/i
+
+function isRecommendQuestion(text: string): boolean {
+  return RECOMMEND_RE.test(text)
+}
 
 const DEFAULT_REPLY = '[NOT_FOUND]'
 const API_ERROR_REPLY = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
@@ -74,7 +80,8 @@ export async function generateReply(
     let searchText = ''
     let searchUrl = ''
     try {
-      const result = await searchSpenderSites(query)
+      const searchFn = isRecommendQuestion(userMessage) ? searchSpenderRecommend : searchSpenderSites
+      const result = await searchFn(query)
       searchText = result.text
       searchUrl = result.url
     } catch { /* search ล้มเหลว — Gemini จะตอบจาก FAQ */ }
