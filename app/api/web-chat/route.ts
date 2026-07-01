@@ -152,11 +152,21 @@ export async function POST(req: NextRequest) {
     const history = await getHistory(sessionId)
     const faqText = await fetchFAQ()
 
-    // shouldHandoff — เว็บไม่มีแอดมิน real-time ให้บอกช่องทาง LINE แทน
+    // shouldHandoff — เว็บไม่มีแอดมิน real-time ตอบครั้งแรกเท่านั้น ครั้งต่อไปเงียบ
     if (shouldHandoff(message)) {
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: HANDOFF_MSG }])
-      log.info('webchat.contact_redirect', { userId })
-      return json({ reply: HANDOFF_MSG }, cors)
+      try {
+        const [count] = await redis.pipeline()
+          .incr(`web_handoff:${sessionId}`)
+          .expire(`web_handoff:${sessionId}`, 10 * 60)
+          .exec() as [number, number]
+        if (count === 1) {
+          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: HANDOFF_MSG }])
+          log.info('webchat.contact_redirect', { userId })
+          return json({ reply: HANDOFF_MSG }, cors)
+        }
+        log.info('webchat.contact_redirect_silent', { userId, count })
+      } catch { /* Redis ล่ม */ }
+      return json({ reply: '' }, cors)
     }
 
     // Gemini

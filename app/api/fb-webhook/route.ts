@@ -297,7 +297,10 @@ export async function POST(req: NextRequest) {
 
             if (pendingTrigger !== null) {
               try {
-                await redis.set(`routed:${userId}`, '1', { ex: 300 })
+                await Promise.all([
+                  redis.set(`routed:${userId}`, '1', { ex: 300 }),
+                  redis.del(`handoff_notified:${userId}`),
+                ])
                 await notifyAdminFacebook(psid, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
               } catch (notifyErr) {
                 log.error('fb.handoff.notify_failed', { err: (notifyErr as Error).message, userId })
@@ -313,7 +316,18 @@ export async function POST(req: NextRequest) {
               try { alreadyRouted = !!(await redis.get(`routed:${userId}`)) } catch { /* */ }
 
               if (alreadyRouted) {
-                await fbSend(psid, 'ได้ส่งเรื่องถึงแอดมินแล้วค่ะ รอแอดมินติดต่อกลับด้วยนะคะ 🙏')
+                try {
+                  const [count] = await redis.pipeline()
+                    .incr(`handoff_notified:${userId}`)
+                    .expire(`handoff_notified:${userId}`, 10 * 60)
+                    .exec() as [number, number]
+                  if (count === 1) {
+                    await fbSend(psid, 'รับทราบแล้วนะคะ ทีมงานจะติดต่อกลับในเวลาทำการค่ะ 🙏')
+                    log.info('fb.handoff.already_routed_ack', { userId })
+                  } else {
+                    log.info('fb.handoff.already_routed_silent', { userId, count })
+                  }
+                } catch { /* Redis ล่ม */ }
                 return
               }
 
@@ -359,7 +373,10 @@ export async function POST(req: NextRequest) {
             if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
               const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
               try {
-                await redis.set(`routed:${userId}`, '1', { ex: 300 })
+                await Promise.all([
+                  redis.set(`routed:${userId}`, '1', { ex: 300 }),
+                  redis.del(`handoff_notified:${userId}`),
+                ])
                 await notifyAdminFacebook(psid, `[สรุปคำสั่ง]: ${summary}`)
               } catch (notifyErr) {
                 log.error('fb.handoff.notify_failed', { err: (notifyErr as Error).message, userId })

@@ -310,6 +310,7 @@ export async function POST(req: NextRequest) {
               await Promise.all([
                 redis.set(`routed:${userId}`, '1', { ex: 300 }),
                 redis.set(`takeover:${userId}`, '1', { ex: TAKEOVER_TTL }),
+                redis.del(`handoff_notified:${userId}`),
               ])
               await notifyAdmin(userId, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
             } catch (notifyErr) {
@@ -328,9 +329,18 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม */ }
 
             if (alreadyRouted) {
-              const alreadyMsg = 'ได้ส่งเรื่องถึงแอดมินแล้วค่ะ รอแอดมินติดต่อกลับด้วยนะคะ 🙏'
-              await safeReply(txt(alreadyMsg))
-              log.info('handoff.already_routed', { userId, latencyMs: Date.now() - startTime })
+              try {
+                const [count] = await redis.pipeline()
+                  .incr(`handoff_notified:${userId}`)
+                  .expire(`handoff_notified:${userId}`, 10 * 60)
+                  .exec() as [number, number]
+                if (count === 1) {
+                  await safeReply(txt('รับทราบแล้วนะคะ ทีมงานจะติดต่อกลับในเวลาทำการค่ะ 🙏'))
+                  log.info('handoff.already_routed_ack', { userId })
+                } else {
+                  log.info('handoff.already_routed_silent', { userId, count })
+                }
+              } catch { /* Redis ล่ม */ }
               return
             }
 
@@ -380,6 +390,7 @@ export async function POST(req: NextRequest) {
               await Promise.all([
                 redis.set(`routed:${userId}`, '1', { ex: 300 }),
                 redis.set(`takeover:${userId}`, '1', { ex: TAKEOVER_TTL }),
+                redis.del(`handoff_notified:${userId}`),
               ])
               await notifyAdmin(userId, `[สรุปคำสั่ง]: ${summary}`)
             } catch (notifyErr) {
