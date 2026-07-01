@@ -335,7 +335,7 @@ export async function POST(req: NextRequest) {
                   .expire(`handoff_notified:${userId}`, 10 * 60)
                   .exec() as [number, number]
                 if (count === 1) {
-                  await safeReply(txt('รับทราบแล้วนะคะ ทีมงานจะติดต่อกลับในเวลาทำการค่ะ 🙏'))
+                  await safeReply(txt('แอดมินจะติดต่อกลับในเวลาทำการนะคะ 🙏\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์)'))
                   log.info('handoff.already_routed_ack', { userId })
                 } else {
                   log.info('handoff.already_routed_silent', { userId, count })
