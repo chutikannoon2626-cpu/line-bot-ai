@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { fetchFAQ } from '@/lib/sheet'
 import { generateReply } from '@/lib/gemini'
-import { shouldHandoff, notifyAdmin } from '@/lib/handoff'
+import { shouldHandoff } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
@@ -19,6 +19,8 @@ const RATE_LIMIT      = 5
 const NONSENSE_TTL    = 10 * 60
 const LAST_ANSWER_TTL = 2 * 60
 const RETRY_TTL       = 10 * 60
+
+const CONTACT_MSG = 'ขออภัยค่ะ ไม่พบข้อมูลที่ตรงกับคำถาม 🙏\nสอบถามเพิ่มเติมได้ที่\n📱 LINE OA: @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
 
 // Anti-spam
 const IP_RATE_LIMIT       = 20
@@ -146,42 +148,17 @@ export async function POST(req: NextRequest) {
 
     const history = await getHistory(sessionId)
     const faqText = await fetchFAQ()
-    const handoffMsg = 'หากต้องการติดต่อแอดมิน กรุณาแจ้งน้องใจดีได้เลยค่ะ'
 
-    // Pre-handoff: รอข้อมูลติดต่อจากลูกค้า
-    let waitingContact = false
-    try { waitingContact = !!(await redis.get(`webchat:pending_contact:${sessionId}`)) }
-    catch { /* Redis ล่ม */ }
-
-    if (waitingContact) {
-      try { await redis.del(`webchat:pending_contact:${sessionId}`) } catch { /* */ }
-      const contactInfo = message
-      try {
-        await notifyAdmin(
-          `web:${sessionId.slice(-8)}`,
-          `[ลูกค้าเว็บไซต์ spenderclub.com]\nขอให้ติดต่อกลับที่: ${contactInfo}`
-        )
-      } catch (err) {
-        log.error('webchat.handoff.notify_failed', { err: (err as Error).message })
-      }
-      const confirmMsg = 'ได้รับข้อมูลแล้วค่ะ แอดมินจะติดต่อกลับเร็วๆ นี้นะคะ 🙏 ขอบคุณค่ะ'
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: confirmMsg }])
-      log.info('webchat.handoff.contact_received', { userId, latencyMs: Date.now() - startTime })
-      return json({ reply: confirmMsg }, cors)
-    }
-
-    // shouldHandoff
+    // shouldHandoff — เว็บไม่มีแอดมิน real-time ให้บอกช่องทาง LINE แทน
     if (shouldHandoff(message)) {
-      try { await redis.set(`webchat:pending_contact:${sessionId}`, '1', { ex: SESSION_TTL }) } catch { /* */ }
-      const askMsg = 'น้องใจดีจะแจ้งแอดมินให้ติดต่อกลับค่ะ 😊\nขอเบอร์โทรศัพท์หรือ LINE ID ของลูกค้าได้เลยนะคะ'
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: askMsg }])
-      log.info('webchat.handoff.ask_contact', { userId })
-      return json({ reply: askMsg }, cors)
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: CONTACT_MSG }])
+      log.info('webchat.contact_redirect', { userId })
+      return json({ reply: CONTACT_MSG }, cors)
     }
 
     // Gemini
     const reply = await Promise.race([
-      generateReply(message, faqText, history, handoffMsg),
+      generateReply(message, faqText, history, CONTACT_MSG),
       new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
     ]).catch(() => GEMINI_UNAVAILABLE)
 
@@ -195,10 +172,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
-      try { await redis.set(`webchat:pending_contact:${sessionId}`, '1', { ex: SESSION_TTL }) } catch { /* */ }
-      const askMsg = 'น้องใจดีจะแจ้งแอดมินให้ติดต่อกลับค่ะ 😊\nขอเบอร์โทรศัพท์หรือ LINE ID ของลูกค้าได้เลยนะคะ'
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: askMsg }])
-      return json({ reply: askMsg }, cors)
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: CONTACT_MSG }])
+      return json({ reply: CONTACT_MSG }, cors)
     }
 
     // Out of domain
@@ -229,17 +204,15 @@ export async function POST(req: NextRequest) {
         const hasRetried = await redis.get(`webchat:retry:${sessionId}`)
         if (hasRetried) {
           await redis.del(`webchat:retry:${sessionId}`)
-          try { await redis.set(`webchat:pending_contact:${sessionId}`, '1', { ex: SESSION_TTL }) } catch { /* */ }
-          const askMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ น้องใจดีจะแจ้งแอดมินให้ติดต่อกลับค่ะ\nขอเบอร์โทรหรือ LINE ID ได้เลยนะคะ'
-          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: askMsg }])
-          return json({ reply: askMsg }, cors)
+          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: CONTACT_MSG }])
+          return json({ reply: CONTACT_MSG }, cors)
         } else {
           await redis.set(`webchat:retry:${sessionId}`, '1', { ex: RETRY_TTL })
           try {
             await redis.lpush('unanswered_log', JSON.stringify({ ts: new Date().toISOString(), userId, question: message }))
             await redis.ltrim('unanswered_log', 0, 499)
           } catch { /* */ }
-          const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ ลองอธิบายเพิ่มเติมได้เลยนะคะ หรือต้องการให้แอดมินช่วยดูแลคะ'
+          const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ ลองอธิบายเพิ่มเติมได้เลยนะคะ'
           await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: retryMsg }])
           return json({ reply: retryMsg }, cors)
         }
