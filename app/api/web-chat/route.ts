@@ -60,9 +60,8 @@ function getClientIp(req: NextRequest): string {
 
 function isNonsenseMessage(msg: string): boolean {
   if (msg.length < 2) return true
-  if (/^(.)\1+$/u.test(msg)) return true                          // aaa, ???, 555
-  if (/(.)\1{2,}/u.test(msg)) return true                         // char repeated 3+ times: ดดด, ไไไไ
-  if (/[ก-ฮ]{2}[่-๋]/u.test(msg)) return true // double consonant + tone: ทท่, กก้
+  if (/^(.)\1+$/u.test(msg)) return true   // ตัวอักษรซ้ำทั้งหมด: aaa, ???, 555
+  if (/(.)\1{2,}/u.test(msg)) return true  // ตัวอักษรซ้ำ 3+ ติดกัน: ดดด, ไไไไ, !!!
   return false
 }
 
