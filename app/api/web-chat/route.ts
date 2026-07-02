@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
         .expire(`webchat:rate:${sessionId}`, RATE_TTL)
         .exec() as [number, number]
       if (rate > RATE_LIMIT) {
-        return json({ reply: 'รอสักครู่นะคะ น้องใจดีกำลังอ่านข้อความค่ะ 🙏' }, cors)
+        return json({ reply: FALLBACK_MSG }, cors)
       }
     } catch { /* Redis ล่ม — ข้าม */ }
 
