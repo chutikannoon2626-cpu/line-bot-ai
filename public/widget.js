@@ -19,9 +19,9 @@
   style.textContent = [
     '#nj-widget *{box-sizing:border-box;font-family:"Sarabun",Tahoma,sans-serif}',
     '#nj-btn{position:fixed;bottom:24px;right:24px;z-index:2147483640;',
-      'height:50px;padding:0 22px;border-radius:25px;background:#0F6E56;color:#fff;',
+      'width:50px;height:50px;padding:0;border-radius:50%;background:#064fa3;color:#fff;',
       'border:none;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25);',
-      'display:flex;align-items:center;gap:10px;font-size:15px;font-weight:bold;white-space:nowrap;',
+      'display:flex;align-items:center;justify-content:center;',
       'transition:transform .15s,box-shadow .15s;user-select:none}',
     '#nj-btn:hover{transform:scale(1.03);box-shadow:0 6px 22px rgba(0,0,0,.3)}',
 
@@ -76,10 +76,10 @@
       'background:#f8f9fb;transition:border-color .15s}',
     '#nj-inp:focus{border-color:#1a3a5c;background:#fff}',
     '#nj-inp:disabled{background:#f0f0f0;color:#aaa}',
-    '#nj-send{width:40px;height:40px;border-radius:50%;background:#0F6E56;',
+    '#nj-send{width:40px;height:40px;border-radius:50%;background:#064fa3;',
       'border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;',
       'flex-shrink:0;transition:background .15s;font-size:18px;color:#fff;line-height:1}',
-    '#nj-send:hover{background:#0a5040}',
+    '#nj-send:hover{background:#053d80}',
     '#nj-send:disabled{background:#ccc;cursor:default}',
 
     '@keyframes njFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}',
@@ -87,7 +87,7 @@
 
     '@media(max-width:480px){',
       '#nj-panel{width:calc(100vw - 16px);right:8px;bottom:80px;height:72vh}',
-      '#nj-btn{bottom:16px;right:12px;font-size:13px;padding:0 14px;height:44px}',
+      '#nj-btn{bottom:16px;right:12px;width:44px;height:44px;padding:0}',
       '#nj-tooltip{right:8px}',
     '}',
   ].join('');
@@ -121,7 +121,6 @@
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
         '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
       '</svg>' +
-      'สอบถามข้อมูลสินค้าเพิ่มเติม' +
     '</button>';
 
   document.body.appendChild(root);
