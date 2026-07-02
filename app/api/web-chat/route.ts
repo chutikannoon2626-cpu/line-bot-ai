@@ -19,12 +19,9 @@ const RATE_TTL        = 10
 const RATE_LIMIT      = 5
 const NONSENSE_TTL    = 10 * 60
 const LAST_ANSWER_TTL = 2 * 60
-const RETRY_TTL       = 10 * 60
 
-// ใช้เมื่อไม่พบข้อมูล
-const CONTACT_MSG  = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูลที่ตรงกับคำถาม 🙏\nรบกวนสอบถามข้อมูลเพิ่มเติมได้ที่\n📱 LINE : @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
-// ใช้เมื่อลูกค้าขอติดต่อแอดมิน
-const HANDOFF_MSG  = 'สอบถามข้อมูลเพิ่มเติมได้ที่\n📱 LINE : @spenderclub\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–ศุกร์) ค่ะ'
+// fallback ทุกกรณีที่ Web Chat ตอบไม่ได้
+const FALLBACK_MSG = 'รบกวนสอบถามรายละเอียดเพิ่มเติมได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
 
 // Anti-spam
 const IP_RATE_LIMIT       = 20
@@ -159,29 +156,19 @@ export async function POST(req: NextRequest) {
 
     // shouldHandoff — เว็บไม่มีแอดมิน real-time ตอบครั้งแรกเท่านั้น ครั้งต่อไปเงียบ
     if (shouldHandoff(message)) {
-      try {
-        const [count] = await redis.pipeline()
-          .incr(`web_handoff:${sessionId}`)
-          .expire(`web_handoff:${sessionId}`, 10 * 60)
-          .exec() as [number, number]
-        if (count === 1) {
-          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: HANDOFF_MSG }])
-          log.info('webchat.contact_redirect', { userId })
-          return json({ reply: HANDOFF_MSG }, cors)
-        }
-        log.info('webchat.contact_redirect_silent', { userId, count })
-      } catch { /* Redis ล่ม */ }
-      return json({ reply: '' }, cors)
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
+      log.info('webchat.handoff', { userId })
+      return json({ reply: FALLBACK_MSG }, cors)
     }
 
     // Gemini
     const reply = await Promise.race([
-      generateReply(message, faqText, history, CONTACT_MSG),
+      generateReply(message, faqText, history, FALLBACK_MSG),
       new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
     ]).catch(() => GEMINI_UNAVAILABLE)
 
     if (reply === GEMINI_UNAVAILABLE) {
-      return json({ reply: 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ กรุณาลองใหม่อีกครั้งนะคะ 🙏' }, cors)
+      return json({ reply: FALLBACK_MSG }, cors)
     }
 
     if (reply === 'CANCEL_IMEI') {
@@ -190,8 +177,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: HANDOFF_MSG }])
-      return json({ reply: HANDOFF_MSG }, cors)
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
+      return json({ reply: FALLBACK_MSG }, cors)
     }
 
     // Out of domain
@@ -219,24 +206,11 @@ export async function POST(req: NextRequest) {
     // NOT_FOUND
     if (reply === NOT_FOUND) {
       try {
-        const hasRetried = await redis.get(`webchat:retry:${sessionId}`)
-        if (hasRetried) {
-          await redis.del(`webchat:retry:${sessionId}`)
-          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: CONTACT_MSG }])
-          return json({ reply: CONTACT_MSG }, cors)
-        } else {
-          await redis.set(`webchat:retry:${sessionId}`, '1', { ex: RETRY_TTL })
-          try {
-            await redis.lpush('unanswered_log', JSON.stringify({ ts: new Date().toISOString(), userId, question: message }))
-            await redis.ltrim('unanswered_log', 0, 499)
-          } catch { /* */ }
-          const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ ลองอธิบายเพิ่มเติมได้เลยนะคะ'
-          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: retryMsg }])
-          return json({ reply: retryMsg }, cors)
-        }
-      } catch {
-        return json({ reply: 'ขออภัยค่ะ ไม่พบข้อมูล กรุณาลองอีกครั้งนะคะ' }, cors)
-      }
+        await redis.lpush('unanswered_log', JSON.stringify({ ts: new Date().toISOString(), userId, question: message }))
+        await redis.ltrim('unanswered_log', 0, 499)
+      } catch { /* */ }
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
+      return json({ reply: FALLBACK_MSG }, cors)
     }
 
     // Duplicate suppression
