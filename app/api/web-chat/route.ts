@@ -63,7 +63,6 @@ function isNonsenseMessage(msg: string): boolean {
   if (/^(.)\1+$/u.test(msg)) return true                          // aaa, ???, 555
   if (/(.)\1{2,}/u.test(msg)) return true                         // char repeated 3+ times: ดดด, ไไไไ
   if (/[ก-ฮ]{2}[่-๋]/u.test(msg)) return true // double consonant + tone: ทท่, กก้
-  if (/[ก-ฮ]ำ[เ-ไ]/u.test(msg)) return true // consonant+sara am+leading vowel: ฉำเ
   return false
 }
 
