@@ -223,6 +223,7 @@
     panel.classList.remove('nj-open');
     btn.style.display = 'flex';
     panel.style.bottom = '';
+    panel.style.height = '';
     // ล้าง history ทันที — เปิดใหม่เริ่มใหม่เสมอ
     msgs.innerHTML = '';
     sessionStorage.removeItem('nj_sid');
@@ -255,8 +256,10 @@
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', function() {
       if (!isOpen) return;
-      var offset = window.innerHeight - window.visualViewport.height;
+      var vvh = window.visualViewport.height;
+      var offset = window.innerHeight - vvh;
       panel.style.bottom = (offset + 8) + 'px';
+      panel.style.height = (vvh - 16) + 'px';
     });
   }
 
