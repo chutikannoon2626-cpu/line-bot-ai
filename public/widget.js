@@ -86,7 +86,7 @@
     '@keyframes njSlideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}',
 
     '@media(max-width:480px){',
-      '#nj-panel{width:calc(100vw - 16px);right:8px;bottom:80px;height:72vh}',
+      '#nj-panel{width:calc(100vw - 16px);left:8px;right:8px;top:8px;bottom:72px;height:auto;border-radius:8px}',
       '#nj-btn{bottom:16px;right:12px;width:44px;height:44px;padding:0}',
       '#nj-tooltip{right:8px}',
     '}',
@@ -222,8 +222,6 @@
     isOpen = false;
     panel.classList.remove('nj-open');
     btn.style.display = 'flex';
-    panel.style.bottom = '';
-    panel.style.height = '';
     // ล้าง history ทันที — เปิดใหม่เริ่มใหม่เสมอ
     msgs.innerHTML = '';
     sessionStorage.removeItem('nj_sid');
@@ -251,17 +249,6 @@
   inp.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
-
-  // ── Visual Viewport (mobile keyboard) ──
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', function() {
-      if (!isOpen) return;
-      var vvh = window.visualViewport.height;
-      var offset = window.innerHeight - vvh;
-      panel.style.bottom = (offset + 8) + 'px';
-      panel.style.height = (vvh - 16) + 'px';
-    });
-  }
 
   // ── Auto tooltip ──
   setTimeout(showTooltip, TOOLTIP_DELAY);
