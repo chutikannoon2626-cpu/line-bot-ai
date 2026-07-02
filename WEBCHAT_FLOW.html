@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Chat Widget Flow — น้องใจดี</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sarabun', Tahoma, sans-serif; background: #f0f4f8; color: #222; padding: 32px 16px; }
+  h1 { text-align: center; color: #1a3a5c; font-size: 24px; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #666; font-size: 14px; margin-bottom: 36px; }
+
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; max-width: 720px; margin: 0 auto; }
+
+  /* Nodes */
+  .node { width: 100%; border-radius: 10px; padding: 14px 20px; font-size: 14px; line-height: 1.6; position: relative; }
+  .node-user    { background: #1a3a5c; color: #fff; text-align: center; font-size: 15px; font-weight: bold; border-radius: 24px; padding: 14px 28px; width: auto; }
+  .node-check   { background: #fff3e0; border: 2px solid #f57c00; color: #7b4200; }
+  .node-action  { background: #e8f5e9; border: 2px solid #388e3c; color: #1b5e20; }
+  .node-gemini  { background: #e3f2fd; border: 2px solid #1565c0; color: #0d2f6e; }
+  .node-branch  { background: #f3e5f5; border: 2px solid #7b1fa2; color: #4a0072; }
+  .node-redis   { background: #fce4ec; border: 2px solid #c62828; color: #7f0000; }
+  .node-reply   { background: #e0f7fa; border: 2px solid #00838f; color: #004d52; }
+  .node-warn    { background: #fff8e1; border: 2px solid #f9a825; color: #5d4000; }
+  .node-end     { background: #37474f; color: #fff; text-align: center; border-radius: 24px; padding: 12px 28px; width: auto; }
+
+  .node-title { font-weight: bold; font-size: 13px; margin-bottom: 4px; }
+  .node-sub   { font-size: 12px; color: inherit; opacity: .8; }
+
+  /* Arrow */
+  .arrow { width: 2px; background: #90a4ae; height: 24px; margin: 0 auto; position: relative; }
+  .arrow::after { content: '▼'; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); color: #90a4ae; font-size: 12px; }
+
+  /* Arrow with label */
+  .arrow-wrap { display: flex; flex-direction: column; align-items: center; gap: 0; width: 100%; }
+  .arrow-label { font-size: 11px; color: #607d8b; background: #f0f4f8; padding: 1px 8px; border-radius: 8px; margin: 2px 0; }
+
+  /* Branch block */
+  .branch-block { width: 100%; background: #fff; border: 1.5px solid #ce93d8; border-radius: 12px; padding: 16px; margin: 0; }
+  .branch-title { font-weight: bold; font-size: 13px; color: #7b1fa2; margin-bottom: 12px; text-align: center; }
+  .branch-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .branch-item { border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; }
+  .b-orange { background: #fff3e0; border: 1px solid #fb8c00; color: #7b4200; }
+  .b-red    { background: #fce4ec; border: 1px solid #e53935; color: #7f0000; }
+  .b-green  { background: #e8f5e9; border: 1px solid #43a047; color: #1b5e20; }
+  .b-blue   { background: #e3f2fd; border: 1px solid #1e88e5; color: #0d2f6e; }
+  .b-tag { font-weight: bold; display: block; margin-bottom: 2px; }
+
+  /* Section label */
+  .section { font-size: 11px; font-weight: bold; color: #90a4ae; text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 4px; text-align: center; }
+
+  /* Redis table */
+  .redis-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 32px; }
+  .redis-table th { background: #1a3a5c; color: #fff; padding: 8px 12px; text-align: left; }
+  .redis-table td { padding: 7px 12px; border-bottom: 1px solid #e0e0e0; background: #fff; }
+  .redis-table tr:last-child td { border-bottom: none; }
+  .redis-table td:first-child { font-family: monospace; font-size: 11px; color: #c62828; }
+
+  /* Source */
+  .source-row { display: flex; gap: 12px; width: 100%; margin-bottom: 4px; }
+  .source-card { flex: 1; border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.6; }
+  .s-sheet { background: #e8f5e9; border: 1px solid #43a047; }
+  .s-gemini { background: #e3f2fd; border: 1px solid #1e88e5; }
+
+  .tag { display: inline-block; background: #1a3a5c; color: #fff; font-size: 10px; border-radius: 4px; padding: 1px 6px; margin-right: 4px; vertical-align: middle; }
+  .tag-orange { background: #f57c00; }
+  .tag-red    { background: #c62828; }
+  .tag-green  { background: #388e3c; }
+  .tag-blue   { background: #1565c0; }
+
+  @media(max-width:500px){ .branch-row{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<h1>🤖 Web Chat Widget Flow</h1>
+<p class="subtitle">น้องใจดี · Spender Club · spenderclub.com → Vercel API → Gemini + Google Sheet</p>
+
+<div class="flow">
+
+  <!-- START -->
+  <div class="node node-user">💬 ผู้ใช้พิมพ์ข้อความบน spenderclub.com</div>
+  <div class="arrow"></div>
+
+  <!-- Widget -->
+  <div class="node node-action">
+    <div class="node-title">📦 widget.js (ฝังใน WordPress)</div>
+    <div class="node-sub">
+      สร้าง Session ID จาก <code>sessionStorage</code> (ปิดแท็บ = หาย)<br>
+      ส่ง <strong>POST /api/web-chat</strong> → Vercel<br>
+      Body: <code>{ sessionId, message }</code>
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Anti-spam -->
+  <div class="node node-check">
+    <div class="node-title">🛡 Anti-spam Checks</div>
+    <div class="node-sub">
+      <strong>Honeypot</strong> — field <code>_hp</code> ถูกกรอก → เงียบทันที<br>
+      <strong>IP Rate Limit</strong> — &gt;20 ข้อความ / 5 นาที (ต่อ IP) → แจ้งเตือน<br>
+      <strong>Session Blocked</strong> — โดน block จาก OOD → เงียบ<br>
+      <strong>Session Rate Limit</strong> — &gt;5 ข้อความ / 10 วินาที → "รอสักครู่นะคะ 🙏"
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Nonsense filter -->
+  <div class="node node-check">
+    <div class="node-title">🚫 Nonsense Filter</div>
+    <div class="node-sub">
+      ตรวจจับ keyboard mashing ก่อนส่ง Gemini:<br>
+      · ข้อความ &lt; 2 ตัวอักษร<br>
+      · ตัวอักษรซ้ำทั้งหมด (aaa, ???)<br>
+      · อักขระซ้ำ 3+ ครั้ง (ดดด, ไไไไ)<br>
+      · พยัญชนะซ้ำ + วรรณยุกต์ (ทท่)<br>
+      · พยัญชนะ + สระอำ + สระนำ (ฉำเ...)<br>
+      → "มีอะไรให้น้องใจดีช่วยไหมคะ 😊" ไม่ส่ง Gemini
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Schedule -->
+  <div class="node node-check">
+    <div class="node-title">🕐 Schedule Check — Web Chat (แยกจาก LINE OA และ Facebook)</div>
+    <div class="node-sub">
+      อ่านกฎเวลาจาก Redis key <code>schedule:rules:web</code><br>
+      ตั้งได้ที่ <strong>/admin/schedule → แท็บ 🟠 Web Chat</strong><br>
+      <strong>ถ้าไม่มีกฎ = ตอบ 24 ชม.</strong><br>
+      ถ้าตั้งกฎและอยู่นอกเวลา → ตอบ "อยู่นอกเวลาทำการ inbox Facebook ได้เลยค่ะ" <em>(ไม่เงียบ)</em>
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- shouldHandoff -->
+  <div class="node node-check">
+    <div class="node-title">🙋 ลูกค้าขอแอดมิน? (shouldHandoff)</div>
+    <div class="node-sub">
+      ตรวจจับคำ เช่น "ขอคุยแอดมิน", "ติดต่อคน", "อยากคุยกับเจ้าของ"<br>
+      → บันทึก history → ตอบ <strong>FALLBACK_MSG</strong> ทันที
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Gemini -->
+  <div class="node node-gemini">
+    <div class="node-title">🧠 Gemini 2.5 Flash (timeout 10 วินาที)</div>
+    <div class="node-sub">
+      Input:
+      <ul style="padding-left:18px;margin-top:4px">
+        <li>ข้อความจากลูกค้า</li>
+        <li>ประวัติบทสนทนา 20 ข้อความล่าสุด (Redis TTL 30 นาที)</li>
+        <li>FAQ จาก Google Sheet (cache 60 วินาที)</li>
+        <li>System Prompt + Hallucination Guard</li>
+      </ul>
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- แหล่งข้อมูล -->
+  <div class="section">แหล่งข้อมูลที่ Gemini ใช้</div>
+  <div class="source-row">
+    <div class="source-card s-sheet">
+      <strong>📊 Google Sheet (FAQ)</strong><br>
+      header: category, question, answer<br>
+      เจ้าของร้านแก้ได้ตลอด<br>
+      bot รีโหลดทุก 60 วินาที
+    </div>
+    <div class="source-card s-gemini">
+      <strong>🤖 Gemini Knowledge</strong><br>
+      ใช้เมื่อ FAQ ไม่มีข้อมูล<br>
+      ถ้าไม่มั่นใจ → ตอบ NOT_FOUND<br>
+      ไม่เดาหรือ hallucinate
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Branch -->
+  <div class="branch-block">
+    <div class="branch-title">🔀 ผลลัพธ์จาก Gemini</div>
+    <div class="branch-row">
+      <div class="branch-item b-orange">
+        <span class="b-tag">HANDOFF / GEMINI_UNAVAILABLE</span>
+        บอทตัดสินใจส่งต่อ หรือ timeout/429/503<br>
+        → ตอบ <strong>FALLBACK_MSG</strong>
+      </div>
+      <div class="branch-item b-red">
+        <span class="b-tag">OUT_OF_DOMAIN</span>
+        คำถามไม่เกี่ยวกับวิทยุสื่อสาร<br>
+        ครั้งที่ 1 → แจ้งขอบเขต<br>
+        ครั้งที่ 2–4 → เงียบ<br>
+        ครั้งที่ 5+ → block session 30 นาที
+      </div>
+      <div class="branch-item b-red">
+        <span class="b-tag">NOT_FOUND</span>
+        ไม่มีข้อมูลในระบบ<br>
+        → บันทึก unanswered_log<br>
+        → ตอบ <strong>FALLBACK_MSG</strong> ทันที
+      </div>
+      <div class="branch-item b-green">
+        <span class="b-tag">ตอบปกติ ✅</span>
+        ตรวจ Duplicate:<br>
+        ตอบซ้ำ → reminder<br>
+        ตอบซ้ำ 2+ → เงียบ<br>
+        บันทึก question_freq
+      </div>
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Reply -->
+  <div class="node node-reply">
+    <div class="node-title">📨 ส่ง reply กลับ widget.js</div>
+    <div class="node-sub">
+      JSON: <code>{ "reply": "ข้อความตอบกลับ" }</code><br>
+      widget แสดงข้อความในกล่องแชท · URL ในข้อความกดได้ (linkify)<br>
+      บันทึก history ลง Redis (TTL 30 นาที)
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- END -->
+  <div class="node node-end">✅ ลูกค้าเห็นข้อความตอบกลับ</div>
+
+</div>
+
+<!-- FALLBACK_MSG -->
+<div style="max-width:720px;margin:32px auto 0;background:#fff3e0;border:1.5px solid #f57c00;border-radius:10px;padding:16px 20px;font-size:13px;color:#7b4200">
+  <strong>📢 FALLBACK_MSG</strong> — ข้อความ fallback สำหรับทุกกรณีที่ตอบไม่ได้ใน Web Chat<br>
+  <code style="font-size:12px;color:#c62828">"รบกวนสอบถามรายละเอียดเพิ่มเติมได้ที่ @spenderclub โทร 085-222-9111 ค่ะ"</code><br>
+  <span style="opacity:.8">ใช้เมื่อ: NOT_FOUND · shouldHandoff · HANDOFF signal · GEMINI_UNAVAILABLE (timeout/429/503)</span>
+</div>
+
+<!-- Redis Table -->
+<div style="max-width:720px;margin:40px auto 0">
+  <h2 style="color:#1a3a5c;font-size:16px;margin-bottom:12px">🗄 Redis Keys ที่ใช้</h2>
+  <table class="redis-table">
+    <tr><th>Key</th><th>หน้าที่</th><th>TTL</th></tr>
+    <tr><td>webchat:hist:{sid}</td><td>ประวัติบทสนทนา (max 20 ข้อความ)</td><td>30 นาที</td></tr>
+    <tr><td>webchat:rate:{sid}</td><td>Session rate limit นับจำนวนข้อความ</td><td>10 วินาที</td></tr>
+    <tr><td>web_ip_rate:{ip}</td><td>IP rate limit (max 20/5นาที)</td><td>5 นาที</td></tr>
+    <tr><td>web_blocked:{sid}</td><td>Session ถูก block จาก OOD ≥5 ครั้ง</td><td>30 นาที</td></tr>
+    <tr><td>webchat:nonsense:{sid}</td><td>นับ out-of-domain ต่อเนื่อง</td><td>10 นาที</td></tr>
+    <tr><td>webchat:last_answer:{sid}</td><td>ป้องกันตอบซ้ำ</td><td>2 นาที</td></tr>
+    <tr><td>webchat:repeat:{sid}</td><td>นับการตอบซ้ำ</td><td>2 นาที</td></tr>
+    <tr><td>unanswered_log</td><td>บันทึกคำถามที่บอทตอบไม่ได้ (max 500)</td><td>ถาวร</td></tr>
+    <tr><td>question_freq</td><td>Sorted set สถิติคำถามยอดนิยม</td><td>ถาวร</td></tr>
+  </table>
+</div>
+
+<!-- Admin -->
+<div style="max-width:720px;margin:32px auto 0;background:#fff;border-radius:10px;border:1px solid #e0e0e0;padding:20px">
+  <h2 style="color:#1a3a5c;font-size:16px;margin-bottom:12px">🛠 Admin Pages</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+    <div style="background:#e3f2fd;border-radius:8px;padding:12px">
+      <strong>/admin/schedule</strong><br>
+      ตั้งเวลาเปิด-ปิดบอท <strong>แยกต่อช่องทาง</strong><br>
+      💚 LINE OA · 💙 Facebook · 🟠 Web Chat<br>
+      รองรับช่วงข้ามคืน เช่น 18:00–07:59<br>
+      Web Chat: ไม่มีกฎ = ตอบ 24 ชม.
+    </div>
+    <div style="background:#e8f5e9;border-radius:8px;padding:12px">
+      <strong>/admin/unanswered</strong><br>
+      ดูคำถามตอบไม่ได้<br>
+      + สถิติคำถามถามบ่อย (LINE/FB/Web รวม)
+    </div>
+  </div>
+</div>
+
+<p style="text-align:center;color:#aaa;font-size:12px;margin-top:32px">
+  น้องใจดี · Spender Club · สร้างด้วย Next.js + Gemini 2.5 Flash + Upstash Redis
+</p>
+
+</body>
+</html>
