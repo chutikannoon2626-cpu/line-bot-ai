@@ -222,6 +222,7 @@
     isOpen = false;
     panel.classList.remove('nj-open');
     btn.style.display = 'flex';
+    panel.style.bottom = '';
     // ล้าง history ทันที — เปิดใหม่เริ่มใหม่เสมอ
     msgs.innerHTML = '';
     sessionStorage.removeItem('nj_sid');
@@ -249,6 +250,15 @@
   inp.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
+
+  // ── Visual Viewport (mobile keyboard) ──
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', function() {
+      if (!isOpen) return;
+      var offset = window.innerHeight - window.visualViewport.height;
+      panel.style.bottom = (offset + 8) + 'px';
+    });
+  }
 
   // ── Auto tooltip ──
   setTimeout(showTooltip, TOOLTIP_DELAY);
