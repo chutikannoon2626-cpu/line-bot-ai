@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { fetchFAQ } from '@/lib/sheet'
 import { generateReply, generateReplyWithImage } from '@/lib/gemini'
-import { shouldHandoff, notifyAdminFacebook } from '@/lib/handoff'
+import { shouldHandoff, shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
 import { log } from '@/lib/log'
@@ -298,7 +298,15 @@ export async function POST(req: NextRequest) {
               return
             }
 
-            if (shouldHandoff(userMessage)) {
+            // "ขอเจ้าของ" นอกเวลาทำการ — ไม่ handoff เลย ตอบข้อความนอกเวลาแทน
+            if (isOwnerRequest(userMessage) && (thaiHour >= 18 || thaiHour < 8)) {
+              await fbSend(psid, OWNER_REQUEST_OFF_HOURS_MSG)
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OWNER_REQUEST_OFF_HOURS_MSG }])
+              log.info('fb.handoff.owner_request_off_hours', { userId })
+              return
+            }
+
+            if (shouldHandoffImmediate(userMessage) || isOwnerRequest(userMessage)) {
               let alreadyRouted = false
               try { alreadyRouted = !!(await redis.get(`routed:${userId}`)) } catch { /* */ }
 
@@ -395,6 +403,20 @@ export async function POST(req: NextRequest) {
             }
 
             if (reply === NOT_FOUND) {
+              // ค้นชีต + ค้นเว็บไม่เจอ (NOT_FOUND) + ข้อความมี deferred handoff trigger
+              // → ขอรายละเอียดก่อน 1 รอบแล้วค่อย handoff (ข้าม retry 2 รอบปกติ)
+              if (shouldHandoffDeferred(userMessage)) {
+                try {
+                  await redis.set(`pre_handoff:${userId}`, userMessage, { ex: PRE_HANDOFF_TTL })
+                } catch { log.warn('fb.handoff.save_failed', { userId }) }
+
+                const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
+                await fbSend(psid, preHandoffQ)
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+                log.info('fb.handoff.deferred_after_not_found', { userId, latencyMs: Date.now() - startTime })
+                return
+              }
+
               try {
                 const retryKey = `retry:${userId}`
                 const hasRetried = await redis.get(retryKey)

@@ -289,10 +289,19 @@
       </div>
     </div>
     <div class="step">
-      <div class="step-num">9</div>
+      <div class="step-num">9a</div>
       <div class="step-content">
-        <div class="step-title">Handoff Trigger Detection (<code>shouldHandoff</code>)</div>
-        <div class="step-desc">30+ keywords match →
+        <div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div>
+        <div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → ans(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return
+          <div class="indent">ไม่ handoff เลย ไม่เข้า pre_handoff/routed ใดๆ</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">9b</div>
+      <div class="step-content">
+        <div class="step-title">Handoff Trigger — ทันที (<code>shouldHandoffImmediate</code> || <code>isOwnerRequest</code> ในเวลาทำการ)</div>
+        <div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" (ขอคนโดยตรง) · "ฟ้อง/ร้องเรียน/ไม่พอใจ" (ร้องเรียน) · หรือ "ขอเจ้าของ" เฉพาะในเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย →
           <div class="indent"><span class="flow-yes">already routed</span> (GET <code>routed:{userId}</code>): INCR <code>handoff_notified:{userId}</code> EX 10min · count=1: reply "แอดมินจะติดต่อกลับ" · count≥2: เงียบ → return</div>
           <div class="indent"><span class="flow-warn">ยังไม่ routed</span>: SET <code>pre_handoff:{userId}</code> EX 600 → ans("กรุณาแจ้งรายละเอียด...") → saveHistory → return</div>
         </div>
@@ -302,7 +311,7 @@
       <div class="step-num">10</div>
       <div class="step-content">
         <div class="step-title">🤖 Gemini Reply</div>
-        <div class="step-desc"><code>Promise.race([generateReply(msg, faq, history, handoffMsg), timeout(10s)])</code> · timeout → GEMINI_UNAVAILABLE</div>
+        <div class="step-desc"><code>Promise.race([generateReply(msg, faq, history, handoffMsg), timeout(10s)])</code> · timeout → GEMINI_UNAVAILABLE<br><span style="opacity:.8">คำอื่นที่เคยเป็น handoff trigger (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ) จะไม่ถูกดักตรงนี้แล้ว — ปล่อยให้ Gemini ค้น FAQ + search_spender_specs ตามปกติก่อนเสมอ</span></div>
       </div>
     </div>
     <div class="step">
@@ -314,7 +323,9 @@
           <span class="flow-warn">CANCEL_IMEI</span> → ans("ยกเลิกรายการแล้ว") + saveHistory([]) → return<br>
           <span class="flow-warn">HANDOFF / HANDOFF:xxx</span> → SET routed+takeover + DEL notified → notifyAdmin(summary) → ans(handoffMsg) → return<br>
           <span class="flow-no">[OUT_OF_DOMAIN]</span> → INCR <code>nonsense_count:{userId}</code> EX 600 · ≤1: ans(OUT_OF_DOMAIN_MSG) · ≥2: เงียบ → return<br>
-          <span class="flow-no">[NOT_FOUND]</span> → GET <code>retry:{userId}</code>: ไม่มี = SET EX 600 + ans(retryMsg) + lpush unanswered_log / มี = DEL + ans(handoffMsg) → return
+          <span class="flow-no">[NOT_FOUND]</span> → ค้นชีต+เว็บไม่เจอจริง ตรวจ <code>shouldHandoffDeferred</code> ก่อนเสมอ:
+          <div class="indent"><span class="flow-yes">มี deferred trigger</span> (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ): SET <code>pre_handoff:{userId}</code> EX 600 → ans("กรุณาแจ้งรายละเอียด...") → saveHistory → return (ข้าม retry 2 รอบ)</div>
+          <div class="indent"><span class="flow-no">ไม่มี trigger</span>: GET <code>retry:{userId}</code>: ไม่มี = SET EX 600 + ans(retryMsg) + lpush unanswered_log / มี = DEL + ans(handoffMsg) → return</div>
         </div>
       </div>
     </div>
@@ -380,9 +391,10 @@
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: fbSend(offHours?) → ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Off-Hours + Greeting ส่งก่อน reply</div><div class="step-desc">offHoursNotice=true → fbSend(OFF_HOURS_NOTICE) · greetFirst=true → fbSend(WELCOME_MSG)</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
-    <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoff</div><div class="step-desc">already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
+    <div class="step"><div class="step-num">5b</div><div class="step-content"><div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div><div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → fbSend(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return · ไม่ handoff เลย</div></div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoffImmediate || isOwnerRequest ในเวลาทำการ</div><div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" · "ฟ้อง/ร้องเรียน/ไม่พอใจ" · หรือ "ขอเจ้าของ" เฉพาะเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย<br>already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
     <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s · GEMINI_UNAVAILABLE → UNAVAILABLE_MSG</div></div></div>
-    <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Handle returns: CANCEL_IMEI · HANDOFF · OUT_OF_DOMAIN · NOT_FOUND · Duplicate</div><div class="step-desc">เหมือน LINE ยกเว้น: ไม่มี takeover key · ใช้ <code>notifyAdminFacebook()</code></div></div></div>
+    <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Handle returns: CANCEL_IMEI · HANDOFF · OUT_OF_DOMAIN · NOT_FOUND · Duplicate</div><div class="step-desc">เหมือน LINE ยกเว้น: ไม่มี takeover key · ใช้ <code>notifyAdminFacebook()</code><br>NOT_FOUND: ตรวจ <code>shouldHandoffDeferred</code> ก่อนเสมอ (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ) — มี trigger → pre_handoff ทันที (ข้าม retry) · ไม่มี → retry 2 รอบตามปกติ</div></div></div>
     <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">fbSendReply(psid, reply)</div><div class="step-desc">ตรวจ URL <code>spenderclub.com</code> ใน reply → มี: Generic Template Card (title+subtitle+2 ปุ่ม) · ไม่มี: plain text<br>saveHistory · log · zincrby question_freq</div></div></div>
   </div>
 
@@ -687,8 +699,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">handoff.ts</span></td>
-      <td>HANDOFF_TRIGGERS 30+ keywords · notifyAdmin → LINE group + link manager.line.biz + คืนบอท: instruction · notifyAdminFacebook → LINE group + link business.facebook.com</td>
-      <td><code>shouldHandoff()</code> <code>notifyAdmin()</code> <code>notifyAdminFacebook()</code></td>
+      <td>HANDOFF_TRIGGERS (Web Chat เท่านั้น รวม "ขอเจ้าของ") · IMMEDIATE_HANDOFF_TRIGGERS 6 คำ (ขอคนโดยตรง/ร้องเรียน — LINE/FB ข้ามค้นชีต-เว็บได้) · DEFERRED_HANDOFF_TRIGGERS ที่เหลือ (LINE/FB ต้องค้นชีต+เว็บไม่เจอก่อนถึง handoff) · OWNER_REQUEST_TRIGGERS ["ขอเจ้าของ"] แยกเช็คตามเวลาทำการ Asia/Bangkok (ในเวลา=immediate, นอกเวลา=ตอบ OWNER_REQUEST_OFF_HOURS_MSG ไม่ handoff) · notifyAdmin → LINE group + link manager.line.biz + คืนบอท: instruction · notifyAdminFacebook → LINE group + link business.facebook.com</td>
+      <td><code>shouldHandoff()</code> <code>shouldHandoffImmediate()</code> <code>shouldHandoffDeferred()</code> <code>isOwnerRequest()</code> <code>notifyAdmin()</code> <code>notifyAdminFacebook()</code></td>
     </tr>
     <tr>
       <td><span class="file-badge">chatlog.ts</span></td>
