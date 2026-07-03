@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>น้องใจดี — System Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sarabun', 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; font-size: 14px; line-height: 1.6; }
+  a { color: #60a5fa; }
+  h1 { font-size: 22px; font-weight: 700; }
+  h2 { font-size: 17px; font-weight: 700; color: #f1f5f9; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-bottom: 14px; }
+  h3 { font-size: 13px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+  p { color: #94a3b8; margin-bottom: 8px; }
+  code { font-family: 'Consolas', 'Fira Code', monospace; background: #1e293b; padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #7dd3fc; }
+  pre { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 14px; font-family: 'Consolas', monospace; font-size: 12px; overflow-x: auto; color: #cbd5e1; line-height: 1.7; }
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  .sidebar { background: #0a0d14; border-right: 1px solid #1e293b; padding: 20px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar-title { padding: 0 16px 16px; font-size: 13px; font-weight: 700; color: #60a5fa; border-bottom: 1px solid #1e293b; margin-bottom: 12px; }
+  .nav-item { display: block; padding: 6px 16px; color: #64748b; font-size: 12px; cursor: pointer; transition: all .15s; text-decoration: none; }
+  .nav-item:hover { color: #e2e8f0; background: #1e293b; }
+  .nav-section { padding: 10px 16px 4px; font-size: 10px; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 1px; }
+  .main { padding: 32px 40px; max-width: 1100px; }
+  .section { margin-bottom: 48px; }
+  .card { background: #1a1f2e; border: 1px solid #263044; border-radius: 8px; padding: 18px 20px; margin-bottom: 14px; }
+  .card-title { font-size: 13px; font-weight: 700; color: #e2e8f0; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+  .badge-green { background: #14532d; color: #86efac; }
+  .badge-blue { background: #1e3a5f; color: #93c5fd; }
+  .badge-orange { background: #7c2d12; color: #fdba74; }
+  .badge-purple { background: #3b0764; color: #d8b4fe; }
+  .badge-red { background: #450a0a; color: #fca5a5; }
+  .badge-gray { background: #1e293b; color: #94a3b8; }
+  .badge-yellow { background: #713f12; color: #fde68a; }
+  .flow-box { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px 14px; margin: 4px 0; font-size: 12px; color: #cbd5e1; }
+  .flow-arrow { color: #475569; font-size: 11px; padding: 1px 0 1px 20px; }
+  .flow-yes { color: #86efac; font-size: 11px; font-weight: 700; }
+  .flow-no { color: #f87171; font-size: 11px; font-weight: 700; }
+  .flow-warn { color: #fbbf24; font-size: 11px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #1e293b; color: #94a3b8; font-weight: 600; padding: 8px 12px; text-align: left; border-bottom: 1px solid #334155; white-space: nowrap; }
+  td { padding: 8px 12px; border-bottom: 1px solid #1e293b; vertical-align: top; color: #cbd5e1; }
+  tr:hover td { background: #1a2030; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin: 1px; }
+  .tag-list { background: #14532d; color: #86efac; }
+  .tag-zset { background: #1e3a5f; color: #93c5fd; }
+  .tag-hash { background: #3b0764; color: #d8b4fe; }
+  .tag-string { background: #713f12; color: #fde68a; }
+  .tag-bool { background: #450a0a; color: #fca5a5; }
+  .ttl { color: #60a5fa; font-weight: 600; }
+  .endpoint { background: #0f172a; border-left: 3px solid #3b82f6; padding: 10px 14px; border-radius: 0 6px 6px 0; margin-bottom: 10px; }
+  .endpoint-method { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; margin-right: 6px; }
+  .method-get { background: #1a3a5f; color: #60a5fa; }
+  .method-post { background: #14532d; color: #86efac; }
+  .method-delete { background: #450a0a; color: #fca5a5; }
+  .method-patch { background: #3b0764; color: #d8b4fe; }
+  .channel-line { border-left-color: #06c755; }
+  .channel-fb { border-left-color: #1877f2; }
+  .channel-web { border-left-color: #f59e0b; }
+  .channel-admin { border-left-color: #8b5cf6; }
+  .step { display: flex; gap: 12px; margin-bottom: 10px; }
+  .step-num { min-width: 24px; height: 24px; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #94a3b8; flex-shrink: 0; }
+  .step-content { flex: 1; }
+  .step-title { font-weight: 700; color: #e2e8f0; font-size: 13px; }
+  .step-desc { color: #64748b; font-size: 12px; margin-top: 2px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .const-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #1e293b; font-size: 12px; }
+  .const-row:last-child { border-bottom: none; }
+  .const-name { color: #94a3b8; }
+  .const-val { color: #fde68a; font-family: monospace; }
+  .tip { background: #1a1f35; border: 1px solid #3b4d6b; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #93c5fd; margin-bottom: 14px; }
+  .warn { background: #1c1505; border: 1px solid #5c3d0a; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #fbbf24; margin-bottom: 14px; }
+  .file-badge { display: inline-block; background: #1e293b; border: 1px solid #334155; color: #7dd3fc; font-size: 11px; font-family: monospace; padding: 2px 7px; border-radius: 4px; margin-right: 4px; margin-bottom: 4px; }
+  .header { background: #0a0d14; border-bottom: 1px solid #1e293b; padding: 16px 40px; display: flex; align-items: center; gap: 14px; position: sticky; top: 0; z-index: 100; }
+  .header-sub { color: #475569; font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #06c755; display: inline-block; box-shadow: 0 0 6px #06c755; }
+  .indent { padding-left: 16px; border-left: 2px solid #1e293b; margin: 4px 0 4px 12px; font-size: 12px; color: #64748b; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-title">🤖 น้องใจดี Docs</div>
+
+  <div class="nav-section">Overview</div>
+  <a class="nav-item" href="#channels">Channel Architecture</a>
+  <a class="nav-item" href="#endpoints">Endpoints ทั้งหมด</a>
+
+  <div class="nav-section">Flow รายช่องทาง</div>
+  <a class="nav-item" href="#line-flow">LINE Webhook Flow</a>
+  <a class="nav-item" href="#fb-flow">Facebook Flow</a>
+  <a class="nav-item" href="#web-flow">Web Chat Flow</a>
+
+  <div class="nav-section">Gemini & Search</div>
+  <a class="nav-item" href="#gemini-flow">Gemini 2-Call Flow</a>
+  <a class="nav-item" href="#recommend">Recommend Protocol</a>
+
+  <div class="nav-section">State & Data</div>
+  <a class="nav-item" href="#redis">Redis Keys ทั้งหมด</a>
+  <a class="nav-item" href="#constants">Constants & TTLs</a>
+
+  <div class="nav-section">Files</div>
+  <a class="nav-item" href="#lib-files">lib/ — หน้าที่แต่ละไฟล์</a>
+  <a class="nav-item" href="#sheet-format">Google Sheet Format</a>
+  <a class="nav-item" href="#admin">Admin Pages</a>
+
+  <div class="nav-section">Config</div>
+  <a class="nav-item" href="#env">Environment Variables</a>
+</nav>
+
+<!-- Main -->
+<div>
+<div class="header">
+  <span class="dot"></span>
+  <div>
+    <h1>น้องใจดี — Spender Club Bot</h1>
+    <div class="header-sub">System Flow Document · อ่านจากโค้ดจริง · Next.js 14 + Gemini 2.5 Flash · runtime: nodejs · maxDuration: 30</div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ─── CHANNEL ARCHITECTURE ─── -->
+<div class="section" id="channels">
+  <h2>🏗 Channel Architecture</h2>
+  <div class="tip">ทั้ง 3 ช่องทางใช้ <code>generateReply()</code> เดียวกัน — Gemini logic ร่วมกันทั้งหมด แตกต่างเฉพาะ transport layer และ state key namespace</div>
+  <div class="card">
+    <pre>
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          ลูกค้าส่งข้อความ                                │
+└────────────┬──────────────────────┬──────────────────────┬──────────────┘
+             ▼                      ▼                      ▼
+      LINE Messaging           Facebook                Web Widget
+   /api/line-webhook         /api/fb-webhook          /api/web-chat
+   userId = {lineId}       userId = fb:{psid}       userId = web:{sid}
+             │                      │                      │
+             └──────────────────────┴──────────────────────┘
+                                    │
+                         lib/gemini.ts → generateReply()
+                                    │
+               ┌────────────────────┼────────────────────┐
+               ▼                    ▼                    ▼
+         lib/sheet.ts          lib/prompts.ts      lib/websearch.ts
+         (FAQ CSV 60s)         (System Prompt)     (Serper API / scraping)
+               │                    │                    │
+               └────────────────────┴────────────────────┘
+                                    │
+                         Gemini 2.5 Flash API
+                         [Call 1] → function call?
+                              ↓ yes: search → [Call 2]
+                              ↓ no:  return text
+    </pre>
+  </div>
+</div>
+
+<!-- ─── ENDPOINTS ─── -->
+<div class="section" id="endpoints">
+  <h2>🔌 Endpoints ทั้งหมด</h2>
+
+  <h3>Public Webhooks</h3>
+  <div class="endpoint channel-line">
+    <span class="endpoint-method method-get">GET</span><code>/api/line-webhook</code> — Health check · return <code>{status:'ok', ts}</code>
+    <br><span class="endpoint-method method-post">POST</span><code>/api/line-webhook</code> — รับ events · ต้องผ่าน HMAC-SHA256 (X-Line-Signature)
+  </div>
+  <div class="endpoint channel-fb">
+    <span class="endpoint-method method-get">GET</span><code>/api/fb-webhook</code> — Facebook verify token challenge
+    <br><span class="endpoint-method method-post">POST</span><code>/api/fb-webhook</code> — รับ events · ต้องผ่าน X-Hub-Signature-256
+  </div>
+  <div class="endpoint channel-web">
+    <span class="endpoint-method method-get">OPTIONS</span><code>/api/web-chat</code> — CORS preflight · 204
+    <br><span class="endpoint-method method-post">POST</span><code>/api/web-chat</code> — รับ <code>{sessionId, message, _hp}</code> · CORS whitelist origin
+  </div>
+
+  <h3 style="margin-top:18px">Admin APIs (ต้อง ?key=ADMIN_SCHEDULE_PASSWORD)</h3>
+  <div class="endpoint channel-admin">
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/unanswered?key=</code> — unanswered_log + question_freq
+    <br><span class="endpoint-method method-delete">DEL</span><code>body:{target:'unanswered'|'freq'}</code> — ล้างข้อมูล
+  </div>
+  <div class="endpoint channel-admin">
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=</code> — 100 conversations ล่าสุด (ZSet score order)
+    <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=&amp;userId=</code> — messages ของ user คนนั้น
+  </div>
+  <div class="endpoint channel-admin">
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;userId=</code> — XLSX บทสนทนา user
+    <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;date=YYYY-MM-DD</code> — XLSX รายวัน (Bangkok TZ)
+  </div>
+  <div class="endpoint channel-admin">
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/schedule?key=&amp;channel=line|fb|web</code>
+    <br><span class="endpoint-method method-post">POST</span> — เพิ่ม rule ใหม่
+    <span class="endpoint-method method-patch">PATCH</span> <code>body:{id,enabled}</code> — toggle
+    <span class="endpoint-method method-delete">DEL</span> <code>body:{id}</code> — ลบ
+  </div>
+</div>
+
+<!-- ─── LINE FLOW ─── -->
+<div class="section" id="line-flow">
+  <h2>📱 LINE Webhook — Flow ทั้งหมด</h2>
+  <div class="tip">ไฟล์: <span class="file-badge">app/api/line-webhook/route.ts</span> · ทุก event process พร้อมกันด้วย <code>Promise.all(body.events.map(...))</code></div>
+
+  <h3>เตรียมข้อมูลก่อน TEXT/IMAGE (ทุก event type)</h3>
+  <div class="card">
+    <div class="step">
+      <div class="step-num">A</div>
+      <div class="step-content">
+        <div class="step-title">Verify LINE Signature</div>
+        <div class="step-desc">HMAC-SHA256 · header <code>X-Line-Signature</code> · ล้มเหลว → 401 return ทันที</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">B</div>
+      <div class="step-content">
+        <div class="step-title">Off-Hours Check (ก่อน reply ทุกอัน)</div>
+        <div class="step-desc">Bangkok time ≥18:00 หรือ &lt;08:00 → GET <code>off_hours:{userId}</code> · ไม่มี = SET EX 23h + เก็บ <code>offHoursNotice</code> text ไว้ prepend ใน reply</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">C</div>
+      <div class="step-content">
+        <div class="step-title">Greeting Check</div>
+        <div class="step-desc"><code>shouldGreet(userId)</code> → SET <code>greeted:{userId}</code> NX EX 86400 · return non-null = ทักครั้งแรก (<code>greetFirst=true</code>)</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:16px">TEXT Message — ลำดับ step ทั้งหมด</h3>
+  <div class="card">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">Log + Load State</div>
+        <div class="step-desc"><code>logChat({userId, 'LINE', 'user', message})</code> (fire-and-forget) · <code>getHistory(userId)</code> · <code>getHandoffMessage()</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">Admin Release: <code>คืนบอท:{targetId}</code></div>
+        <div class="step-desc">DEL <code>takeover:{targetId}</code> → safeReply "✅ คืนน้องใจดีดูแลลูกค้าแล้วค่ะ ({id.slice(-6)})" → return</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">Schedule Check</div>
+        <div class="step-desc"><code>isScheduledOff('line')</code> → ถ้า off = เงียบ (return โดยไม่ reply)</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">Rate Limit</div>
+        <div class="step-desc">INCR <code>msg_rate:{userId}</code> + EXPIRE 10s (pipeline) · เกิน 5: ครั้งแรก reply "รอสักครู่" ครั้งต่อไปเงียบ → return</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <div class="step-title">Pending Image Check (<code>img_data:{userId}</code>)</div>
+        <div class="step-desc">GET JSON <code>{id, ts}</code> · elapsed &lt; 300000ms:
+          <div class="indent">DEL key → ดึงรูป blob → generateReplyWithImage(b64, faq, userMessage) timeout 15s → ans → saveHistory → return</div>
+          elapsed ≥ 300000ms:
+          <div class="indent">DEL key → OCR ยี่ห้อ/รุ่น (max 50 tokens) → ไม่เจอ: "รบกวนพิมพ์ชื่อรุ่น" / เจอ: imageIntentCard(product) → return</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <div class="step-title">Special Command: <code>สอบถามสเปก</code></div>
+        <div class="step-desc">GET+DEL <code>img:{userId}</code> · ถ้ามี imageId: ดึงรูป → generateReplyWithImage(b64, faq, 'สอบถามสเปกและฟังก์ชันการใช้งาน') timeout 15s → return</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-content">
+        <div class="step-title">Admin Takeover Suppression</div>
+        <div class="step-desc">GET <code>takeover:{userId}</code> · ถ้ามี = เงียบ (บอทเงียบ แอดมินดูแลอยู่) → return</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-content">
+        <div class="step-title">Pre-Handoff State</div>
+        <div class="step-desc">GETDEL <code>pre_handoff:{userId}</code> · ถ้ามี pending trigger:
+          <div class="indent">SET <code>routed:{userId}</code> EX 300 + SET <code>takeover:{userId}</code> EX 7200 + DEL <code>handoff_notified:{userId}</code> (pipeline) → notifyAdmin() → ans(handoffMsg) → saveHistory → return</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-content">
+        <div class="step-title">Handoff Trigger Detection (<code>shouldHandoff</code>)</div>
+        <div class="step-desc">30+ keywords match →
+          <div class="indent"><span class="flow-yes">already routed</span> (GET <code>routed:{userId}</code>): INCR <code>handoff_notified:{userId}</code> EX 10min · count=1: reply "แอดมินจะติดต่อกลับ" · count≥2: เงียบ → return</div>
+          <div class="indent"><span class="flow-warn">ยังไม่ routed</span>: SET <code>pre_handoff:{userId}</code> EX 600 → ans("กรุณาแจ้งรายละเอียด...") → saveHistory → return</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-content">
+        <div class="step-title">🤖 Gemini Reply</div>
+        <div class="step-desc"><code>Promise.race([generateReply(msg, faq, history, handoffMsg), timeout(10s)])</code> · timeout → GEMINI_UNAVAILABLE</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">11</div>
+      <div class="step-content">
+        <div class="step-title">Handle Gemini Returns (ลำดับ)</div>
+        <div class="step-desc">
+          <span class="flow-no">GEMINI_UNAVAILABLE</span> → ans(UNAVAILABLE_MSG "ระบบนานกว่าปกติ...") → return<br>
+          <span class="flow-warn">CANCEL_IMEI</span> → ans("ยกเลิกรายการแล้ว") + saveHistory([]) → return<br>
+          <span class="flow-warn">HANDOFF / HANDOFF:xxx</span> → SET routed+takeover + DEL notified → notifyAdmin(summary) → ans(handoffMsg) → return<br>
+          <span class="flow-no">[OUT_OF_DOMAIN]</span> → INCR <code>nonsense_count:{userId}</code> EX 600 · ≤1: ans(OUT_OF_DOMAIN_MSG) · ≥2: เงียบ → return<br>
+          <span class="flow-no">[NOT_FOUND]</span> → GET <code>retry:{userId}</code>: ไม่มี = SET EX 600 + ans(retryMsg) + lpush unanswered_log / มี = DEL + ans(handoffMsg) → return
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">12</div>
+      <div class="step-content">
+        <div class="step-title">Duplicate Answer Suppression</div>
+        <div class="step-desc">GET <code>last_answer:{userId}</code> · ซ้ำ: INCR <code>repeat_count:{userId}</code> EX 120s · count=1: ans(reminder) · count≥2: เงียบ → return</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">13</div>
+      <div class="step-content">
+        <div class="step-title">Send Reply — ans()</div>
+        <div class="step-desc">
+          <strong>greetFirst=true</strong>: safeReply([offHours?, WELCOME_MSG]) → safePush([answer]) · ส่งแยก 2 ข้อความ<br>
+          <strong>greetFirst=false</strong>: safeReply([offHours?, answer])<br>
+          ต่อจากนั้น: SET <code>last_answer:{userId}</code> EX 120s + DEL repeat_count · saveHistory · log · zincrby <code>question_freq</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:16px">IMAGE Message — Flow</h3>
+  <div class="card">
+    <div class="flow-box">ลูกค้าส่งรูป → Promise.all([SET <code>img:{userId}</code> EX 300, SET <code>img_data:{userId}</code> EX 360])</div>
+    <div class="flow-arrow">↓ ถ้า Redis สำเร็จ</div>
+    <div class="flow-box">safeReply([offHours?, greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</div>
+    <div class="flow-arrow">↓ ถ้า Redis ล้มเหลว (fallback)</div>
+    <div class="flow-box">safeReply([offHours?, greet?, imageIntentCard()])</div>
+    <div class="flow-arrow">↓ ลูกค้าพิมพ์ข้อความตามมา → จัดการใน step 5 ของ TEXT handler</div>
+  </div>
+</div>
+
+<!-- ─── FACEBOOK FLOW ─── -->
+<div class="section" id="fb-flow">
+  <h2>📘 Facebook Messenger — Flow</h2>
+  <div class="tip">ไฟล์: <span class="file-badge">app/api/fb-webhook/route.ts</span> · userId namespace = <code>fb:{psid}</code> · <strong>ไม่มี takeover key</strong> (LINE เท่านั้น)</div>
+
+  <h3>เตรียมข้อมูลก่อน TEXT/IMAGE (ทุก event)</h3>
+  <div class="card">
+    <div class="step">
+      <div class="step-num">A</div>
+      <div class="step-content">
+        <div class="step-title">Verify FB Signature (X-Hub-Signature-256)</div>
+        <div class="step-desc">HMAC-SHA256 · <code>crypto.timingSafeEqual()</code> · ล้มเหลว → 401</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">B</div>
+      <div class="step-content">
+        <div class="step-title">Off-Hours Check + Greeting Check</div>
+        <div class="step-desc">Bangkok ≥18/&lt;08 → GET <code>off_hours:fb:{psid}</code> · ไม่มี = SET EX 23h + <code>offHoursNotice=true</code>
+          <br><code>shouldGreet('fb:{psid}')</code> → <code>greetFirst</code></div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:14px">TEXT — ลำดับ step</h3>
+  <div class="card">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">logChat(user) + getHistory + Rate Limit</div><div class="step-desc">INCR <code>msg_rate:fb:{psid}</code> EX 10s (pipeline) · เกิน 5: ครั้งแรก reply ครั้งต่อไปเงียบ</div></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('fb')</code> → เงียบ</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: fbSend(offHours?) → ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Off-Hours + Greeting ส่งก่อน reply</div><div class="step-desc">offHoursNotice=true → fbSend(OFF_HOURS_NOTICE) · greetFirst=true → fbSend(WELCOME_MSG)</div></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoff</div><div class="step-desc">already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
+    <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s · GEMINI_UNAVAILABLE → UNAVAILABLE_MSG</div></div></div>
+    <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Handle returns: CANCEL_IMEI · HANDOFF · OUT_OF_DOMAIN · NOT_FOUND · Duplicate</div><div class="step-desc">เหมือน LINE ยกเว้น: ไม่มี takeover key · ใช้ <code>notifyAdminFacebook()</code></div></div></div>
+    <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">fbSendReply(psid, reply)</div><div class="step-desc">ตรวจ URL <code>spenderclub.com</code> ใน reply → มี: Generic Template Card (title+subtitle+2 ปุ่ม) · ไม่มี: plain text<br>saveHistory · log · zincrby question_freq</div></div></div>
+  </div>
+
+  <h3 style="margin-top:14px">IMAGE — Flow</h3>
+  <div class="card">
+    <div class="flow-box">offHours? + greet? ส่งก่อน → fbSend("ได้รับรูปแล้วค่ะ 📷") → ดาวน์โหลดรูปจาก Facebook URL (timeout 8s)</div>
+    <div class="flow-arrow">↓ มี caption พร้อมรูป?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
+      <div>
+        <div class="badge badge-green" style="margin-bottom:6px">มี caption</div>
+        <div class="flow-box" style="font-size:11px">generateReplyWithImage(b64, faq, caption)<br>timeout 10s → fbSend(reply) → saveHistory → return</div>
+      </div>
+      <div>
+        <div class="badge badge-blue" style="margin-bottom:6px">ไม่มี caption</div>
+        <div class="flow-box" style="font-size:11px">OCR ยี่ห้อ/รุ่น (max 50 tokens)<br>ไม่เจอ → ถามชื่อรุ่น → return<br>เจอ → SET <code>fb_img_url:fb:{psid}</code> EX 600<br>→ fbSendQuickReplies 3 ปุ่ม:<br>  [ราคา {model}] [สเปค/ฟังก์ชัน] [วิธีสั่งซื้อ]</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:14px">POSTBACK — Flow</h3>
+  <div class="card">
+    <div class="flow-box">payload → map เป็น queryText:
+QUERY_SPENDERNETWORK → 'สอบถาม Spendernetwork'
+QUERY_RADIO → 'สอบถามการใช้งานและราคาวิทยุสื่อสาร'
+REPORT_ISSUE → 'แจ้งปัญหาการใช้งาน'
+QUERY_SPEC → 'สอบถามสเปกและฟังก์ชันการใช้งาน'
+CONTACT_SERVICE → 'ติดต่อศูนย์บริการ'
+(ไม่ตรง payload ใดเลย → ใช้ title โดยตรง)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-box">shouldHandoff(queryText) → fbSend(handoffMsg) → return
+ไม่ใช่ → generateReply(queryText, ...) timeout 7s
+NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
+→ fbSendReply(psid, finalReply) → saveHistory</div>
+  </div>
+</div>
+
+<!-- ─── WEB CHAT FLOW ─── -->
+<div class="section" id="web-flow">
+  <h2>🌐 Web Chat — Flow</h2>
+  <div class="tip">ไฟล์: <span class="file-badge">app/api/web-chat/route.ts</span> · CORS: spenderclub.com, www.spenderclub.com, localhost:3000 · ใช้ local getHistory/saveHistory (ไม่ใช้ lib/history.ts)</div>
+  <div class="card">
+    <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">CORS + Parse Body</div><div class="step-desc">Origin whitelist · parse <code>{sessionId, message, _hp}</code> · ขาดอะไร → 400</div></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Honeypot <code>_hp</code></div><div class="step-desc"><code>_hp !== ""</code> = bot → <code>{reply:""}</code> เงียบ</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">IP Rate Limit</div><div class="step-desc">INCR <code>web_ip_rate:{ip}</code> EX 5min (pipeline) · เกิน 20 → reply "ส่งถี่เกินไป รอ 5 นาที"</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Session Blocked</div><div class="step-desc">GET <code>web_blocked:{sessionId}</code> · ถ้า blocked → <code>{reply:""}</code> เงียบ</div></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Session Rate Limit</div><div class="step-desc">INCR <code>webchat:rate:{sessionId}</code> EX 10s · เกิน 5 → FALLBACK_MSG</div></div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">Nonsense Filter</div><div class="step-desc">length &lt; 2 · regex ตัวซ้ำทั้งหมด <code>/^(.)\1+$/u</code> (aaa, ???) · หรือตัวซ้ำ 3+ ติดกัน <code>/(.)\1{2,}/u</code> → "มีอะไรให้น้องใจดีช่วยไหมคะ 😊" <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span></div></div></div>
+    <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('web')</code> → "นอกเวลาทำการ ... inbox Facebook ได้เลย" <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span></div></div></div>
+    <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Load History + Log + FAQ</div><div class="step-desc">GET <code>webchat:hist:{sessionId}</code> · logChat(user) · fetchFAQ()</div></div></div>
+    <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">shouldHandoff</div><div class="step-desc">keyword match (<code>lib/handoff.ts</code>) ไม่มี counter · ตรงคำ → saveHistory + return FALLBACK_MSG ทุกครั้ง</div></div></div>
+    <div class="step"><div class="step-num">10</div><div class="step-content"><div class="step-title">Order Intent</div><div class="step-desc">regex <code>ORDER_RE</code> (อยากสั่ง/จะซื้อ/โอนเงิน ฯลฯ) → saveHistory + return FALLBACK_MSG ทันที ไม่ผ่าน Gemini</div></div></div>
+    <div class="step"><div class="step-num">11</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s</div><div class="step-desc"><code>generateReply(message, faq, history, FALLBACK_MSG)</code></div></div></div>
+    <div class="step"><div class="step-num">12</div><div class="step-content"><div class="step-title">Handle Gemini Returns</div><div class="step-desc">
+      <span class="flow-no">GEMINI_UNAVAILABLE</span> → FALLBACK_MSG<br>
+      <span class="flow-warn">CANCEL_IMEI</span> → saveHistory([]) → "ยกเลิกแล้ว" <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span><br>
+      <span class="flow-warn">HANDOFF</span> (จาก Gemini) → saveHistory + return FALLBACK_MSG<br>
+      <span class="flow-no">OUT_OF_DOMAIN</span>: INCR <code>webchat:nonsense:{sessionId}</code> EX 10min
+      <div class="indent">≥5 → SET <code>web_blocked:{sessionId}</code> EX 30min → reply "ตอบได้เฉพาะวิทยุ" <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span><br>2–4 → <code>{reply:""}</code> เงียบ<br>≤1 → reply OOD msg <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span></div>
+      <span class="flow-no">NOT_FOUND</span>: lpush <code>unanswered_log</code> + ltrim 500 → saveHistory + return FALLBACK_MSG เสมอ (ไม่มี retry flag แล้ว)
+    </div></div></div>
+    <div class="step"><div class="step-num">13</div><div class="step-content"><div class="step-title">Duplicate Suppression</div><div class="step-desc">GET <code>webchat:last_answer:{sessionId}</code> EX 120s · ซ้ำ count=1: reminder <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span> · count≥2: <code>{reply:""}</code></div></div></div>
+    <div class="step"><div class="step-num">14</div><div class="step-content"><div class="step-title">Reply + Track + Save</div><div class="step-desc">zincrby <code>question_freq</code> · ถ้า reply มีคำว่า "บาท" → ต่อ BUY_SUFFIX (เบอร์สั่งซื้อ) · SET last_answer + DEL repeat · saveHistory (slice -20) · logChat(bot) · <span class="badge badge-blue">+CONTACT_SUFFIX ถ้ายังไม่เคยแสดงใน session</span> · return <code>{reply}</code></div></div></div>
+  </div>
+  <div class="tip"><strong>CONTACT_SUFFIX</strong> (<code>withContactSuffix()</code>): ต่อท้าย "สนใจสอบถามเพิ่มเติมติดต่อได้ที่ @spenderclub โทร 085-222-9111 ค่ะ" เฉพาะ<u>ข้อความแรกที่บอทตอบใน session</u> — เช็ค/SET flag <code>webchat:contact_shown:{sessionId}</code> EX 30min · ไม่ต่อท้าย FALLBACK_MSG เพราะมีเบอร์ติดต่อฝังอยู่แล้ว</div>
+  <div class="warn">Web ไม่มีแอดมิน real-time: ทุกกรณีที่ตอบไม่ได้ (rate limit / handoff / order intent / GEMINI_UNAVAILABLE / HANDOFF / NOT_FOUND) → FALLBACK_MSG เดียวกันหมด (มีเบอร์ติดต่อในตัว)</div>
+</div>
+
+<!-- ─── GEMINI FLOW ─── -->
+<div class="section" id="gemini-flow">
+  <h2>🧠 Gemini 2-Call Flow</h2>
+  <div class="tip">ไฟล์: <span class="file-badge">lib/gemini.ts</span> · Model: <code>gemini-2.5-flash</code> · Temperature: 1.0 (text) / 0 (OCR) · Max tokens: 1024</div>
+  <div class="card">
+    <div class="flow-box"><strong>Call 1</strong> — Gemini + SEARCH_TOOL function declaration
+<code>search_spender_specs(query: string)</code>
+contents = [...history.map(role+text), {role:'user', text:userMessage}]
+config: systemInstruction=buildSystemPrompt, tools=[SEARCH_TOOL], temp=1.0, maxTokens=1024</div>
+    <div class="flow-arrow">↓ ตรวจ response parts</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
+      <div>
+        <div class="badge badge-green" style="margin-bottom:6px">ไม่มี functionCall</div>
+        <div class="flow-box" style="font-size:11px">Gemini ตอบจาก FAQ/prompt โดยตรง<br>finishReason=MAX_TOKENS → API_ERROR_REPLY<br>→ return response.text.trim()</div>
+      </div>
+      <div>
+        <div class="badge badge-orange" style="margin-bottom:6px">functionCall: search_spender_specs</div>
+        <div class="flow-box" style="font-size:11px">
+          query = fcPart.args.query || userMessage<br>
+          isRecommendQuestion(userMessage)?<br>
+          <span class="flow-yes">YES</span> → searchSpenderRecommend(query) 4 sites<br>
+          <span class="flow-no">NO</span> → searchSpenderSites(query) 1 combined
+        </div>
+      </div>
+    </div>
+    <div class="flow-arrow">↓ ถ้ามี function call</div>
+    <div class="flow-box"><strong>Call 2</strong> — ส่ง functionResponse กลับ Gemini
+contents = [..., {role:'model', fcPart}, {role:'user', functionResponse:{name, response:{content, url}}}]
+search ล้มเหลว → content='ไม่พบข้อมูลจากการค้นหา'
+finishReason=MAX_TOKENS → API_ERROR_REPLY
+→ return finalResponse.text.trim()</div>
+  </div>
+
+  <h3 style="margin-top:16px">generateReplyWithImage (3 steps)</h3>
+  <div class="card">
+    <div class="flow-box"><strong>Step 1 — OCR Extract</strong> · maxTokens=400 · temp=0
+JSON: <code>{brand, model, code, ocrText}</code>
+imageQuery = brand + model + code joined · ocrText = ข้อความทุกตัวในรูป</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-box"><strong>Step 2 — Web Search</strong>
+query = userQuestion || imageQuery → searchSpenderSites(query)
+→ webContext = "ข้อมูลจาก spenderclub.com:\n{text}\nลิงก์: {url}"</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-box"><strong>Step 3 — Generate Answer</strong> · maxTokens=1024 · temp=1.0
+systemInstruction = systemPrompt + webContext + ocrContext
+content = [{role:'user', parts:[{text:question}, {inlineData:base64}]}]
+→ return response.text.trim()</div>
+  </div>
+</div>
+
+<!-- ─── RECOMMEND ─── -->
+<div class="section" id="recommend">
+  <h2>💡 Recommendation Protocol (2 ชั้น)</h2>
+  <div class="tip">Detect regex: <code>/รุ่นไหนดี|แนะนำ|เหมาะก[ับ]|เปรียบเทียบ|ต่างกัน|เหมือนกัน|ดีกว่า|ราคาถูกกว่า|ราคาไม่เกิน|งบ.{0,15}บาท|ซื้อรุ่นไหน|เลือกรุ่น|เหมาะสำหรับ|ใช้กับอะไร|เหมาะกับงาน/i</code></div>
+  <div class="card">
+    <div class="flow-box">📋 <strong>ชั้น 1 — FAQ เพียงพอ</strong> → Gemini ตอบทันที (ไม่ call search)</div>
+    <div class="flow-arrow">↓ Gemini call search_spender_specs + isRecommendQuestion=true</div>
+    <div class="flow-box">🔍 <strong>ชั้น 2 — searchSpenderRecommend</strong> · Promise.allSettled 4 queries พร้อมกัน
+<code>site:spenderclub.com/product/ {query}</code>       → top 2
+<code>site:spenderclub.com/blog/ {query}</code>          → top 2
+<code>site:spenderclub.com/downlods_hub/ {query}</code>  → top 2
+<code>site:spendernetwork.com {query}</code>             → top 2
+รวม: all[].map(title+snippet) ตัดที่ 4000 chars + urlLines
+cache: <code>search_rec:{query.slice(0,100)}</code> TTL 24h
+fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
+    <div class="flow-arrow">↓ ถ้า search ไม่พบ / FAQ ไม่มี</div>
+    <div class="flow-box">❓ Prompt fallback: Gemini ถามความต้องการการใช้งาน (ร้านอาหาร / โรงงาน / อีเวนต์ ...)</div>
+  </div>
+
+  <h3 style="margin-top:14px">Refinement Detection (step 2.5 ใน reasoning_protocol)</h3>
+  <div class="card">
+    <div class="flow-box">ลูกค้าส่งข้อความสั้น เช่น "ใช้ในร้านอาหาร" หลังบอทแนะนำรุ่นไปแล้ว</div>
+    <div class="flow-arrow">↓ Gemini อ่าน prompt step 2.5 ก่อน step 3–6</div>
+    <div class="flow-box">ตรวจ history → filter รุ่นที่แนะนำไว้ → ตอบจาก history (ห้าม search ซ้ำ)
+ถ้า history ไม่มีคำตอบ → ค้น FAQ / เรียก search ตามปกติ</div>
+  </div>
+</div>
+
+<!-- ─── REDIS KEYS ─── -->
+<div class="section" id="redis">
+  <h2>🗄 Redis Keys ทั้งหมด</h2>
+  <div class="tip">LINE userId ไม่มี prefix · FB: userId = <code>fb:{psid}</code> ใช้ใน key ทั้งหมด · Web: ใช้ sessionId โดยตรง (ไม่ใช่ userId)</div>
+
+  <h3>LINE Channel</h3>
+  <table>
+    <tr><th>Key Pattern</th><th>Type</th><th>TTL</th><th>หน้าที่</th></tr>
+    <tr><td><code>greeted:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">24h</span></td><td>ทักทายครั้งแรก (SET NX)</td></tr>
+    <tr><td><code>off_hours:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>แสดง off-hours notice แล้ววันนี้</td></tr>
+    <tr><td><code>msg_rate:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit 5/10s</td></tr>
+    <tr><td><code>img:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">300s</span></td><td>Image message ID สำหรับ "สอบถามสเปก"</td></tr>
+    <tr><td><code>img_data:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">360s</span></td><td><code>{id, ts}</code> รูปค้างรอข้อความ (window 5 min)</td></tr>
+    <tr><td><code>takeover:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">7200s</span></td><td>Admin takeover LINE เท่านั้น · บอทเงียบ</td></tr>
+    <tr><td><code>pre_handoff:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>Trigger message ค้างไว้ (GETDEL)</td></tr>
+    <tr><td><code>routed:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">300s</span></td><td>ส่งต่อแอดมินแล้ว</td></tr>
+    <tr><td><code>handoff_notified:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>นับแจ้งแอดมิน: count=1 reply count≥2 เงียบ</td></tr>
+    <tr><td><code>nonsense_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD counter · ≤1=reply ≥2=เงียบ</td></tr>
+    <tr><td><code>retry:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">600s</span></td><td>NOT_FOUND: ไม่มี=retryMsg+log / มี=handoffMsg</td></tr>
+    <tr><td><code>last_answer:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>ป้องกัน duplicate reply</td></tr>
+    <tr><td><code>repeat_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Duplicate counter: 1=reminder 2+=เงียบ</td></tr>
+    <tr><td><code>history:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s</span></td><td>Conversation turns max 6 (lib/history.ts)</td></tr>
+  </table>
+
+  <h3 style="margin-top:18px">Facebook Channel (ทุก key ใช้ userId = fb:{psid} นำหน้า)</h3>
+  <table>
+    <tr><th>Key Pattern (actual)</th><th>Type</th><th>TTL</th><th>หน้าที่</th></tr>
+    <tr><td><code>greeted:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">24h</span></td><td>ทักทายครั้งแรก FB</td></tr>
+    <tr><td><code>off_hours:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>Off-hours notice FB</td></tr>
+    <tr><td><code>msg_rate:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit FB 5/10s</td></tr>
+    <tr><td><code>fb_img_url:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>FB image URL รอ "สเปค/ฟังก์ชัน"</td></tr>
+    <tr><td><code>pre_handoff:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>Pre-handoff trigger FB (GETDEL + stale check)</td></tr>
+    <tr><td><code>routed:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">300s</span></td><td>ส่งต่อแอดมินแล้ว FB</td></tr>
+    <tr><td><code>handoff_notified:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>นับแจ้งแอดมิน FB</td></tr>
+    <tr><td><code>nonsense_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD counter FB</td></tr>
+    <tr><td><code>retry:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">600s</span></td><td>NOT_FOUND retry FB</td></tr>
+    <tr><td><code>last_answer:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress FB</td></tr>
+    <tr><td><code>repeat_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Repeat counter FB</td></tr>
+    <tr><td><code>history:fb:{psid}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s</span></td><td>Conversation history FB (lib/history.ts)</td></tr>
+  </table>
+
+  <h3 style="margin-top:18px">Web Chat Channel (ใช้ sessionId โดยตรง)</h3>
+  <table>
+    <tr><th>Key Pattern</th><th>Type</th><th>TTL</th><th>หน้าที่</th></tr>
+    <tr><td><code>web_ip_rate:{ip}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">5m</span></td><td>IP rate limit 20/5min</td></tr>
+    <tr><td><code>web_blocked:{sessionId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">30m</span></td><td>Session block (OOD ≥5)</td></tr>
+    <tr><td><code>webchat:rate:{sessionId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Session rate limit 5/10s</td></tr>
+    <tr><td><code>webchat:hist:{sessionId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">30m</span></td><td>Session history max 20 turns (slice -20)</td></tr>
+    <tr><td><code>webchat:nonsense:{sessionId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD: ≥5=block, 2-4=เงียบ, ≤1=reply</td></tr>
+    <tr><td><code>webchat:last_answer:{sessionId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress</td></tr>
+    <tr><td><code>webchat:repeat:{sessionId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Repeat counter</td></tr>
+    <tr><td><code>webchat:contact_shown:{sessionId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">30m</span></td><td>CONTACT_SUFFIX แสดงไปแล้วใน session นี้หรือยัง</td></tr>
+  </table>
+
+  <h3 style="margin-top:18px">Shared (ทุกช่องทาง)</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>TTL</th><th>หน้าที่</th></tr>
+    <tr><td><code>unanswered_log</code></td><td><span class="tag tag-list">List</span></td><td>–</td><td>JSON <code>{ts, userId, question}</code> · max 500 (ltrim 0–499) · LINE+FB+Web</td></tr>
+    <tr><td><code>question_freq</code></td><td><span class="tag tag-zset">ZSet</span></td><td>–</td><td>score=จำนวนครั้ง · member=คำถาม (slice 0–100)</td></tr>
+    <tr><td><code>schedule:rules:{channel}</code></td><td><span class="tag tag-string">JSON</span></td><td>–</td><td>Schedule rules array สำหรับ line / fb / web</td></tr>
+    <tr><td><code>chatlog:u:{userId}</code></td><td><span class="tag tag-list">List</span></td><td><span class="ttl">30d</span></td><td>Messages JSON · max 200 (ltrim 0–199) · newest first (lpush)</td></tr>
+    <tr><td><code>chatlog:convs</code></td><td><span class="tag tag-zset">ZSet</span></td><td>–</td><td>score=lastTs · member=userId · index conversations</td></tr>
+    <tr><td><code>chatlog:uchan</code></td><td><span class="tag tag-hash">Hash</span></td><td>–</td><td>userId → channel (LINE/Facebook/Web)</td></tr>
+    <tr><td><code>search_cache:{query.slice(0,120)}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">24h</span></td><td>Serper normal search cache</td></tr>
+    <tr><td><code>search_rec:{query.slice(0,100)}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">24h</span></td><td>Recommend 4-site search cache</td></tr>
+  </table>
+</div>
+
+<!-- ─── CONSTANTS ─── -->
+<div class="section" id="constants">
+  <h2>⚙️ Constants & TTLs</h2>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="badge badge-green">LINE</span></div>
+      <div class="const-row"><span class="const-name">safeReply / safePush timeout</span><span class="const-val">4s</span></div>
+      <div class="const-row"><span class="const-name">Gemini timeout (text)</span><span class="const-val">10s</span></div>
+      <div class="const-row"><span class="const-name">Gemini timeout (image)</span><span class="const-val">15s</span></div>
+      <div class="const-row"><span class="const-name">Rate limit</span><span class="const-val">5 / 10s</span></div>
+      <div class="const-row"><span class="const-name">Image pending window</span><span class="const-val">300000ms (5 min)</span></div>
+      <div class="const-row"><span class="const-name">TAKEOVER_TTL</span><span class="const-val">7200s (2h)</span></div>
+      <div class="const-row"><span class="const-name">PRE_HANDOFF_TTL</span><span class="const-val">600s</span></div>
+      <div class="const-row"><span class="const-name">RETRY_TTL</span><span class="const-val">600s</span></div>
+      <div class="const-row"><span class="const-name">OFF_HOURS_TTL</span><span class="const-val">23h</span></div>
+      <div class="const-row"><span class="const-name">Greeted TTL</span><span class="const-val">24h</span></div>
+      <div class="const-row"><span class="const-name">NONSENSE_TTL</span><span class="const-val">10m</span></div>
+      <div class="const-row"><span class="const-name">LAST_ANSWER_TTL</span><span class="const-val">120s</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-blue">Facebook</span></div>
+      <div class="const-row"><span class="const-name">fbSend / fbSendProductCard timeout</span><span class="const-val">5s</span></div>
+      <div class="const-row"><span class="const-name">Gemini timeout (text)</span><span class="const-val">10s</span></div>
+      <div class="const-row"><span class="const-name">Gemini timeout (image spec)</span><span class="const-val">20s</span></div>
+      <div class="const-row"><span class="const-name">Gemini timeout (postback)</span><span class="const-val">7s</span></div>
+      <div class="const-row"><span class="const-name">Image download timeout</span><span class="const-val">8s</span></div>
+      <div class="const-row"><span class="const-name">Rate limit</span><span class="const-val">5 / 10s</span></div>
+      <div class="const-row"><span class="const-name">FB_IMG_TTL</span><span class="const-val">600s</span></div>
+      <div class="const-row"><span class="const-name">OFF_HOURS_TTL</span><span class="const-val">23h</span></div>
+      <div class="const-row"><span class="const-name">PRE_HANDOFF_TTL</span><span class="const-val">600s</span></div>
+      <div class="const-row"><span class="const-name">RETRY_TTL</span><span class="const-val">600s</span></div>
+      <div class="const-row"><span class="const-name">NONSENSE_TTL</span><span class="const-val">10m</span></div>
+      <div class="const-row"><span class="const-name">LAST_ANSWER_TTL</span><span class="const-val">120s</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-yellow">Web Chat</span></div>
+      <div class="const-row"><span class="const-name">Gemini timeout</span><span class="const-val">10s</span></div>
+      <div class="const-row"><span class="const-name">SESSION_TTL (history)</span><span class="const-val">30m</span></div>
+      <div class="const-row"><span class="const-name">Rate limit</span><span class="const-val">5 / 10s</span></div>
+      <div class="const-row"><span class="const-name">IP rate limit</span><span class="const-val">20 / 5min</span></div>
+      <div class="const-row"><span class="const-name">OOD block threshold</span><span class="const-val">5 ครั้ง</span></div>
+      <div class="const-row"><span class="const-name">BLOCKED_TTL</span><span class="const-val">30m</span></div>
+      <div class="const-row"><span class="const-name">RETRY_TTL</span><span class="const-val">10m</span></div>
+      <div class="const-row"><span class="const-name">Handoff TTL</span><span class="const-val">10m</span></div>
+      <div class="const-row"><span class="const-name">LAST_ANSWER_TTL</span><span class="const-val">120s</span></div>
+      <div class="const-row"><span class="const-name">NONSENSE_TTL</span><span class="const-val">10m</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-purple">Gemini & Search</span></div>
+      <div class="const-row"><span class="const-name">Model</span><span class="const-val">gemini-2.5-flash</span></div>
+      <div class="const-row"><span class="const-name">Temperature (text)</span><span class="const-val">1.0</span></div>
+      <div class="const-row"><span class="const-name">Temperature (OCR)</span><span class="const-val">0</span></div>
+      <div class="const-row"><span class="const-name">Max tokens (text)</span><span class="const-val">1024</span></div>
+      <div class="const-row"><span class="const-name">Max tokens (OCR extract)</span><span class="const-val">400</span></div>
+      <div class="const-row"><span class="const-name">Max tokens (OCR product name)</span><span class="const-val">50</span></div>
+      <div class="const-row"><span class="const-name">Serper fetch timeout</span><span class="const-val">5s</span></div>
+      <div class="const-row"><span class="const-name">Normal search num</span><span class="const-val">5 results (text slice 3000)</span></div>
+      <div class="const-row"><span class="const-name">Recommend per site</span><span class="const-val">3 results top 2 (text slice 4000)</span></div>
+      <div class="const-row"><span class="const-name">Search cache TTL</span><span class="const-val">24h</span></div>
+      <div class="const-row"><span class="const-name">FAQ cache (in-memory)</span><span class="const-val">60s + stale fallback</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── LIB FILES ─── -->
+<div class="section" id="lib-files">
+  <h2>📁 lib/ — หน้าที่แต่ละไฟล์</h2>
+  <table>
+    <tr><th>ไฟล์</th><th>หน้าที่</th><th>Export หลัก</th></tr>
+    <tr>
+      <td><span class="file-badge">gemini.ts</span></td>
+      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step</td>
+      <td><code>generateReply()</code> <code>generateReplyWithImage()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">prompts.ts</span></td>
+      <td>buildSystemPrompt รวม: hallucination guard, recommend_protocol (2-tier), use_case_map, reasoning_protocol (step 2.5 refinement detection)</td>
+      <td><code>buildSystemPrompt()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">websearch.ts</span></td>
+      <td>Serper API · fetchSerperRaw (raw query) · searchSpenderSites (combined site:) · searchSpenderRecommend (4 parallel) · scraping fallback · cleanUrl · stripHtml</td>
+      <td><code>searchSpenderSites()</code> <code>searchSpenderRecommend()</code> <code>searchSpenderClub()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">sheet.ts</span></td>
+      <td>Fetch CSV · parse 13-col Row · 3 types: product/faq/license · license map lookup · in-memory cache 60s + stale fallback · custom CSV parser รองรับ quoted newlines</td>
+      <td><code>fetchFAQ()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">handoff.ts</span></td>
+      <td>HANDOFF_TRIGGERS 30+ keywords · notifyAdmin → LINE group + link manager.line.biz + คืนบอท: instruction · notifyAdminFacebook → LINE group + link business.facebook.com</td>
+      <td><code>shouldHandoff()</code> <code>notifyAdmin()</code> <code>notifyAdminFacebook()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">chatlog.ts</span></td>
+      <td>Fire-and-forget (ไม่ await) · pipeline 5 ops: lpush+ltrim+expire+zadd+hset · .catch(()=>{}) ไม่กระทบ response time</td>
+      <td><code>logChat(entry)</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">history.ts</span></td>
+      <td>LINE + FB conversation history · max 6 turns · key <code>history:{userId}</code> TTL 600s</td>
+      <td><code>getHistory()</code> <code>saveHistory()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">schedule.ts</span></td>
+      <td>Schedule rules per channel · Bangkok TZ check · overnight range support · fail-open (return false เมื่อ error)</td>
+      <td><code>isScheduledOff()</code> <code>getRules()</code> <code>saveRules()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">greeting.ts</span></td>
+      <td>SET <code>greeted:{userId}</code> NX EX 86400 · non-null = ควรทักทาย · WELCOME_MSG = ข้อความต้อนรับ</td>
+      <td><code>shouldGreet()</code> <code>WELCOME_MSG</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">flex-cards.ts</span></td>
+      <td>LINE Flex Message builders · greetingCard (08:00-18:00) · imageIntentCard(product?) · catalogCard · contactCard</td>
+      <td><code>greetingCard()</code> <code>imageIntentCard()</code> <code>catalogCard()</code> <code>contactCard()</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">redis.ts</span></td>
+      <td>Upstash Redis REST singleton · fallback env: UPSTASH_REDIS_KV_REST_API_URL / TOKEN</td>
+      <td><code>redis</code></td>
+    </tr>
+    <tr>
+      <td><span class="file-badge">log.ts</span></td>
+      <td>JSON structured logging → console · format: <code>{ts:ISO, level, event, ...ctx}</code></td>
+      <td><code>log.info()</code> <code>log.warn()</code> <code>log.error()</code></td>
+    </tr>
+  </table>
+</div>
+
+<!-- ─── SHEET FORMAT ─── -->
+<div class="section" id="sheet-format">
+  <h2>📊 Google Sheet Format (CSV 13 columns)</h2>
+  <div class="tip">ไฟล์: <span class="file-badge">lib/sheet.ts</span> · custom CSV parser รองรับ quoted fields ที่มี newline · skip header row</div>
+  <table>
+    <tr><th>Col</th><th>Field</th><th>Row type</th><th>หน้าที่</th></tr>
+    <tr><td>0</td><td><code>id</code></td><td>product, license</td><td>reference key (license_ref lookup)</td></tr>
+    <tr><td>1</td><td><code>type</code></td><td>ทั้งหมด</td><td><code>product</code> / <code>faq</code> / <code>license</code></td></tr>
+    <tr><td>2</td><td><code>category</code></td><td>ทั้งหมด</td><td>หมวดหมู่</td></tr>
+    <tr><td>3</td><td><code>keywords</code></td><td>ทั้งหมด</td><td>คำค้น (required — row ข้ามถ้าว่าง)</td></tr>
+    <tr><td>4</td><td><code>answer</code></td><td>ทั้งหมด</td><td>คำตอบ (required)</td></tr>
+    <tr><td>5</td><td><code>url</code></td><td>ทั้งหมด</td><td>ลิงก์อ้างอิง</td></tr>
+    <tr><td>6</td><td><code>brand</code></td><td>product</td><td>ยี่ห้อ</td></tr>
+    <tr><td>7</td><td><code>model_code</code></td><td>product</td><td>รหัสรุ่น</td></tr>
+    <tr><td>8</td><td><code>price</code></td><td>product</td><td>ราคาหน่วย (- = ไม่แสดง)</td></tr>
+    <tr><td>9</td><td><code>price_pack</code></td><td>product</td><td>ราคาแพ็ก / โปรโมชั่น (- = ไม่แสดง)</td></tr>
+    <tr><td>10</td><td><code>stock</code></td><td>product</td><td><code>out</code> → OUT_OF_STOCK template แทน price+info</td></tr>
+    <tr><td>11</td><td><code>license_required</code></td><td>product</td><td><code>ไม่ต้องขอ</code> / <code>ต้องขอ</code></td></tr>
+    <tr><td>12</td><td><code>license_ref</code></td><td>product</td><td>id ของ license row ที่จะ join รายละเอียดใบอนุญาต</td></tr>
+  </table>
+  <div class="card" style="margin-top:10px">
+    <div class="card-title">Output ที่ buildSystemPrompt ส่งให้ Gemini</div>
+    <pre>
+[สินค้า] Spender TC-11HW | ประเภท | keywords
+→ PRICE: ราคา 2,500 บาท หรือ 4,500 (โปรโมชั่นสุดคุ้ม)
+  INFO: สเปกและรายละเอียด
+  LICENSE: ไม่ต้องขอใบอนุญาต ใช้ได้ถูกกฎหมาย รับประกัน 2 ปี
+  ดูรายละเอียด/ราคาล่าสุด: https://...
+  CTA: ลูกค้าสนใจสั่งเลยไหมคะ?
+
+[สินค้า] Spender XX OUT_OF_STOCK | keywords
+→ [OUT_OF_STOCK] XX ตอนนี้ของหมดชั่วคราวค่ะ สอบถามคิวกับแอดมิน / ดูรุ่นใกล้เคียง: url
+
+[ใบอนุญาต] keywords → answer ดูขั้นตอน: url
+
+[category] keywords → answer ข้อมูลเพิ่มเติม: url</pre>
+  </div>
+</div>
+
+<!-- ─── ADMIN PAGES ─── -->
+<div class="section" id="admin">
+  <h2>🛡 Admin Pages</h2>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="badge badge-purple">/admin/unanswered</span></div>
+      <p style="font-size:12px;margin-bottom:8px">Auth: ADMIN_SCHEDULE_PASSWORD</p>
+      <div style="font-size:12px">
+        <div style="margin-bottom:6px"><strong>Tab 1 — ❓ ตอบไม่ได้</strong><br>100 ล่าสุด · Export CSV · ล้างทั้งหมด</div>
+        <div style="margin-bottom:6px"><strong>Tab 2 — 🔥 ถามบ่อย</strong><br>top 30 จาก question_freq ZSet · Export CSV · ล้างสถิติ</div>
+        <div><strong>Tab 3 — 💬 ประวัติแชท</strong>
+          <ul style="margin-left:14px;margin-top:4px;color:#64748b">
+            <li>100 conversations (ZREVRANGE chatlog:convs)</li>
+            <li>Dropdown filter: LINE / Facebook / Web</li>
+            <li>Table: ช่องทาง | ข้อความล่าสุด | จำนวน | เวลา | ⬇</li>
+            <li>กดแถว → expand chat-bubble thread</li>
+            <li>⬇ icon per row → XLSX บทสนทนานั้น</li>
+            <li>ปุ่มเขียว → Export รายวัน (date Bangkok TZ)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-purple">/admin/schedule</span></div>
+      <p style="font-size:12px;margin-bottom:8px">Auth: ADMIN_SCHEDULE_PASSWORD</p>
+      <div style="font-size:12px">
+        <div style="margin-bottom:4px">3 tabs: LINE OA / Facebook / Web Chat</div>
+        <div>กำหนดเวลาปิดบอท per channel:
+          <ul style="margin-left:14px;margin-top:4px;color:#64748b">
+            <li>เลือกวัน (Mon-Fri / Sat-Sun / ทุกวัน / custom)</li>
+            <li>ช่วงเวลา HH:MM — HH:MM (Bangkok TZ)</li>
+            <li>รองรับ overnight: 18:00–07:59</li>
+            <li>Toggle enable/disable per rule</li>
+            <li>นาฬิกา Bangkok real-time</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ENV VARS ─── -->
+<div class="section" id="env">
+  <h2>🔑 Environment Variables</h2>
+  <div class="card">
+    <table>
+      <tr><th>Variable</th><th>ใช้ที่</th><th>Required</th></tr>
+      <tr><td><code>LINE_CHANNEL_SECRET</code></td><td>Signature verify (HMAC-SHA256)</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>LINE_CHANNEL_ACCESS_TOKEN</code></td><td>LINE API calls · notifyAdmin · notifyAdminFacebook</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>FACEBOOK_APP_SECRET</code></td><td>FB signature verify (X-Hub-Signature-256)</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>FACEBOOK_PAGE_ACCESS_TOKEN</code></td><td>FB Send API · Generic Template · Quick Replies</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>FACEBOOK_VERIFY_TOKEN</code></td><td>FB webhook GET challenge</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>GEMINI_API_KEY</code></td><td>Gemini 2.5 Flash API</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>SHEET_CSV_URL</code></td><td>Google Sheet CSV public URL</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>UPSTASH_REDIS_REST_URL</code></td><td>Redis REST connection</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>UPSTASH_REDIS_REST_TOKEN</code></td><td>Redis auth token</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>ADMIN_SCHEDULE_PASSWORD</code></td><td>Admin pages auth (?key=)</td><td><span class="badge badge-red">Required</span></td></tr>
+      <tr><td><code>SERPER_API_KEY</code></td><td>Serper search API · ไม่มี = fallback scraping spenderclub.com</td><td><span class="badge badge-yellow">Optional</span></td></tr>
+      <tr><td><code>ADMIN_GROUP_ID</code></td><td>LINE group ID สำหรับ notifyAdmin + notifyAdminFacebook</td><td><span class="badge badge-yellow">Optional</span></td></tr>
+    </table>
+  </div>
+  <div class="tip" style="margin-top:10px">
+    <strong>Upstash fallback:</strong> redis.ts รองรับ <code>UPSTASH_REDIS_KV_REST_API_URL</code> + <code>UPSTASH_REDIS_KV_REST_API_TOKEN</code> ด้วย (Vercel KV auto-generated names)
+  </div>
+</div>
+
+<div style="text-align:center;color:#334155;font-size:12px;padding:40px 0 60px">
+  อ่านจากโค้ดจริง · น้องใจดี — Spender Club · Next.js 14 + Gemini 2.5 Flash
+</div>
+
+</div><!-- end main -->
+</div><!-- end right column -->
+</div><!-- end layout -->
+
+</body>
+</html>
