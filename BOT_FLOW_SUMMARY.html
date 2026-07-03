@@ -321,6 +321,7 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
   <tr><td>ลูกค้ากด [ราคา {รุ่น}]</td><td>ค้นราคาจาก FAQ</td><td>ตอบราคาพร้อมข้อมูลสินค้า</td></tr>
   <tr><td>ลูกค้ากด [สเปค/ฟังก์ชัน]</td><td>วิเคราะห์รูปเต็มรูปแบบ (3 ขั้น)</td><td>สเปค ฟังก์ชัน วิธีใช้ + URL</td></tr>
 </table>
+<div class="ok">(แก้บั๊กแล้ว — 2026-07-03) เดิม LINE เก็บ <code>img_data:{userId}</code> ด้วย JSON.stringify แล้วอ่านกลับด้วย JSON.parse ซ้ำ แต่ Upstash Redis client deserialize JSON ให้อัตโนมัติอยู่แล้วตอน get() พอ parse ซ้ำเลย error เงียบๆ ทำให้ <code>imgData</code> เป็น <code>null</code> เสมอ — ลูกค้าส่งรูปแล้วถามต่อทันทีก็ไม่ถูกนำรูปไปวิเคราะห์เลย ตกไปตอบแบบไม่มีรูปแทน (บอทบอกว่า "ดูรูปภาพไม่ได้") ตอนนี้แก้แล้วโดยเช็ค <code>typeof raw</code> ก่อน parse — ถ้าเป็น object ที่ deserialize มาแล้วใช้ตรงๆ ถ้าเป็น string ค่อย JSON.parse</div>
 
 <h3>กระบวนการ [สเปค/ฟังก์ชัน] (3 ขั้น)</h3>
 <div class="flow-box">
