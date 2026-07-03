@@ -187,8 +187,8 @@ export async function POST(req: NextRequest) {
           // ตรวจ pending image — ลูกค้าส่งรูปแล้วพิมพ์ข้อความตามมา
           let imgData: { id: string; ts: number } | null = null
           try {
-            const raw = await redis.get<string>(`img_data:${userId}`)
-            if (raw) imgData = JSON.parse(raw) as { id: string; ts: number }
+            const raw = await redis.get<unknown>(`img_data:${userId}`)
+            if (raw) imgData = (typeof raw === 'string' ? JSON.parse(raw) : raw) as { id: string; ts: number }
           } catch { /* Redis ล่ม */ }
 
           if (imgData) {

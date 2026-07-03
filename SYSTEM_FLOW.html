@@ -258,7 +258,7 @@
       <div class="step-num">5</div>
       <div class="step-content">
         <div class="step-title">Pending Image Check (<code>img_data:{userId}</code>)</div>
-        <div class="step-desc">GET JSON <code>{id, ts}</code> · elapsed &lt; 300000ms:
+        <div class="step-desc">GET <code>{id, ts}</code> · Upstash คืนค่าเป็น object ที่ deserialize มาแล้วอัตโนมัติ — เช็ค <code>typeof raw === 'string'</code> ก่อนค่อย JSON.parse (ถ้าเป็น object อยู่แล้วใช้ตรงๆ) เพื่อกันบั๊ก parse ซ้อนที่ทำให้ <code>imgData</code> เป็น null เสมอ · elapsed &lt; 300000ms:
           <div class="indent">DEL key → ดึงรูป blob → generateReplyWithImage(b64, faq, userMessage) timeout 15s → ans → saveHistory → return</div>
           elapsed ≥ 300000ms:
           <div class="indent">DEL key → OCR ยี่ห้อ/รุ่น (max 50 tokens) → ไม่เจอ: "รบกวนพิมพ์ชื่อรุ่น" / เจอ: imageIntentCard(product) → return</div>
