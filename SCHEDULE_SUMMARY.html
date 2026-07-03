@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สรุประบบตั้งเวลาบอท — น้องใจดี</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sarabun', sans-serif; background: #f5f7fa; color: #222; font-size: 15px; line-height: 1.7; }
+  .container { max-width: 860px; margin: 40px auto; padding: 0 20px 60px; }
+  h1 { font-size: 26px; color: #1a3a5c; margin-bottom: 6px; }
+  h2 { font-size: 18px; color: #1a3a5c; margin: 36px 0 12px; border-left: 4px solid #1a3a5c; padding-left: 12px; }
+  h3 { font-size: 15px; color: #333; margin: 20px 0 8px; }
+  p { margin-bottom: 10px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 32px; }
+
+  .card { background: #fff; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card-blue { background: #e8f0fe; border-left: 4px solid #1a3a5c; }
+  .card-green { background: #e8f5e9; border-left: 4px solid #2e7d32; }
+  .card-orange { background: #fff3e0; border-left: 4px solid #e65100; }
+  .card-red { background: #fce4ec; border-left: 4px solid #c00; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th { background: #1a3a5c; color: #fff; padding: 10px 14px; text-align: left; font-size: 13px; }
+  td { padding: 10px 14px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f9f9f9; }
+
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+  .badge-on { background: #e8f5e9; color: #2e7d32; }
+  .badge-off { background: #fce4ec; color: #c00; }
+  .badge-gray { background: #eee; color: #666; }
+
+  .timeline { display: flex; align-items: center; margin: 16px 0; gap: 0; }
+  .tl-seg { padding: 10px 0; text-align: center; font-size: 12px; font-weight: bold; flex: 1; }
+  .tl-work { background: #e8f5e9; color: #2e7d32; border: 2px solid #2e7d32; }
+  .tl-off  { background: #fce4ec; color: #c00; border: 2px solid #c00; }
+  .tl-label { font-size: 11px; display: block; font-weight: normal; }
+
+  code { background: #f0f4f8; padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #1a3a5c; }
+  .url { font-size: 14px; color: #1565c0; word-break: break-all; }
+
+  .step { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
+  .step-num { min-width: 28px; height: 28px; background: #1a3a5c; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; }
+  .step-body { flex: 1; padding-top: 4px; }
+
+  .warn { color: #e65100; font-weight: bold; }
+  .ok { color: #2e7d32; font-weight: bold; }
+
+  hr { border: none; border-top: 1px solid #ddd; margin: 32px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>📅 สรุประบบตั้งเวลาบอท — น้องใจดี</h1>
+  <p class="subtitle">อัปเดต 1 กรกฎาคม 2569 · แต่ละช่องทางตั้งเวลาแยกกันได้อิสระ (LINE OA / Facebook / Web Chat)</p>
+
+  <!-- ===== หลักการ ===== -->
+  <h2>1. หลักการทำงาน</h2>
+  <div class="card card-blue">
+    <p>ระบบนี้ตั้ง <strong>"ช่วงเวลาที่บอทปิด (OFF)"</strong> เท่านั้น — นอกจากช่วงที่ตั้งไว้ บอทจะทำงานปกติ</p>
+    <br>
+    <p><span class="badge badge-on">บอทเปิด ✓</span> &nbsp;→ ตอบลูกค้าอัตโนมัติด้วย AI</p>
+    <p style="margin-top:6px"><span class="badge badge-off">บอทปิด ✗</span> &nbsp;→ ไม่ตอบเลย (แอดมินดูแลเอง)</p>
+    <br>
+    <p style="font-size:13px;color:#555">กฎทำซ้ำทุกสัปดาห์อัตโนมัติ — ไม่ต้องตั้งใหม่ทุกวัน</p>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <p style="font-weight:bold;margin-bottom:10px">⚙️ แต่ละช่องทางตั้งแยกกัน:</p>
+    <table>
+      <tr><th>ช่องทาง</th><th>Redis Key</th><th>พฤติกรรมเมื่อปิด</th></tr>
+      <tr><td>💚 LINE OA</td><td><code>schedule:rules:line</code></td><td>เงียบ (แอดมินดูแล)</td></tr>
+      <tr><td>💙 Facebook</td><td><code>schedule:rules:fb</code></td><td>เงียบ (แอดมินดูแล)</td></tr>
+      <tr><td>🟠 Web Chat</td><td><code>schedule:rules:web</code></td><td>แจ้ง "นอกเวลาทำการ" (ไม่มีแอดมินดูแลเว็บ)<br><strong>ถ้าไม่มีกฎ = ตอบ 24 ชม.</strong></td></tr>
+    </table>
+  </div>
+
+  <!-- ===== การเข้าใช้งาน ===== -->
+  <h2>2. วิธีเข้าใช้งานหน้า Admin</h2>
+  <div class="card">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">เปิด browser ไปที่<br>
+        <span class="url">https://line-bot-ai-theta.vercel.app/admin/schedule</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">ใส่รหัสผ่าน = ค่า <code>ADMIN_SCHEDULE_PASSWORD</code> ที่ตั้งใน Vercel</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">กด <strong>เข้าสู่ระบบ</strong> → เข้าหน้าจัดการกฎได้เลย</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>เลือกแท็บช่องทาง</strong> ที่ต้องการตั้งกฎ:<br>
+        <span style="color:#00b900;font-weight:bold">💚 LINE OA</span> &nbsp;|&nbsp;
+        <span style="color:#1877f2;font-weight:bold">💙 Facebook</span> &nbsp;|&nbsp;
+        <span style="color:#e65100;font-weight:bold">🟠 Web Chat</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== วิธีตั้งกฎ ===== -->
+  <h2>3. วิธีตั้งกฎ (ปิดบอท)</h2>
+  <div class="card">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>เลือกแท็บช่องทาง</strong> ที่ต้องการตั้ง (LINE OA / Facebook / Web Chat)</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>เลือกวัน</strong> — คลิก pill วันที่ต้องการ หรือใช้ปุ่มลัด:<br>
+        <code>จ–ศ</code> = วันจันทร์ถึงศุกร์ &nbsp;|&nbsp;
+        <code>เสาร์–อาทิตย์</code> = วันหยุด &nbsp;|&nbsp;
+        <code>ทุกวัน</code> = ทุกวัน
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>ตั้งเวลา</strong> — เลือก เวลาเริ่ม และ เวลาจบ (รูปแบบ 24 ชั่วโมง)<br>
+        <span style="font-size:13px;color:#666">รองรับช่วงข้ามคืน เช่น 18:00 – 07:59 ได้</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">กด <strong>+ บันทึกกฎ</strong> → กฎจะ active ทันที</div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">ทำซ้ำข้อ 1–4 สำหรับช่องทางอื่นที่ต้องการตั้งกฎ</div>
+    </div>
+  </div>
+
+  <!-- ===== ตัวอย่าง ===== -->
+  <h2>4. ตัวอย่างการตั้งกฎ</h2>
+
+  <h3>📌 ตัวอย่าง A — แอดมินทำงาน 08:00–18:00 บอทตอบแทน 18:00–07:59 (แนะนำ)</h3>
+  <div class="card">
+    <p style="font-size:13px;color:#555;margin-bottom:10px">ตั้งใน <strong>💚 LINE OA</strong> และ <strong>💙 Facebook</strong> (Web Chat ไม่ต้องตั้ง = ตอบ 24 ชม.)</p>
+    <table>
+      <tr><th>กฎที่ตั้ง</th><th>วัน</th><th>ช่วงเวลา (ปิดบอท)</th><th>ผล</th></tr>
+      <tr><td>กฎ 1</td><td>ทุกวัน</td><td>08:00 – 18:00</td><td>บอทปิด — แอดมินทำงาน</td></tr>
+    </table>
+    <div class="timeline" style="margin-top:16px">
+      <div class="tl-seg tl-work" style="flex:2">18:00–07:59<br><span class="tl-label">🤖 บอทตอบแทน</span></div>
+      <div class="tl-seg tl-off" style="flex:2">08:00–17:59<br><span class="tl-label">👤 แอดมินทำงาน</span></div>
+    </div>
+    <p style="font-size:13px;color:#555;margin-top:10px">→ บอทตอบช่วง <strong>18:00 – 07:59</strong> · แอดมินดูแลช่วง <strong>08:00 – 17:59</strong></p>
+  </div>
+
+  <h3>📌 ตัวอย่าง A2 — ปิดบอทนอกเวลาทำการ (บอททำงาน 8:00–18:00)</h3>
+  <div class="card">
+    <table>
+      <tr><th>กฎที่ตั้ง</th><th>วัน</th><th>ช่วงเวลา (ปิดบอท)</th><th>ผล</th></tr>
+      <tr><td>กฎ 1</td><td>ทุกวัน</td><td>18:00 – 07:59</td><td>บอทปิดข้ามคืน</td></tr>
+    </table>
+    <div class="timeline" style="margin-top:16px">
+      <div class="tl-seg tl-off" style="flex:2">18:00–07:59<br><span class="tl-label">บอทปิด</span></div>
+      <div class="tl-seg tl-work" style="flex:2">08:00–17:59<br><span class="tl-label">บอทเปิด ✓</span></div>
+    </div>
+    <p style="font-size:13px;color:#555;margin-top:10px">→ บอทจะตอบลูกค้าได้ช่วง <strong>08:00 – 17:59</strong> ทุกวัน</p>
+  </div>
+
+  <h3>📌 ตัวอย่าง B — ปิดบอทกลางวัน (เวลาพักเที่ยง จ–ศ)</h3>
+  <div class="card">
+    <table>
+      <tr><th>กฎที่ตั้ง</th><th>วัน</th><th>ช่วงเวลา (ปิดบอท)</th><th>ผล</th></tr>
+      <tr><td>กฎ 1</td><td>จ–ศ</td><td>12:00 – 13:00</td><td>บอทปิดช่วงพักเที่ยง</td></tr>
+    </table>
+    <p style="font-size:13px;color:#555;margin-top:10px">→ บอทตอบปกติตลอดวัน ยกเว้น 12:00–13:00 วันจันทร์–ศุกร์</p>
+  </div>
+
+  <h3>📌 ตัวอย่าง C — ปิดบอทวันหยุด + นอกเวลาทำการ</h3>
+  <div class="card">
+    <table>
+      <tr><th>กฎที่ตั้ง</th><th>วัน</th><th>ช่วงเวลา (ปิดบอท)</th></tr>
+      <tr><td>กฎ 1</td><td>จ–ศ</td><td>18:00 – 07:59</td></tr>
+      <tr><td>กฎ 2</td><td>เสาร์–อาทิตย์</td><td>00:00 – 23:59</td></tr>
+    </table>
+    <p style="font-size:13px;color:#555;margin-top:10px">→ บอทตอบเฉพาะ <strong>วันจันทร์–ศุกร์ 08:00–17:59</strong> เท่านั้น</p>
+  </div>
+
+  <!-- ===== สูตรคิด ===== -->
+  <h2>5. สูตรคิดง่ายๆ</h2>
+  <div class="card card-green">
+    <p style="font-size:16px"><strong>บอทเปิด = เวลาทั้งหมด ลบด้วย ช่วงที่ตั้งกฎปิด</strong></p>
+    <br>
+    <p>อยากให้บอท<strong>เปิด</strong>ช่วงไหน → ตั้งกฎ<strong>ปิด</strong>ช่วงที่เหลือ</p>
+    <br>
+    <table>
+      <tr><th>อยากให้บอทเปิด</th><th>ต้องตั้งกฎปิด</th></tr>
+      <tr><td>08:00 – 18:00</td><td>18:00 – 07:59</td></tr>
+      <tr><td>09:00 – 17:00</td><td>17:00 – 08:59</td></tr>
+      <tr><td>ตลอด 24 ชั่วโมง</td><td>ไม่ต้องตั้งกฎเลย</td></tr>
+    </table>
+  </div>
+
+  <!-- ===== การจัดการกฎ ===== -->
+  <h2>6. การจัดการกฎที่มีอยู่</h2>
+  <div class="card">
+    <table>
+      <tr><th>ปุ่ม</th><th>ความหมาย</th></tr>
+      <tr>
+        <td><span class="badge badge-gray">ปิดชั่วคราว</span></td>
+        <td>กฎนี้ถูกหยุดใช้ชั่วคราว — บอทจะ<strong>ไม่</strong>ปิดตามช่วงเวลานี้ (กฎยังอยู่ ลบไม่หาย)</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-on">เปิดใหม่</span></td>
+        <td>เปิดใช้กฎนี้อีกครั้ง — บอทจะปิดตามช่วงเวลานี้ทันที</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-off">ลบ</span></td>
+        <td>ลบกฎออกถาวร — ต้องตั้งใหม่ถ้าต้องการใช้อีก</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ===== ข้อสำคัญ ===== -->
+  <h2>7. ข้อสำคัญที่ต้องรู้</h2>
+  <div class="card card-orange">
+    <p>⏰ <strong>Timezone</strong> — ระบบใช้เวลา <strong>Bangkok (UTC+7)</strong> เสมอ ไม่ว่าเซิร์ฟเวอร์จะอยู่ที่ไหน</p>
+    <br>
+    <p>📱 <strong>แต่ละช่องทางตั้งแยกกัน</strong> — 💚 LINE OA · 💙 Facebook · 🟠 Web Chat มีกฎของตัวเอง<br>
+    <span style="font-size:13px">Web Chat: ถ้าไม่มีกฎ = ตอบ 24 ชม. อัตโนมัติ</span></p>
+    <br>
+    <p>🔁 <strong>ทำซ้ำทุกสัปดาห์</strong> — กฎที่ตั้งไว้จะมีผลซ้ำทุกสัปดาห์อัตโนมัติ ไม่หมดอายุ</p>
+    <br>
+    <p>✅ <strong>ถ้า Redis ล่ม</strong> — ระบบ fail-open หมายความว่าบอทจะ<strong>ตอบตามปกติ</strong> (ไม่ปิดโดยไม่ตั้งใจ)</p>
+    <br>
+    <p>⚠️ <strong>กฎต้อง Active</strong> — กฎที่แสดง "ปิดชั่วคราว" จะไม่มีผล ต้องกด "เปิดใหม่" ก่อน</td>
+  </div>
+
+  <!-- ===== เวลาปัจจุบัน ===== -->
+  <h2>8. ดูเวลาปัจจุบันก่อนตั้งกฎ</h2>
+  <div class="card card-blue">
+    <p>หน้า <code>/admin/schedule</code> แสดงเวลา Bangkok แบบ real-time ที่ด้านบน</p>
+    <p style="margin-top:8px">ให้ดูก่อนตั้งกฎเสมอ เพื่อให้แน่ใจว่าวัน/เวลาที่ตั้งตรงกับที่ต้องการ</p>
+    <div style="background:#fff;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:14px;color:#1a3a5c">
+      🕐 เวลาปัจจุบัน (Bangkok): <strong>วันอังคารที่ 30 มิถุนายน 2569 เวลา 13:40:12</strong>
+    </div>
+  </div>
+
+  <!-- ===== ไฟล์ที่เกี่ยวข้อง ===== -->
+  <h2>9. ไฟล์โค้ดที่เกี่ยวข้อง</h2>
+  <div class="card">
+    <table>
+      <tr><th>ไฟล์</th><th>หน้าที่</th></tr>
+      <tr><td><code>lib/schedule.ts</code></td><td>Logic หลัก — getRules(channel), saveRules(channel, rules), isScheduledOff(channel)</td></tr>
+      <tr><td><code>app/api/admin/schedule/route.ts</code></td><td>API: GET/POST/PATCH/DELETE กฎ รับ ?channel=line|fb|web</td></tr>
+      <tr><td><code>app/admin/schedule/page.tsx</code></td><td>หน้า UI — 3 แท็บ LINE OA / Facebook / Web Chat</td></tr>
+      <tr><td><code>app/api/line-webhook/route.ts</code></td><td>เรียก isScheduledOff('line') ก่อนตอบ LINE</td></tr>
+      <tr><td><code>app/api/fb-webhook/route.ts</code></td><td>เรียก isScheduledOff('fb') ก่อนตอบ Facebook</td></tr>
+      <tr><td><code>app/api/web-chat/route.ts</code></td><td>เรียก isScheduledOff('web') ก่อนตอบ Web Chat</td></tr>
+    </table>
+    <p style="font-size:13px;color:#555;margin-top:12px">Redis keys: <code>schedule:rules:line</code> · <code>schedule:rules:fb</code> · <code>schedule:rules:web</code></p>
+  </div>
+
+  <hr>
+  <p style="font-size:12px;color:#999;text-align:center">น้องใจดี · Spender Club · สร้างโดย Claude Sonnet 4.6</p>
+
+</div>
+</body>
+</html>

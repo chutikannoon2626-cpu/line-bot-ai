@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Go-Live Checklist — น้องใจดี Spender Club</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sarabun', sans-serif; background: #f5f7fa; color: #222; font-size: 15px; line-height: 1.7; }
+  .container { max-width: 900px; margin: 40px auto; padding: 0 20px 60px; }
+  h1 { font-size: 26px; color: #1a3a5c; margin-bottom: 6px; }
+  h2 { font-size: 18px; color: #1a3a5c; margin: 36px 0 12px; padding: 10px 14px; border-radius: 6px; }
+  h2.line  { background: #e8f5e9; border-left: 4px solid #2e7d32; }
+  h2.fb    { background: #e3f2fd; border-left: 4px solid #1565c0; }
+  h2.both  { background: #e8f0fe; border-left: 4px solid #1a3a5c; }
+  h2.warn  { background: #fff3e0; border-left: 4px solid #e65100; }
+  h3 { font-size: 15px; color: #333; margin: 18px 0 8px; }
+  p { margin-bottom: 10px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 32px; }
+
+  .card { background: #fff; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+  .check-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px; background: #fff; border: 1px solid #e0e0e0;
+    border-radius: 8px; margin-bottom: 8px;
+  }
+  .check-item.done { border-color: #a5d6a7; background: #f1f8e9; }
+  .check-item.warn { border-color: #ffcc80; background: #fff8e1; }
+  .check-item.critical { border-color: #ef9a9a; background: #fff5f5; }
+  .checkbox { width: 22px; height: 22px; border: 2px solid #bbb; border-radius: 4px; flex-shrink: 0; margin-top: 2px; }
+  .check-body { flex: 1; }
+  .check-title { font-weight: bold; font-size: 14px; }
+  .check-desc { font-size: 13px; color: #555; margin-top: 4px; }
+
+  .step { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
+  .step-num { min-width: 28px; height: 28px; background: #1a3a5c; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; flex-shrink: 0; }
+  .step-num.green { background: #2e7d32; }
+  .step-num.blue  { background: #1565c0; }
+  .step-num.orange { background: #e65100; }
+  .step-body { flex: 1; padding-top: 4px; }
+
+  code { background: #f0f4f8; padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #1a3a5c; }
+  .url { color: #1565c0; word-break: break-all; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th { background: #1a3a5c; color: #fff; padding: 10px 14px; text-align: left; font-size: 13px; }
+  td { padding: 10px 14px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #f9f9f9; }
+
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+  .badge-must { background: #fce4ec; color: #c00; }
+  .badge-opt  { background: #e8f5e9; color: #2e7d32; }
+  .badge-done { background: #e8f0fe; color: #1a3a5c; }
+
+  .notice { background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px; padding: 14px 16px; margin: 16px 0; font-size: 14px; }
+  .notice.red { background: #fce4ec; border-color: #ef9a9a; }
+  .notice.green { background: #e8f5e9; border-color: #a5d6a7; }
+
+  hr { border: none; border-top: 1px solid #ddd; margin: 32px 0; }
+  .section-num { display: inline-block; background: #1a3a5c; color: #fff; border-radius: 50%; width: 26px; height: 26px; text-align: center; line-height: 26px; font-weight: bold; font-size: 14px; margin-right: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>🚀 Go-Live Checklist — น้องใจดี</h1>
+  <p class="subtitle">สิ่งที่ต้องทำก่อนเปิดใช้งานจริงทั้ง LINE OA และ Facebook Messenger</p>
+
+  <div class="notice red">
+    ⚠️ <strong>ขั้นตอนสำคัญ:</strong> ต้องทำให้ครบก่อน Go-Live เพราะถ้าข้ามขั้นตอน บอทอาจส่งข้อความผิด หรือลูกค้าเห็นข้อความ "กำลังทดสอบ"
+  </div>
+
+  <!-- ===== ส่วนที่ 1 ===== -->
+  <h2 class="both"><span class="section-num">1</span> ทั้ง 2 Platform — ทำก่อนเลย</h2>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ลบข้อความ "กำลังทดสอบ" ออกจาก Greeting</div>
+      <div class="check-desc">
+        ตอนนี้ greeting card มีข้อความ <code>( ขณะนี้อยู่ระหว่างการทดสอบระบบตอบกลับอัตโนมัติค่ะ )</code><br>
+        ต้องแก้ใน 2 ที่:<br>
+        &bull; <code>lib/flex-cards.ts</code> บรรทัด 22 — LINE OA Flex Card<br>
+        &bull; <code>app/api/fb-webhook/route.ts</code> บรรทัด 275 — Facebook Quick Reply text<br>
+        เปลี่ยนเป็นข้อความต้อนรับจริง เช่น <em>"ยินดีต้อนรับสู่ Spender Club ค่ะ สอบถามได้เลยนะคะ 😊"</em>
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ตรวจ Google Sheet ครบถ้วน</div>
+      <div class="check-desc">
+        ตรวจสอบว่า Sheet มีข้อมูลครบก่อน Go-Live:<br>
+        &bull; สินค้าทุกรุ่นที่ขายอยู่ (ชื่อ, ราคา, สเปค, ลิงก์สินค้า)<br>
+        &bull; ข้อมูลการสั่งซื้อ (ช่องทาง, การชำระเงิน, การจัดส่ง)<br>
+        &bull; ข้อมูลการรับประกันและบริการหลังการขาย<br>
+        &bull; ข้อมูลติดต่อ (เบอร์โทร, LINE, ที่อยู่, เวลาทำการ)<br>
+        &bull; คำถามที่ลูกค้าถามบ่อย (ดูจาก <code>/admin/unanswered</code> หลัง Go-Live)
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ตรวจ Environment Variables ใน Vercel ครบทุกตัว</div>
+      <div class="check-desc">
+        ไปที่ Vercel → Settings → Environment Variables ตรวจว่ามีครบ:
+        <table style="margin-top:10px">
+          <tr><th>Variable</th><th>ได้จากไหน</th><th>สถานะ</th></tr>
+          <tr><td><code>LINE_CHANNEL_ACCESS_TOKEN</code></td><td>LINE Developers Console</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>LINE_CHANNEL_SECRET</code></td><td>LINE Developers Console</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>GEMINI_API_KEY</code></td><td>Google AI Studio</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>SHEET_CSV_URL</code></td><td>Google Sheet → Share → Publish as CSV</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>UPSTASH_REDIS_REST_URL</code></td><td>Upstash Dashboard</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>UPSTASH_REDIS_REST_TOKEN</code></td><td>Upstash Dashboard</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>FACEBOOK_PAGE_ACCESS_TOKEN</code></td><td>Facebook Developers</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>FACEBOOK_APP_SECRET</code></td><td>Facebook Developers</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>FACEBOOK_VERIFY_TOKEN</code></td><td>กำหนดเองตอนตั้ง Webhook</td><td><span class="badge badge-must">จำเป็น</span></td></tr>
+          <tr><td><code>ADMIN_GROUP_ID</code></td><td>LINE Group ID ของแอดมิน</td><td><span class="badge badge-opt">แนะนำ</span></td></tr>
+          <tr><td><code>ADMIN_SCHEDULE_PASSWORD</code></td><td>กำหนดเอง</td><td><span class="badge badge-done">ตั้งแล้ว</span></td></tr>
+          <tr><td><code>SERPER_API_KEY</code></td><td>serper.dev (ถ้าใช้ Web Search)</td><td><span class="badge badge-opt">ถ้าใช้</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ตั้งเวลาเปิด/ปิดบอทจริงใน /admin/schedule</div>
+      <div class="check-desc">
+        เปิด <span class="url">https://line-bot-ai-theta.vercel.app/admin/schedule</span><br>
+        ตั้งกฎให้ตรงกับเวลาทำการจริงของร้าน เช่น ปิดบอทนอกเวลาทำการ 18:00–07:59
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ส่วนที่ 2 — LINE OA ===== -->
+  <h2 class="line"><span class="section-num">2</span> LINE OA — ตั้งค่าใน LINE Developers Console</h2>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ตรวจ Webhook URL ใน LINE Developers Console</div>
+      <div class="check-desc">
+        ไปที่ <span class="url">developers.line.biz</span> → เลือก Channel → Messaging API<br>
+        <strong>Webhook URL</strong> ต้องเป็น:<br>
+        <code>https://line-bot-ai-theta.vercel.app/api/line-webhook</code><br>
+        &bull; กด <strong>Verify</strong> → ต้องขึ้น "Success"<br>
+        &bull; Use webhook = <strong>ON</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ปิด Auto-reply และ Greeting Message ของ LINE เอง</div>
+      <div class="check-desc">
+        ใน LINE Developers Console → Messaging API:<br>
+        &bull; <strong>Auto-reply messages</strong> → <code>Disabled</code><br>
+        &bull; <strong>Greeting messages</strong> → <code>Disabled</code><br><br>
+        หรือไปที่ LINE Official Account Manager (OA Manager):<br>
+        &bull; การตั้งค่า → ตอบกลับข้อความ → ปิด "ตอบกลับอัตโนมัติ" และ "ข้อความทักทาย" ของ LINE เอง<br>
+        ⚠️ ถ้าไม่ปิด ลูกค้าจะได้รับ 2 ข้อความ (ของ LINE + ของบอท)
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ตั้งค่า ADMIN_GROUP_ID สำหรับ Smart Handoff</div>
+      <div class="check-desc">
+        เมื่อบอทส่งต่อแอดมิน ระบบจะแจ้งเตือนไปยัง LINE Group ที่กำหนด<br>
+        วิธีหา Group ID:<br>
+        <div class="step" style="margin-top:8px">
+          <div class="step-num green" style="font-size:11px">1</div>
+          <div class="step-body">เพิ่มบอท (@SpenderClub) เข้า LINE Group แอดมิน</div>
+        </div>
+        <div class="step">
+          <div class="step-num green" style="font-size:11px">2</div>
+          <div class="step-body">ดู Vercel Logs หลังมีข้อความใน Group → จะเห็น groupId ใน log</div>
+        </div>
+        <div class="step">
+          <div class="step-num green" style="font-size:11px">3</div>
+          <div class="step-body">นำ groupId ไปใส่ใน Vercel → <code>ADMIN_GROUP_ID</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ทดสอบ LINE OA ครั้งสุดท้ายก่อน Go-Live</div>
+      <div class="check-desc">
+        &bull; ส่งข้อความครั้งแรก → ต้องได้รับ Greeting Card (ไม่มีข้อความ "ทดสอบ")<br>
+        &bull; ถามเรื่องสินค้า → บอทตอบถูกต้อง<br>
+        &bull; ส่งรูปสินค้า → บอทแสดง Intent Card<br>
+        &bull; พิมพ์ "ติดต่อแอดมิน" → บอทส่งต่อ + แจ้ง Group แอดมิน<br>
+        &bull; ทดสอบช่วงเวลาปิดบอท → บอทไม่ตอบ
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ส่วนที่ 3 — Facebook ===== -->
+  <h2 class="fb"><span class="section-num">3</span> Facebook Messenger — ตั้งค่าใน Facebook Developers</h2>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ตรวจ Webhook ใน Facebook Developers Console</div>
+      <div class="check-desc">
+        ไปที่ <span class="url">developers.facebook.com</span> → App → Messenger → Webhooks<br>
+        <strong>Callback URL:</strong><br>
+        <code>https://line-bot-ai-theta.vercel.app/api/fb-webhook</code><br>
+        <strong>Subscribed Fields</strong> ต้องติ๊ก:<br>
+        &bull; <code>messages</code><br>
+        &bull; <code>messaging_postbacks</code><br>
+        &bull; <code>messaging_optins</code> (ถ้าใช้)<br>
+        กด <strong>Verify and Save</strong> → ต้องสำเร็จ
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ตรวจสอบ Facebook App Permissions</div>
+      <div class="check-desc">
+        Facebook App ต้องมี Permission:<br>
+        &bull; <code>pages_messaging</code> — ส่งข้อความจาก Page<br>
+        &bull; <code>pages_read_engagement</code> — รับข้อความ<br><br>
+        <strong>ถ้า App ยังเป็น Development Mode:</strong><br>
+        บอทตอบได้เฉพาะคนที่เป็น Admin/Tester ของ App เท่านั้น<br>
+        → ต้อง Submit App for Review เพื่อให้ลูกค้าทั่วไปใช้งานได้<br><br>
+        <strong>วิธี Submit for Review:</strong><br>
+        App Review → Permissions and Features → ขอ <code>pages_messaging</code> → กรอกข้อมูล + วิดีโอสาธิต
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item critical">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">🔴 ปิด Auto-reply ของ Facebook Page เอง</div>
+      <div class="check-desc">
+        ไปที่ Facebook Page → Inbox → Automated Responses<br>
+        &bull; ปิด <strong>Instant Reply</strong> (ถ้าเปิดไว้)<br>
+        &bull; ปิด <strong>Away Message</strong> (ถ้าเปิดไว้)<br>
+        ⚠️ ถ้าไม่ปิด ลูกค้าจะได้รับ 2 ข้อความ (ของ Facebook Page + ของบอท)
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ตั้ง Get Started Button (ปุ่มเริ่มต้น)</div>
+      <div class="check-desc">
+        ปุ่ม "Get Started" ของ Facebook Messenger ส่ง Postback เมื่อลูกค้าเปิด chat ครั้งแรก<br>
+        ถ้ายังไม่ได้ตั้ง สามารถตั้งผ่าน Graph API:<br>
+        <code>POST /me/messenger_profile</code> with <code>{ "get_started": { "payload": "GET_STARTED" } }</code><br>
+        บอทรับ Postback นี้และแสดง Greeting อัตโนมัติ
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ทดสอบ Facebook Messenger ครั้งสุดท้ายก่อน Go-Live</div>
+      <div class="check-desc">
+        &bull; ส่งข้อความครั้งแรก → ต้องได้รับ Greeting พร้อม Quick Replies (ไม่มีข้อความ "ทดสอบ")<br>
+        &bull; ถามเรื่องสินค้าที่มีลิงก์ใน Sheet → บอทตอบเป็น Generic Template Card<br>
+        &bull; ส่งรูปสินค้า → บอทตอบรับ + แสดงปุ่ม Quick Replies<br>
+        &bull; ทดสอบช่วงเวลาปิดบอท → บอทไม่ตอบ
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ส่วนที่ 4 — หลัง Go-Live ===== -->
+  <h2 class="warn"><span class="section-num">4</span> หลัง Go-Live — Monitor และ Optimize</h2>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ติดตาม Vercel Logs 24 ชั่วโมงแรก</div>
+      <div class="check-desc">
+        Vercel → Deployments → ล่าสุด → <strong>Logs</strong> (Runtime Logs)<br>
+        ดูว่ามี error อะไรผิดปกติไหม เช่น Gemini timeout, Redis ล่ม, Signature ไม่ผ่าน
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">เช็ค /admin/unanswered ทุกวันช่วงแรก</div>
+      <div class="check-desc">
+        เปิด <span class="url">https://line-bot-ai-theta.vercel.app/admin/unanswered</span><br>
+        ดูคำถามที่บอทตอบไม่ได้ → นำไปเพิ่มใน Google Sheet ทันที<br>
+        ช่วง 1–2 สัปดาห์แรกควรเช็คทุกวัน จนบอทตอบได้ครอบคลุม
+      </div>
+    </div>
+  </div>
+
+  <div class="check-item">
+    <div class="checkbox"></div>
+    <div class="check-body">
+      <div class="check-title">ตรวจสอบ Gemini API Quota</div>
+      <div class="check-desc">
+        Google AI Studio → ดู Usage ว่าใกล้ขีดจำกัดไหม<br>
+        Gemini 2.5 Flash มี free tier ถ้าใช้มากขึ้นอาจต้องอัปเกรด Plan
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== สรุป ===== -->
+  <h2 class="both"><span class="section-num">5</span> สรุปลำดับขั้นตอน</h2>
+  <div class="card">
+    <div class="step">
+      <div class="step-num orange">1</div>
+      <div class="step-body"><strong>ลบข้อความ "กำลังทดสอบ"</strong> จาก flex-cards.ts และ fb-webhook → commit + push</div>
+    </div>
+    <div class="step">
+      <div class="step-num orange">2</div>
+      <div class="step-body"><strong>อัปเดต Google Sheet</strong> ให้ครบทุกสินค้าและข้อมูลที่ลูกค้าจะถาม</div>
+    </div>
+    <div class="step">
+      <div class="step-num orange">3</div>
+      <div class="step-body"><strong>ตรวจ Env Vars</strong> ใน Vercel ครบทุกตัว</div>
+    </div>
+    <div class="step">
+      <div class="step-num green">4</div>
+      <div class="step-body"><strong>LINE:</strong> ตรวจ Webhook URL, ปิด Auto-reply, หา ADMIN_GROUP_ID</div>
+    </div>
+    <div class="step">
+      <div class="step-num blue">5</div>
+      <div class="step-body"><strong>Facebook:</strong> ตรวจ Webhook, Submit App Review (ถ้ายังไม่ได้ทำ), ปิด Auto-reply ของ Page</div>
+    </div>
+    <div class="step">
+      <div class="step-num orange">6</div>
+      <div class="step-body"><strong>ตั้งเวลาเปิด/ปิดบอท</strong> ใน /admin/schedule ให้ตรงเวลาทำการจริง</div>
+    </div>
+    <div class="step">
+      <div class="step-num orange">7</div>
+      <div class="step-body"><strong>ทดสอบครั้งสุดท้าย</strong> ทั้ง LINE OA และ Facebook ก่อนประกาศให้ลูกค้าใช้</div>
+    </div>
+    <div class="step">
+      <div class="step-num orange">8</div>
+      <div class="step-body"><strong>Go-Live!</strong> ประกาศให้ลูกค้าทราบ → Monitor Logs + เช็ค /admin/unanswered ทุกวัน</div>
+    </div>
+  </div>
+
+  <div class="notice green">
+    ✅ <strong>ขั้นตอนที่สำคัญที่สุด</strong> — ลบข้อความ "กำลังทดสอบ" และ Submit Facebook App for Review (ถ้ายังไม่ได้ทำ) เพราะถ้าไม่ทำ ลูกค้าทั่วไปจะใช้ Facebook บอทไม่ได้
+  </div>
+
+  <hr>
+  <p style="font-size:12px;color:#999;text-align:center">น้องใจดี · Spender Club · สร้างโดย Claude Sonnet 4.6 · อัปเดต 30 มิถุนายน 2569</p>
+
+</div>
+</body>
+</html>
