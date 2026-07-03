@@ -23,6 +23,15 @@ const LAST_ANSWER_TTL = 2 * 60
 // fallback ทุกกรณีที่ Web Chat ตอบไม่ได้
 const FALLBACK_MSG = 'รบกวนสอบถามรายละเอียดเพิ่มเติมได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
 
+// Purchase intent
+const BUY_SUFFIX = '\n\nสนใจสั่งซื้อติดต่อได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
+const ORDER_RE = /อยากสั่ง|ต้องการซื้อ|จะซื้อ|สั่งได้ไหม|ซื้อยังไง|โอนเงิน|ชำระเงิน|จ่ายเงิน/u
+
+// Contact suffix — ต่อท้ายข้อความแรกที่บอทตอบใน session เท่านั้น
+// (ไม่ต่อท้าย FALLBACK_MSG เพราะมีเบอร์ติดต่อฝังอยู่แล้ว)
+const CONTACT_SUFFIX    = '\n\nสนใจสอบถามเพิ่มเติมติดต่อได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
+const CONTACT_SHOWN_TTL = SESSION_TTL
+
 // Anti-spam
 const IP_RATE_LIMIT       = 20
 const IP_RATE_TTL         = 5 * 60   // 5 นาที
@@ -75,6 +84,19 @@ async function getHistory(sid: string): Promise<History> {
 async function saveHistory(sid: string, history: History) {
   try { await redis.set(`webchat:hist:${sid}`, history.slice(-20), { ex: SESSION_TTL }) }
   catch { /* Redis ล่ม */ }
+}
+
+// ต่อท้าย CONTACT_SUFFIX เฉพาะข้อความแรกที่บอทตอบใน session (เช็คผ่าน redis flag ต่อ sessionId)
+async function withContactSuffix(sid: string, replyText: string): Promise<string> {
+  if (!replyText) return replyText
+  try {
+    const shown = await redis.get(`webchat:contact_shown:${sid}`)
+    if (shown) return replyText
+    await redis.set(`webchat:contact_shown:${sid}`, '1', { ex: CONTACT_SHOWN_TTL })
+    return replyText + CONTACT_SUFFIX
+  } catch {
+    return replyText // Redis ล่ม — ส่งข้อความปกติโดยไม่ต่อท้าย
+  }
 }
 
 // OPTIONS — CORS preflight
@@ -137,14 +159,14 @@ export async function POST(req: NextRequest) {
 
     // Nonsense filter — กรองก่อนส่ง Gemini
     if (isNonsenseMessage(message)) {
-      return json({ reply: 'มีอะไรให้น้องใจดีช่วยไหมคะ 😊' }, cors)
+      return json({ reply: await withContactSuffix(sessionId, 'มีอะไรให้น้องใจดีช่วยไหมคะ 😊') }, cors)
     }
 
     // Schedule check
     if (await isScheduledOff('web')) {
       log.info('webchat.scheduled_off', { userId })
       return json({
-        reply: 'ขณะนี้อยู่นอกเวลาทำการค่ะ น้องใจดีจะกลับมาให้บริการในเวลาทำการนะคะ 🙏\nหากต้องการติดต่อด่วน สามารถ inbox Facebook Spender Club ได้เลยค่ะ',
+        reply: await withContactSuffix(sessionId, 'ขณะนี้อยู่นอกเวลาทำการค่ะ น้องใจดีจะกลับมาให้บริการในเวลาทำการนะคะ 🙏\nหากต้องการติดต่อด่วน สามารถ inbox Facebook Spender Club ได้เลยค่ะ'),
       }, cors)
     }
 
@@ -156,6 +178,13 @@ export async function POST(req: NextRequest) {
     if (shouldHandoff(message)) {
       await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
       log.info('webchat.handoff', { userId })
+      return json({ reply: FALLBACK_MSG }, cors)
+    }
+
+    // Case 2: ลูกค้าแสดงเจตนาสั่งซื้อชัดเจน → ตอบทันที ไม่ผ่าน Gemini
+    if (ORDER_RE.test(message)) {
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
+      log.info('webchat.order_intent', { userId })
       return json({ reply: FALLBACK_MSG }, cors)
     }
 
@@ -171,7 +200,7 @@ export async function POST(req: NextRequest) {
 
     if (reply === 'CANCEL_IMEI') {
       await saveHistory(sessionId, [])
-      return json({ reply: 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ' }, cors)
+      return json({ reply: await withContactSuffix(sessionId, 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ') }, cors)
     }
 
     if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
@@ -191,12 +220,12 @@ export async function POST(req: NextRequest) {
       } catch { /* */ }
       if (count >= OOD_BLOCK_THRESHOLD) {
         try { await redis.set(`web_blocked:${sessionId}`, '1', { ex: BLOCKED_TTL }) } catch { /* */ }
-        return json({ reply: 'ขออภัยค่ะ น้องใจดีตอบได้เฉพาะเรื่องวิทยุสื่อสารนะคะ 🙏' }, cors)
+        return json({ reply: await withContactSuffix(sessionId, 'ขออภัยค่ะ น้องใจดีตอบได้เฉพาะเรื่องวิทยุสื่อสารนะคะ 🙏') }, cors)
       }
       if (count <= 1) {
         const msg = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ มีอะไรให้ช่วยเรื่องวิทยุสื่อสารไหมคะ'
         await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: msg }])
-        return json({ reply: msg }, cors)
+        return json({ reply: await withContactSuffix(sessionId, msg) }, cors)
       }
       return json({ reply: '' }, cors) // เงียบครั้งที่ 2–4
     }
@@ -222,7 +251,7 @@ export async function POST(req: NextRequest) {
         if (cnt === 1) {
           const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ มีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
           await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reminder }])
-          return json({ reply: reminder }, cors)
+          return json({ reply: await withContactSuffix(sessionId, reminder) }, cors)
         }
         return json({ reply: '' }, cors)
       }
@@ -233,10 +262,12 @@ export async function POST(req: NextRequest) {
     // Track frequency
     try { await redis.zincrby('question_freq', 1, message.slice(0, 100)) } catch { /* */ }
 
-    await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reply }])
-    log.info('webchat.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
-    logChat({ userId, channel: 'Web', role: 'bot', message: reply, ts: Date.now() })
-    return json({ reply }, cors)
+    // Case 1: ถ้า reply มีราคา (บาท) → ต่อท้ายด้วย BUY_SUFFIX
+    const finalReply = reply.includes('บาท') ? reply + BUY_SUFFIX : reply
+    await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: finalReply }])
+    log.info('webchat.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
+    logChat({ userId, channel: 'Web', role: 'bot', message: finalReply, ts: Date.now() })
+    return json({ reply: await withContactSuffix(sessionId, finalReply) }, cors)
 
   } catch (err) {
     log.error('webchat.error', { err: (err as Error).message, userId })
