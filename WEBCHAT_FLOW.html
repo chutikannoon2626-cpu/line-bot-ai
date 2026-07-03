@@ -113,7 +113,8 @@
       · ข้อความ &lt; 2 ตัวอักษร<br>
       · ตัวอักษรซ้ำทั้งหมด (aaa, ???)<br>
       · อักขระซ้ำ 3+ ครั้ง (ดดด, ไไไไ)<br>
-      → "มีอะไรให้น้องใจดีช่วยไหมคะ 😊" ไม่ส่ง Gemini
+      → "มีอะไรให้น้องใจดีช่วยไหมคะ 😊" ไม่ส่ง Gemini<br>
+      <span class="tag tag-blue">+CONTACT_SUFFIX ถ้าเป็นข้อความแรกของ session</span>
     </div>
   </div>
   <div class="arrow"></div>
@@ -125,7 +126,8 @@
       อ่านกฎเวลาจาก Redis key <code>schedule:rules:web</code><br>
       ตั้งได้ที่ <strong>/admin/schedule → แท็บ 🟠 Web Chat</strong><br>
       <strong>ถ้าไม่มีกฎ = ตอบ 24 ชม.</strong><br>
-      ถ้าตั้งกฎและอยู่นอกเวลา → ตอบ "อยู่นอกเวลาทำการ inbox Facebook ได้เลยค่ะ" <em>(ไม่เงียบ)</em>
+      ถ้าตั้งกฎและอยู่นอกเวลา → ตอบ "อยู่นอกเวลาทำการ inbox Facebook ได้เลยค่ะ" <em>(ไม่เงียบ)</em><br>
+      <span class="tag tag-blue">+CONTACT_SUFFIX ถ้าเป็นข้อความแรกของ session</span>
     </div>
   </div>
   <div class="arrow"></div>
@@ -136,6 +138,16 @@
     <div class="node-sub">
       ตรวจจับคำ เช่น "ขอคุยแอดมิน", "ติดต่อคน", "อยากคุยกับเจ้าของ"<br>
       → บันทึก history → ตอบ <strong>FALLBACK_MSG</strong> ทันที
+    </div>
+  </div>
+  <div class="arrow"></div>
+
+  <!-- Order intent -->
+  <div class="node node-check">
+    <div class="node-title">🛒 ลูกค้าต้องการสั่งซื้อ? (Order Intent)</div>
+    <div class="node-sub">
+      regex ตรวจจับ เช่น "อยากสั่ง", "จะซื้อ", "โอนเงิน", "ชำระเงิน"<br>
+      → บันทึก history → ตอบ <strong>FALLBACK_MSG</strong> ทันที ไม่ผ่าน Gemini
     </div>
   </div>
   <div class="arrow"></div>
@@ -182,12 +194,18 @@
         บอทตัดสินใจส่งต่อ หรือ timeout/429/503<br>
         → ตอบ <strong>FALLBACK_MSG</strong>
       </div>
+      <div class="branch-item b-blue">
+        <span class="b-tag">CANCEL_IMEI</span>
+        ลูกค้ายกเลิกรายการเช็ค IMEI<br>
+        → ล้าง history → ตอบ "ยกเลิกแล้วค่ะ"<br>
+        <span class="tag tag-blue" style="margin-top:4px">+CONTACT_SUFFIX ครั้งแรก</span>
+      </div>
       <div class="branch-item b-red">
         <span class="b-tag">OUT_OF_DOMAIN</span>
         คำถามไม่เกี่ยวกับวิทยุสื่อสาร<br>
-        ครั้งที่ 1 → แจ้งขอบเขต<br>
+        ครั้งที่ 1 → แจ้งขอบเขต <span class="tag tag-blue">+CONTACT_SUFFIX ครั้งแรก</span><br>
         ครั้งที่ 2–4 → เงียบ<br>
-        ครั้งที่ 5+ → block session 30 นาที
+        ครั้งที่ 5+ → block session 30 นาที <span class="tag tag-blue">+CONTACT_SUFFIX ครั้งแรก</span>
       </div>
       <div class="branch-item b-red">
         <span class="b-tag">NOT_FOUND</span>
@@ -198,9 +216,11 @@
       <div class="branch-item b-green">
         <span class="b-tag">ตอบปกติ ✅</span>
         ตรวจ Duplicate:<br>
-        ตอบซ้ำ → reminder<br>
+        ตอบซ้ำ → reminder <span class="tag tag-blue">+CONTACT_SUFFIX ครั้งแรก</span><br>
         ตอบซ้ำ 2+ → เงียบ<br>
-        บันทึก question_freq
+        มีคำว่า "บาท" → ต่อ BUY_SUFFIX (เบอร์สั่งซื้อ)<br>
+        บันทึก question_freq<br>
+        <span class="tag tag-blue" style="margin-top:4px">+CONTACT_SUFFIX ถ้าเป็นข้อความแรกของ session</span>
       </div>
     </div>
   </div>
@@ -212,7 +232,8 @@
     <div class="node-sub">
       JSON: <code>{ "reply": "ข้อความตอบกลับ" }</code><br>
       widget แสดงข้อความในกล่องแชท · URL ในข้อความกดได้ (linkify)<br>
-      บันทึก history ลง Redis (TTL 30 นาที)
+      บันทึก history ลง Redis (TTL 30 นาที)<br>
+      <span style="opacity:.8">history เก็บข้อความ "สะอาด" (ไม่รวม CONTACT_SUFFIX) เพื่อไม่ปนกับ context ที่ส่งให้ Gemini</span>
     </div>
   </div>
   <div class="arrow"></div>
@@ -226,7 +247,14 @@
 <div style="max-width:720px;margin:32px auto 0;background:#fff3e0;border:1.5px solid #f57c00;border-radius:10px;padding:16px 20px;font-size:13px;color:#7b4200">
   <strong>📢 FALLBACK_MSG</strong> — ข้อความ fallback สำหรับทุกกรณีที่ตอบไม่ได้ใน Web Chat<br>
   <code style="font-size:12px;color:#c62828">"รบกวนสอบถามรายละเอียดเพิ่มเติมได้ที่ @spenderclub โทร 085-222-9111 ค่ะ"</code><br>
-  <span style="opacity:.8">ใช้เมื่อ: NOT_FOUND · shouldHandoff · HANDOFF signal · GEMINI_UNAVAILABLE (timeout/429/503)</span>
+  <span style="opacity:.8">ใช้เมื่อ: Session Rate Limit · shouldHandoff · Order Intent · HANDOFF signal · GEMINI_UNAVAILABLE (timeout/429/503) · NOT_FOUND</span>
+</div>
+
+<!-- CONTACT_SUFFIX -->
+<div style="max-width:720px;margin:16px auto 0;background:#e3f2fd;border:1.5px solid #1e88e5;border-radius:10px;padding:16px 20px;font-size:13px;color:#0d2f6e">
+  <strong>🔗 CONTACT_SUFFIX</strong> — ต่อท้ายข้อความแรกที่บอทตอบใน session เท่านั้น<br>
+  <code style="font-size:12px;color:#c62828">"สนใจสอบถามเพิ่มเติมติดต่อได้ที่ @spenderclub โทร 085-222-9111 ค่ะ"</code><br>
+  <span style="opacity:.8">เช็ค/SET redis flag <code>webchat:contact_shown:{sid}</code> (TTL 30 นาที) · ข้อความถัดไปในเซสชันเดียวกันไม่ต่อท้ายซ้ำ · ไม่ต่อท้าย FALLBACK_MSG เพราะมีเบอร์ติดต่อฝังอยู่แล้ว</span>
 </div>
 
 <!-- Redis Table -->
@@ -241,6 +269,7 @@
     <tr><td>webchat:nonsense:{sid}</td><td>นับ out-of-domain ต่อเนื่อง</td><td>10 นาที</td></tr>
     <tr><td>webchat:last_answer:{sid}</td><td>ป้องกันตอบซ้ำ</td><td>2 นาที</td></tr>
     <tr><td>webchat:repeat:{sid}</td><td>นับการตอบซ้ำ</td><td>2 นาที</td></tr>
+    <tr><td>webchat:contact_shown:{sid}</td><td>CONTACT_SUFFIX แสดงไปแล้วใน session นี้หรือยัง</td><td>30 นาที</td></tr>
     <tr><td>unanswered_log</td><td>บันทึกคำถามที่บอทตอบไม่ได้ (max 500)</td><td>ถาวร</td></tr>
     <tr><td>question_freq</td><td>Sorted set สถิติคำถามยอดนิยม</td><td>ถาวร</td></tr>
   </table>
