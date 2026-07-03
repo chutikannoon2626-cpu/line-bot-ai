@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
 
   if (userId) {
     // ── Single conversation ──
-    const raw = await redis.lrange(`chatlog:u:${userId}`, 0, 199) as string[]
+    const raw = await redis.lrange(`chatlog:u:${userId}`, 0, 199) as unknown[]
     rows = raw
-      .map(s => { try { return JSON.parse(s) as ChatLogEntry } catch { return null } })
+      .map(s => { try { return (typeof s === 'string' ? JSON.parse(s) : s) as ChatLogEntry } catch { return null } })
       .filter((e): e is ChatLogEntry => e !== null)
       .reverse()
     filename = `chat_${userId.slice(-8)}_${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -57,12 +57,12 @@ export async function GET(req: NextRequest) {
     // Fetch messages for each user in parallel (batched)
     const pipe = redis.pipeline()
     for (const uid of userArr) pipe.lrange(`chatlog:u:${uid}`, 0, 199)
-    const allLists = await pipe.exec() as (string[] | null)[]
+    const allLists = await pipe.exec() as (unknown[] | null)[]
 
     for (const list of allLists) {
       if (!list) continue
-      const entries = (list as string[])
-        .map(s => { try { return JSON.parse(s) as ChatLogEntry } catch { return null } })
+      const entries = list
+        .map(s => { try { return (typeof s === 'string' ? JSON.parse(s) : s) as ChatLogEntry } catch { return null } })
         .filter((e): e is ChatLogEntry => e !== null && e.ts >= from && e.ts <= to)
       rows.push(...entries)
     }

@@ -34,9 +34,9 @@ export async function GET(req: NextRequest) {
 
   // ── Single conversation ──
   if (userId) {
-    const raw = await redis.lrange(`chatlog:u:${userId}`, 0, 199) as string[]
+    const raw = await redis.lrange(`chatlog:u:${userId}`, 0, 199) as unknown[]
     const messages: ChatLogEntry[] = raw
-      .map(s => { try { return JSON.parse(s) as ChatLogEntry } catch { return null } })
+      .map(s => { try { return (typeof s === 'string' ? JSON.parse(s) : s) as ChatLogEntry } catch { return null } })
       .filter((e): e is ChatLogEntry => e !== null)
       .reverse()  // oldest first
     return new Response(JSON.stringify({ messages }), {
@@ -64,14 +64,17 @@ export async function GET(req: NextRequest) {
     pipe.lindex(`chatlog:u:${uid}`, 0)  // newest message (JSON string)
     pipe.llen(`chatlog:u:${uid}`)        // total count
   }
-  const results = await pipe.exec() as (string | number | null)[]
+  const results = await pipe.exec() as unknown[]
 
   const conversations: ConvSummary[] = convList.map((c, i) => {
-    const lastRaw = results[i * 2] as string | null
+    const lastRaw = results[i * 2] as string | Record<string, unknown> | null
     const count   = Number(results[i * 2 + 1] ?? 0)
     let lastMessage = ''
     if (lastRaw) {
-      try { lastMessage = (JSON.parse(lastRaw) as ChatLogEntry).message.slice(0, 80) } catch {}
+      try {
+        const parsed = (typeof lastRaw === 'string' ? JSON.parse(lastRaw) : lastRaw) as ChatLogEntry
+        lastMessage = parsed.message.slice(0, 80)
+      } catch {}
     }
     return {
       userId:      c.member,
