@@ -540,7 +540,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>
         <div class="badge badge-green" style="margin-bottom:6px">history มีสินค้าที่เคยแนะนำแล้ว</div>
-        <div class="flow-box" style="font-size:11px">filter รุ่นที่ตรงเงื่อนไขใหม่ → ตอบจาก history ห้าม search ซ้ำ</div>
+        <div class="flow-box" style="font-size:11px">filter รุ่นที่ตรงเงื่อนไขใหม่ → ตอบจาก history ห้าม search ซ้ำ<br><span style="opacity:.8">ถ้าข้อความลูกค้าไม่มีเงื่อนไขใหม่ให้คัดกรองจริง (แค่ย้ำของเดิม เช่น เคยบอก "ร้านอาหาร" แล้วพิมพ์ "ใช้ร้านอาหาร" ซ้ำ) → ห้ามตอบว่าไม่พบข้อมูล ให้ยืนยันรุ่นเดิมที่เคยแนะนำไว้แล้วซ้ำแทน</span></div>
       </div>
       <div>
         <div class="badge badge-orange" style="margin-bottom:6px">history ไม่มีสินค้าที่เคยแนะนำเลย</div>
@@ -549,6 +549,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </div>
   </div>
   <div class="warn">(แก้บั๊กแล้ว) เดิม step 2.5 ไม่มีกฎรองรับกรณี "history ไม่มีสินค้าที่เคยแนะนำเลย" (เช่น ข้อความก่อนหน้าเป็นแค่คำถามถามลักษณะการใช้งานจากชั้น 1+2 ที่หาไม่เจอ ยังไม่เคยแนะนำสินค้าจริง) — Gemini เจอคำตอบตัวอย่างในกฎ ("ใช้ในร้านอาหาร") ตรงกับข้อความลูกค้าเป๊ะ เข้าใจผิดว่าต้อง filter จาก history ที่ว่างเปล่า แล้วตอบ NOT_FOUND ไปเลยโดยไม่เรียก search_spender_specs เพิ่มกฎ (2) ให้ชัดแล้วว่าต้องกลับไปทำ recommend_protocol ใหม่ในกรณีนี้</div>
+  <div class="warn">(แก้บั๊กเพิ่ม) แม้ history จะมีสินค้าที่เคยแนะนำแล้ว (เข้ากรณี (1)) แต่ถ้าลูกค้าพิมพ์ย้ำเงื่อนไขเดิมโดยไม่มีอะไรใหม่ให้คัดกรอง (เช่น "ใช้สำหรับร้านอาหาร" ซ้ำหลังจากที่บอทแนะนำรุ่นสำหรับร้านอาหารไปแล้ว) Gemini เคยตีความว่า "ไม่มีเงื่อนไขให้ filter" แล้วตอบ NOT_FOUND ทั้งที่ควรแค่ยืนยันคำแนะนำเดิม เพิ่มกฎย่อยใน (1) ให้ชัดแล้ว</div>
 </div>
 
 <!-- ─── REDIS KEYS ─── -->
