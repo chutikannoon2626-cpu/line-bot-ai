@@ -465,12 +465,12 @@ NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
 <!-- ─── GEMINI FLOW ─── -->
 <div class="section" id="gemini-flow">
   <h2>🧠 Gemini 2-Call Flow</h2>
-  <div class="tip">ไฟล์: <span class="file-badge">lib/gemini.ts</span> · Model: <code>gemini-2.5-flash</code> · Temperature: 1.0 (text) / 0 (OCR) · Max tokens: 1024</div>
+  <div class="tip">ไฟล์: <span class="file-badge">lib/gemini.ts</span> · Model: <code>gemini-2.5-flash</code> · Temperature: 1.0 (text) / 0 (OCR) · Max tokens: 3072 (text) · thinkingBudget: 1024 (text เท่านั้น — generateReplyWithImage ยังเป็น 1024/400 เดิม ไม่แตะ)</div>
   <div class="card">
     <div class="flow-box"><strong>Call 1</strong> — Gemini + SEARCH_TOOL function declaration
 <code>search_spender_specs(query: string)</code>
 contents = [...history.map(role+text), {role:'user', text:userMessage}]
-config: systemInstruction=buildSystemPrompt, tools=[SEARCH_TOOL], temp=1.0, maxTokens=1024</div>
+config: systemInstruction=buildSystemPrompt, tools=[SEARCH_TOOL], temp=1.0, maxTokens=3072, thinkingBudget=1024</div>
     <div class="flow-arrow">↓ ตรวจ response parts</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>
@@ -496,6 +496,7 @@ finishReason=MAX_TOKENS → DEFAULT_REPLY (=[NOT_FOUND])
   </div>
   <div class="tip">(แก้บั๊กแล้ว) <code>&lt;search_tool&gt;</code> template "ค้นเว็บแล้วยังไม่เจอข้อมูล" ใน <span class="file-badge">prompts.ts</span> เดิม hardcode ประโยค "รอแอดมินติดต่อกลับในเวลาทำการ 08:00–17:00 น." ตายตัวทุกช่องทาง (Gemini ใช้ free text นี้เวลาค้นเว็บเจอข้อมูลใกล้เคียงแต่ไม่ตรงเป๊ะ ซึ่งไม่ผ่าน sentinel <code>[NOT_FOUND]</code> เลย ทำให้ FALLBACK_MSG unification ของ Web Chat ดักไม่ได้) ตอนนี้เปลี่ยนเป็น <code>&#36;{handoffMsg}</code> แล้ว (เหมือนจุดอื่นในไฟล์เดียวกัน) — Web Chat จะได้ FALLBACK_MSG ที่ถูกต้อง (เบอร์ติดต่อ @spenderclub) แทน "รอแอดมิน...เวลาทำการ" ของ LINE/FB</div>
   <div class="tip">(แก้บั๊กแล้ว) <code>generateReply()</code> เดิมมี <code>API_ERROR_REPLY</code> (ข้อความ hardcode "น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ") return ตรงๆ ตอน finishReason=MAX_TOKENS หรือข้อความว่างหลัง Call 2 — เป็น literal string ไม่ใช่ sentinel ทำให้ web-chat/route.ts (และ LINE/FB) ดักไม่ได้เลย เปลี่ยนเป็น <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) ทั้งหมดแล้ว ให้ไหลผ่าน NOT_FOUND handling ปกติของแต่ละช่องทาง · <code>API_ERROR_REPLY</code> ยังใช้อยู่เฉพาะใน <code>generateReplyWithImage()</code> (ไม่แตะ ตามจุดห้ามแตะเรื่องรูปภาพ)</div>
+  <div class="tip">(แก้บั๊กแล้ว) root cause ที่แท้จริงของ MAX_TOKENS ที่เจอบ่อย: log จริง (Vercel) เจอ <code>thoughtsTokenCount:921 + candidatesTokenCount:99 ≈ 1024</code> (เพดานเดิม) — Gemini 2.5 Flash "คิด" (thinking) ก่อนตอบ นับรวมอยู่ใน <code>maxOutputTokens</code> เดียวกับข้อความจริง โดย default ไม่ได้จำกัดแยก พอพรอมต์ซับซ้อนขึ้น (recommend_protocol, refinement 2 กรณี, use_case_map ฯลฯ) ยิ่ง "คิด" เยอะจนกิน token เกือบหมดก่อนจะได้เขียนคำตอบ หรือก่อนจะตัดสินใจเรียก search_spender_specs ด้วยซ้ำ → MAX_TOKENS ทั้งที่ไม่เคยค้นเว็บเลย แก้โดยเพิ่ม <code>maxOutputTokens: 3072</code> (จาก 1024) + ตั้ง <code>thinkingConfig: {'{'}thinkingBudget: 1024{'}'}</code> ชัดเจน ไม่ให้ thinking กินโควตาจนไม่เหลือที่เขียนคำตอบ — เฉพาะ <code>generateReply()</code> (text) เท่านั้น ไม่แตะ <code>generateReplyWithImage()</code></div>
 
   <h3 style="margin-top:16px">generateReplyWithImage (3 steps)</h3>
   <div class="card">
@@ -672,7 +673,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
       <div class="const-row"><span class="const-name">Model</span><span class="const-val">gemini-2.5-flash</span></div>
       <div class="const-row"><span class="const-name">Temperature (text)</span><span class="const-val">1.0</span></div>
       <div class="const-row"><span class="const-name">Temperature (OCR)</span><span class="const-val">0</span></div>
-      <div class="const-row"><span class="const-name">Max tokens (text)</span><span class="const-val">1024</span></div>
+      <div class="const-row"><span class="const-name">Max tokens (text)</span><span class="const-val">3072 · thinkingBudget 1024</span></div>
       <div class="const-row"><span class="const-name">Max tokens (OCR extract)</span><span class="const-val">400</span></div>
       <div class="const-row"><span class="const-name">Max tokens (OCR product name)</span><span class="const-val">50</span></div>
       <div class="const-row"><span class="const-name">Serper fetch timeout</span><span class="const-val">5s</span></div>
@@ -691,7 +692,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><th>ไฟล์</th><th>หน้าที่</th><th>Export หลัก</th></tr>
     <tr>
       <td><span class="file-badge">gemini.ts</span></td>
-      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage)</td>
+      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage) · <code>generateReply()</code> ทั้ง 2 calls: maxOutputTokens 1024→3072 + thinkingBudget 1024 กัน thinking กิน token จนตอบไม่ทัน (MAX_TOKENS)</td>
       <td><code>generateReply()</code> <code>generateReplyWithImage()</code></td>
     </tr>
     <tr>

@@ -58,6 +58,7 @@ export async function generateReply(
   ]
 
   // Call 1 — Gemini ตัดสินใจว่าต้องค้นเว็บไหม
+  // maxOutputTokens เพิ่มจาก 1024 + thinkingBudget จำกัดไว้ที่ 1024 กันไม่ให้ "คิด" กินโควตาจนไม่เหลือที่เขียนคำตอบ (MAX_TOKENS)
   const response = await ai.models.generateContent({
     model: MODEL,
     contents,
@@ -66,7 +67,8 @@ export async function generateReply(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tools: [SEARCH_TOOL] as any,
       temperature: 1.0,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 3072,
+      thinkingConfig: { thinkingBudget: 1024 },
     },
   })
 
@@ -116,7 +118,8 @@ export async function generateReply(
       config: {
         systemInstruction: systemPrompt,
         temperature: 1.0,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 3072,
+        thinkingConfig: { thinkingBudget: 1024 },
       },
     })
 
