@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { fetchFAQ } from '@/lib/sheet'
+import { fetchFAQ, findExactMatch } from '@/lib/sheet'
 import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoff, shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
@@ -340,6 +340,15 @@ export async function POST(req: NextRequest) {
               await fbSend(psid, preHandoffQ)
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
               log.info('fb.handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+
+            // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
+            const exactMatch = await findExactMatch(userMessage)
+            if (exactMatch) {
+              await fbSend(psid, exactMatch)
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
+              log.info('fb.exact_match.sent', { userId, latencyMs: Date.now() - startTime })
               return
             }
 

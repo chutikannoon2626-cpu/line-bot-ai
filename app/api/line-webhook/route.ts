@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateSignature, messagingApi } from '@line/bot-sdk'
-import { fetchFAQ } from '@/lib/sheet'
+import { fetchFAQ, findExactMatch } from '@/lib/sheet'
 import { generateReply, generateReplyWithImage } from '@/lib/gemini'
 import { shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
@@ -373,6 +373,15 @@ export async function POST(req: NextRequest) {
             await ans(txt(preHandoffQ))
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
             log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
+            return
+          }
+
+          // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
+          const exactMatch = await findExactMatch(userMessage)
+          if (exactMatch) {
+            await ans(txt(exactMatch))
+            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
+            log.info('exact_match.sent', { userId, latencyMs: Date.now() - startTime })
             return
           }
 

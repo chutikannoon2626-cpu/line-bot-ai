@@ -104,6 +104,7 @@
   <div class="nav-section">Files</div>
   <a class="nav-item" href="#lib-files">lib/ — หน้าที่แต่ละไฟล์</a>
   <a class="nav-item" href="#sheet-format">Google Sheet Format</a>
+  <a class="nav-item" href="#exact-match">Exact Keyword Match</a>
   <a class="nav-item" href="#admin">Admin Pages</a>
 
   <div class="nav-section">Config</div>
@@ -308,6 +309,13 @@
       </div>
     </div>
     <div class="step">
+      <div class="step-num">9b2</div>
+      <div class="step-content">
+        <div class="step-title">Exact Keyword Match (<code>findExactMatch</code>) — ไม่ผ่าน Gemini</div>
+        <div class="step-desc">ตรวจ keyword ตรงชีตแบบ deterministic (2 ชั้น: สั้น+ตรง / ไม่มีคำบ่งบอกความต้องการอื่น) — match เจอ 1 แถวพอดี → ans(คำตอบจาก formatProduct/formatFaq/formatLicense) → saveHistory → return<br>ไม่ match (ไม่เจอ/กำกวม/มีคำอื่นปน) → ไปต่อขั้นถัดไปตามปกติ · ดูรายละเอียดที่หัวข้อ "Exact Keyword Match"</div>
+      </div>
+    </div>
+    <div class="step">
       <div class="step-num">9c</div>
       <div class="step-content">
         <div class="step-title">Order Confirm (<code>ORDER_CONFIRM_RE</code>) — ไม่ผ่าน Gemini</div>
@@ -403,6 +411,7 @@
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
     <div class="step"><div class="step-num">5b</div><div class="step-content"><div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div><div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → fbSend(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return · ไม่ handoff เลย</div></div></div>
     <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoffImmediate || isOwnerRequest ในเวลาทำการ</div><div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" · "ฟ้อง/ร้องเรียน/ไม่พอใจ" · หรือ "ขอเจ้าของ" เฉพาะเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย<br>already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
+    <div class="step"><div class="step-num">5c</div><div class="step-content"><div class="step-title">Exact Keyword Match (<code>findExactMatch</code>) — ไม่ผ่าน Gemini</div><div class="step-desc">ตรวจ keyword ตรงชีตแบบ deterministic (2 ชั้น) — match เจอ 1 แถวพอดี → fbSend(คำตอบ) → saveHistory → return · ไม่ match → ไปต่อตามปกติ · ดูหัวข้อ "Exact Keyword Match"</div></div></div>
     <div class="step"><div class="step-num">6b</div><div class="step-content"><div class="step-title">Order Confirm (<code>ORDER_CONFIRM_RE</code>) — ไม่ผ่าน Gemini</div><div class="step-desc">"สั่งเลย/อยากสั่ง/ต้องการซื้อ/จะซื้อ/สั่งได้ไหม/ซื้อยังไง/โอนเงิน/ชำระเงิน/จ่ายเงิน"<br>นอกเวลาทำการ → fbSend("ขณะนี้อยู่นอกเวลาทำการ...") ทุกครั้ง ไม่กันซ้ำ<br>ในเวลาทำการ → GET <code>order_confirm:fb:{psid}</code>: ไม่มี → SET EX 1200 + fbSend("กรุณารอสักครู่นะคะ") · มีแล้ว → เงียบ</div></div></div>
     <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s · GEMINI_UNAVAILABLE → UNAVAILABLE_MSG</div></div></div>
     <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Handle returns: CANCEL_IMEI · HANDOFF · OUT_OF_DOMAIN · NOT_FOUND · Duplicate</div><div class="step-desc">เหมือน LINE ยกเว้น: ไม่มี takeover key · ใช้ <code>notifyAdminFacebook()</code><br>NOT_FOUND: ตรวจ <code>shouldHandoffDeferred</code> ก่อนเสมอ (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ) — มี trigger → pre_handoff ทันที (ข้าม retry) · ไม่มี → retry 2 รอบตามปกติ</div></div></div>
@@ -456,6 +465,7 @@ NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
     <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('web')</code> → "นอกเวลาทำการ ... inbox Facebook ได้เลย" <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span></div></div></div>
     <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Load History + Log + FAQ</div><div class="step-desc">GET <code>webchat:hist:{sessionId}</code> · logChat(user) · fetchFAQ()</div></div></div>
     <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">shouldHandoff</div><div class="step-desc">keyword match (<code>lib/handoff.ts</code>) ไม่มี counter · ตรงคำ → saveHistory + return FALLBACK_MSG ทุกครั้ง</div></div></div>
+    <div class="step"><div class="step-num">9b</div><div class="step-content"><div class="step-title">Exact Keyword Match (<code>findExactMatch</code>)</div><div class="step-desc">ตรวจ keyword ตรงชีตแบบ deterministic (2 ชั้น) — match เจอ 1 แถวพอดี → saveHistory + return คำตอบ <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span> ไม่ผ่าน Gemini · ไม่ match → ไปต่อตามปกติ · ดูหัวข้อ "Exact Keyword Match"</div></div></div>
     <div class="step"><div class="step-num">10</div><div class="step-content"><div class="step-title">Order Intent</div><div class="step-desc">regex <code>ORDER_RE</code> (อยากสั่ง/จะซื้อ/โอนเงิน ฯลฯ) → saveHistory + return FALLBACK_MSG ทันที ไม่ผ่าน Gemini</div></div></div>
     <div class="step"><div class="step-num">11</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s</div><div class="step-desc"><code>generateReply(message, faq, history, FALLBACK_MSG)</code></div></div></div>
     <div class="step"><div class="step-num">12</div><div class="step-content"><div class="step-title">Handle Gemini Returns</div><div class="step-desc">
@@ -720,8 +730,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">sheet.ts</span></td>
-      <td>Fetch CSV · parse 12-col Row (แก้จาก 13 คอลัมน์แล้ว — เอา stock ที่ไม่มีจริงในชีตออก) · 3 types: product/faq/license · license map lookup (license_required/license_ref อ่าน index ถูกต้องแล้ว) · in-memory cache 60s + stale fallback · custom CSV parser รองรับ quoted newlines</td>
-      <td><code>fetchFAQ()</code></td>
+      <td>Fetch CSV · parse 12-col Row (แก้จาก 13 คอลัมน์แล้ว — เอา stock ที่ไม่มีจริงในชีตออก) · 3 types: product/faq/license · license map lookup (license_required/license_ref อ่าน index ถูกต้องแล้ว) · cache เก็บทั้ง text + rows + licenseMap · in-memory cache 60s + stale fallback · custom CSV parser รองรับ quoted newlines · <code>findExactMatch()</code> ทางลัดก่อน Gemini (ดูหัวข้อ Exact Keyword Match)</td>
+      <td><code>fetchFAQ()</code> <code>findExactMatch()</code></td>
     </tr>
     <tr>
       <td><span class="file-badge">handoff.ts</span></td>
@@ -801,6 +811,38 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
 [category] keywords → answer ข้อมูลเพิ่มเติม: url</pre>
   </div>
   <div class="tip">เรื่องสินค้าหมด: ไม่ track ใน Google Sheet ตั้งใจ — ให้แอดมินตอบลูกค้าเรื่องสต๊อกเองแทน ไม่ใช่หน้าที่ของบอท</div>
+</div>
+
+<!-- ─── EXACT MATCH ─── -->
+<div class="section" id="exact-match">
+  <h2>⚡ Exact Keyword Match — ทางลัดก่อน Gemini</h2>
+  <div class="tip">ไฟล์: <span class="file-badge">lib/sheet.ts</span> · <code>findExactMatch()</code> · ใช้เหมือนกันทั้ง 3 ช่องทาง (LINE / Facebook / Web Chat) เช็คก่อนเรียก Gemini ทุกครั้ง</div>
+  <div class="card">
+    <div class="flow-box"><strong>ชั้นที่ 1 — ต้องสั้นและตรง keyword ชัดเจน</strong>
+ข้อความ (lowercase, trim) ยาวไม่เกิน 40 ตัวอักษร
+มี keyword (จากคอลัมน์ keywords คั่นด้วย comma) เป็น substring ของข้อความ
+ความยาวข้อความต้องไม่เกิน keyword ที่ match + 15 ตัวอักษร (กันข้อความยาวที่มีบริบทอื่นปน)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-box"><strong>ชั้นที่ 2 — ต้องไม่มีคำที่บ่งบอกความต้องการอื่น (BLOCK_INTENT_RE)</strong>
+<code>เสีย|ซ่อม|พัง|ปัญหา|เคลม|ต่างกัน|เปรียบเทียบ|ดีกว่า|ไม่เอา|ไม่ใช่|ยกเลิก|แนะนำ|งบ|เหมาะกับ</code>
+เจอคำกลุ่มนี้ → return null ทันที (ยกให้ Gemini ตัดสินใจเต็มรูปแบบ ไม่เสี่ยงตอบผิดบริบท)</div>
+    <div class="flow-arrow">↓ ผ่านทั้ง 2 ชั้น</div>
+    <div class="flow-box"><strong>เช็คจำนวน row ที่ match</strong>
+match = 0 แถว → null (ไม่เจอ ปล่อย Gemini)
+match ≥ 2 แถว → null (กำกวม เช่น "245" ตรงหลายรุ่น → ปล่อย Gemini ถามยืนยันรุ่นตามปกติ)
+match = 1 แถวพอดี → ตอบทันทีด้วย <code>formatProduct()</code>/<code>formatFaq()</code>/<code>formatLicense()</code> เดิม (ฟังก์ชันเดียวกับที่ build FAQ text ให้ Gemini) — <strong>ไม่เรียก Gemini เลย</strong></div>
+  </div>
+  <div class="tip">ทดสอบกับชีตจริงแล้ว (2026-07-04): "TC-11HW" / "มีรุ่น11HW ไหมคะ" → match ตอบทันที · "TC-11HW เสียซ่อมยังไง" / "...ต่างกันยังไง" / "แนะนำ..." / "ไม่เอา..." → block ถูกต้อง (ไม่ match) · "245" (กำกวม) → null ถูกต้อง</div>
+  <div class="card" style="margin-top:10px">
+    <div class="card-title">จุดที่เรียกใช้ (เหมือนกันทั้ง 3 ไฟล์ — ก่อน fetchFAQ()/generateReply() เสมอ)</div>
+    <pre>const exactMatch = await findExactMatch(userMessage)
+if (exactMatch) {
+  ans/fbSend/json(exactMatch)
+  saveHistory(...)
+  return   // ไม่ไปแตะ Gemini / handoff / FALLBACK_MSG เลย
+}
+// ไม่ match → โค้ดเดิมทั้งหมดทำงานเหมือนเดิม (shouldHandoff, ORDER_CONFIRM_RE, generateReply ฯลฯ)</pre>
+  </div>
 </div>
 
 <!-- ─── ADMIN PAGES ─── -->

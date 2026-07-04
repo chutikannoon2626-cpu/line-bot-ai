@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { fetchFAQ } from '@/lib/sheet'
+import { fetchFAQ, findExactMatch } from '@/lib/sheet'
 import { generateReply } from '@/lib/gemini'
 import { shouldHandoff } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
@@ -179,6 +179,14 @@ export async function POST(req: NextRequest) {
       await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
       log.info('webchat.handoff', { userId })
       return json({ reply: FALLBACK_MSG }, cors)
+    }
+
+    // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
+    const exactMatch = await findExactMatch(message)
+    if (exactMatch) {
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: exactMatch }])
+      log.info('webchat.exact_match', { userId })
+      return json({ reply: await withContactSuffix(sessionId, exactMatch) }, cors)
     }
 
     // Case 2: ลูกค้าแสดงเจตนาสั่งซื้อชัดเจน → ตอบทันที ไม่ผ่าน Gemini

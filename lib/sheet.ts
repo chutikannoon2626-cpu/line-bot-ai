@@ -1,34 +1,3 @@
-let cache: { text: string; expiresAt: number } | null = null
-const CACHE_TTL_MS = 60_000
-
-export async function fetchFAQ(): Promise<string> {
-  const now = Date.now()
-  if (cache && cache.expiresAt > now) return cache.text
-
-  try {
-    const url = process.env.SHEET_CSV_URL
-    if (!url) throw new Error('SHEET_CSV_URL not set')
-
-    const res = await fetch(url, {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(3000),
-    })
-    if (!res.ok) throw new Error(`sheet fetch ${res.status}`)
-
-    const csv = await res.text()
-    const text = csvToFaqText(csv)
-
-    cache = { text, expiresAt: now + CACHE_TTL_MS }
-    return text
-  } catch (err) {
-    if (cache) {
-      console.warn('[sheet] fetch failed · serving stale cache', err)
-      return cache.text
-    }
-    throw err
-  }
-}
-
 // --- Types ---
 type Row = {
   id: string
@@ -46,12 +15,80 @@ type Row = {
 }
 
 type LicenseInfo = { answer: string; url: string }
+type Sheet = { text: string; rows: Row[]; licenseMap: Map<string, LicenseInfo>; expiresAt: number }
 
-// --- Main parser ---
-function csvToFaqText(csv: string): string {
+let cache: Sheet | null = null
+const CACHE_TTL_MS = 60_000
+
+async function loadSheet(): Promise<Sheet> {
+  const now = Date.now()
+  if (cache && cache.expiresAt > now) return cache
+
+  try {
+    const url = process.env.SHEET_CSV_URL
+    if (!url) throw new Error('SHEET_CSV_URL not set')
+
+    const res = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(3000),
+    })
+    if (!res.ok) throw new Error(`sheet fetch ${res.status}`)
+
+    const csv = await res.text()
+    const rows = parseRows(csv)
+    const licenseMap = buildLicenseMap(rows)
+    const text = rowsToFaqText(rows, licenseMap)
+
+    cache = { text, rows, licenseMap, expiresAt: now + CACHE_TTL_MS }
+    return cache
+  } catch (err) {
+    if (cache) {
+      console.warn('[sheet] fetch failed · serving stale cache', err)
+      return cache
+    }
+    throw err
+  }
+}
+
+export async function fetchFAQ(): Promise<string> {
+  const sheet = await loadSheet()
+  return sheet.text
+}
+
+// --- Exact keyword match — ทางลัดก่อน Gemini เฉพาะคำถามง่ายและชัดเจนจริงๆ เท่านั้น ---
+// กันเข้าใจผิดบริบท: ต้องผ่านทั้ง 2 ชั้น (สั้น+ตรง keyword และ ไม่มีคำที่บ่งบอกความต้องการอื่น)
+const BLOCK_INTENT_RE = /เสีย|ซ่อม|พัง|ปัญหา|เคลม|ต่างกัน|เปรียบเทียบ|ดีกว่า|ไม่เอา|ไม่ใช่|ยกเลิก|แนะนำ|งบ|เหมาะกับ/u
+const MAX_EXTRA_CHARS = 15 // ข้อความยาวกว่า keyword ที่ match ได้ไม่เกินกี่ตัวอักษร ถึงจะถือว่า "คำถามง่าย"
+
+export async function findExactMatch(userMessage: string): Promise<string | null> {
+  const msg = userMessage.trim().toLowerCase()
+  if (!msg || msg.length > 40) return null   // ยาวเกินไป ไม่ใช่คำถามง่าย
+  if (BLOCK_INTENT_RE.test(msg)) return null  // มีคำที่บ่งบอกความต้องการอื่น (ซ่อม/เปรียบเทียบ/ปฏิเสธ/แนะนำ ฯลฯ)
+
+  try {
+    const { rows, licenseMap } = await loadSheet()
+
+    const matches = rows.filter((row) => {
+      if (!row.keywords || !row.answer) return false
+      const keywords = row.keywords.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean)
+      return keywords.some((k) => msg.includes(k) && msg.length <= k.length + MAX_EXTRA_CHARS)
+    })
+
+    if (matches.length !== 1) return null // ไม่เจอ หรือเจอหลายรุ่น (กำกวม) → ปล่อยให้ Gemini จัดการ
+
+    const row = matches[0]
+    if (row.type === 'product') return formatProduct(row, licenseMap)
+    if (row.type === 'faq')     return formatFaq(row)
+    if (row.type === 'license') return formatLicense(row)
+  } catch { /* sheet โหลดไม่ได้ — ปล่อยผ่านไป Gemini ตามปกติ */ }
+
+  return null
+}
+
+// --- Parse CSV rows into structured Row[] ---
+function parseRows(csv: string): Row[] {
   const rawRows = parseCsvRows(csv).slice(1) // skip header
-
-  const rows: Row[] = rawRows.map((cols) => ({
+  return rawRows.map((cols) => ({
     id:               cols[0]  ?? '',
     type:             cols[1]  ?? '',
     category:         cols[2]  ?? '',
@@ -65,18 +102,21 @@ function csvToFaqText(csv: string): string {
     license_required: cols[10] ?? '',
     license_ref:      cols[11] ?? '',
   }))
+}
 
-  // Build license lookup: id → {answer, url}
+// --- Build license lookup: id → {answer, url} ---
+function buildLicenseMap(rows: Row[]): Map<string, LicenseInfo> {
   const licenseMap = new Map<string, LicenseInfo>()
   for (const r of rows) {
     if (r.type === 'license' && r.id) {
-      licenseMap.set(r.id, {
-        answer: clean(r.answer),
-        url: r.url,
-      })
+      licenseMap.set(r.id, { answer: clean(r.answer), url: r.url })
     }
   }
+  return licenseMap
+}
 
+// --- Build full FAQ text (embedded into Gemini prompt) ---
+function rowsToFaqText(rows: Row[], licenseMap: Map<string, LicenseInfo>): string {
   return rows
     .map((row) => {
       if (!row.keywords || !row.answer) return null
