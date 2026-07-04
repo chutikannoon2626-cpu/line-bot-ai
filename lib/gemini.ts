@@ -126,8 +126,8 @@ export async function generateReply(
       latencyMs: Date.now() - startTime, finishReason: finishReason2, query,
     }))
 
-    if (finishReason2 === 'MAX_TOKENS') return API_ERROR_REPLY
-    return finalResponse.text?.trim() || API_ERROR_REPLY
+    if (finishReason2 === 'MAX_TOKENS') return DEFAULT_REPLY
+    return finalResponse.text?.trim() || DEFAULT_REPLY
   }
 
   const usage = response.usageMetadata
@@ -142,7 +142,7 @@ export async function generateReply(
     totalTokenCount: usage?.totalTokenCount ?? 0,
   }))
 
-  if (finishReason === 'MAX_TOKENS') return API_ERROR_REPLY
+  if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
   return response.text?.trim() || DEFAULT_REPLY
 }
 

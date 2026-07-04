@@ -475,7 +475,7 @@ config: systemInstruction=buildSystemPrompt, tools=[SEARCH_TOOL], temp=1.0, maxT
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>
         <div class="badge badge-green" style="margin-bottom:6px">ไม่มี functionCall</div>
-        <div class="flow-box" style="font-size:11px">Gemini ตอบจาก FAQ/prompt โดยตรง<br>finishReason=MAX_TOKENS → API_ERROR_REPLY<br>→ return response.text.trim()</div>
+        <div class="flow-box" style="font-size:11px">Gemini ตอบจาก FAQ/prompt โดยตรง<br>finishReason=MAX_TOKENS → DEFAULT_REPLY (=[NOT_FOUND])<br>→ return response.text.trim()</div>
       </div>
       <div>
         <div class="badge badge-orange" style="margin-bottom:6px">functionCall: search_spender_specs</div>
@@ -491,10 +491,11 @@ config: systemInstruction=buildSystemPrompt, tools=[SEARCH_TOOL], temp=1.0, maxT
     <div class="flow-box"><strong>Call 2</strong> — ส่ง functionResponse กลับ Gemini
 contents = [..., {role:'model', fcPart}, {role:'user', functionResponse:{name, response:{content, url}}}]
 search ล้มเหลว → content='ไม่พบข้อมูลจากการค้นหา'
-finishReason=MAX_TOKENS → API_ERROR_REPLY
+finishReason=MAX_TOKENS → DEFAULT_REPLY (=[NOT_FOUND])
 → return finalResponse.text.trim()</div>
   </div>
   <div class="tip">(แก้บั๊กแล้ว) <code>&lt;search_tool&gt;</code> template "ค้นเว็บแล้วยังไม่เจอข้อมูล" ใน <span class="file-badge">prompts.ts</span> เดิม hardcode ประโยค "รอแอดมินติดต่อกลับในเวลาทำการ 08:00–17:00 น." ตายตัวทุกช่องทาง (Gemini ใช้ free text นี้เวลาค้นเว็บเจอข้อมูลใกล้เคียงแต่ไม่ตรงเป๊ะ ซึ่งไม่ผ่าน sentinel <code>[NOT_FOUND]</code> เลย ทำให้ FALLBACK_MSG unification ของ Web Chat ดักไม่ได้) ตอนนี้เปลี่ยนเป็น <code>&#36;{handoffMsg}</code> แล้ว (เหมือนจุดอื่นในไฟล์เดียวกัน) — Web Chat จะได้ FALLBACK_MSG ที่ถูกต้อง (เบอร์ติดต่อ @spenderclub) แทน "รอแอดมิน...เวลาทำการ" ของ LINE/FB</div>
+  <div class="tip">(แก้บั๊กแล้ว) <code>generateReply()</code> เดิมมี <code>API_ERROR_REPLY</code> (ข้อความ hardcode "น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ") return ตรงๆ ตอน finishReason=MAX_TOKENS หรือข้อความว่างหลัง Call 2 — เป็น literal string ไม่ใช่ sentinel ทำให้ web-chat/route.ts (และ LINE/FB) ดักไม่ได้เลย เปลี่ยนเป็น <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) ทั้งหมดแล้ว ให้ไหลผ่าน NOT_FOUND handling ปกติของแต่ละช่องทาง · <code>API_ERROR_REPLY</code> ยังใช้อยู่เฉพาะใน <code>generateReplyWithImage()</code> (ไม่แตะ ตามจุดห้ามแตะเรื่องรูปภาพ)</div>
 
   <h3 style="margin-top:16px">generateReplyWithImage (3 steps)</h3>
   <div class="card">
@@ -536,9 +537,18 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
   <div class="card">
     <div class="flow-box">ลูกค้าส่งข้อความสั้น เช่น "ใช้ในร้านอาหาร" หลังบอทแนะนำรุ่นไปแล้ว</div>
     <div class="flow-arrow">↓ Gemini อ่าน prompt step 2.5 ก่อน step 3–6</div>
-    <div class="flow-box">ตรวจ history → filter รุ่นที่แนะนำไว้ → ตอบจาก history (ห้าม search ซ้ำ)
-ถ้า history ไม่มีคำตอบ → ค้น FAQ / เรียก search ตามปกติ</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
+      <div>
+        <div class="badge badge-green" style="margin-bottom:6px">history มีสินค้าที่เคยแนะนำแล้ว</div>
+        <div class="flow-box" style="font-size:11px">filter รุ่นที่ตรงเงื่อนไขใหม่ → ตอบจาก history ห้าม search ซ้ำ</div>
+      </div>
+      <div>
+        <div class="badge badge-orange" style="margin-bottom:6px">history ไม่มีสินค้าที่เคยแนะนำเลย</div>
+        <div class="flow-box" style="font-size:11px">กลับไปทำ &lt;recommend_protocol&gt; ใหม่ตั้งแต่ชั้นที่ 1 ทันที (รวมเงื่อนไขนี้เป็นความต้องการ) ห้ามตอบ default_reply เองโดยไม่ค้นก่อน</div>
+      </div>
+    </div>
   </div>
+  <div class="warn">(แก้บั๊กแล้ว) เดิม step 2.5 ไม่มีกฎรองรับกรณี "history ไม่มีสินค้าที่เคยแนะนำเลย" (เช่น ข้อความก่อนหน้าเป็นแค่คำถามถามลักษณะการใช้งานจากชั้น 1+2 ที่หาไม่เจอ ยังไม่เคยแนะนำสินค้าจริง) — Gemini เจอคำตอบตัวอย่างในกฎ ("ใช้ในร้านอาหาร") ตรงกับข้อความลูกค้าเป๊ะ เข้าใจผิดว่าต้อง filter จาก history ที่ว่างเปล่า แล้วตอบ NOT_FOUND ไปเลยโดยไม่เรียก search_spender_specs เพิ่มกฎ (2) ให้ชัดแล้วว่าต้องกลับไปทำ recommend_protocol ใหม่ในกรณีนี้</div>
 </div>
 
 <!-- ─── REDIS KEYS ─── -->
@@ -680,12 +690,12 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><th>ไฟล์</th><th>หน้าที่</th><th>Export หลัก</th></tr>
     <tr>
       <td><span class="file-badge">gemini.ts</span></td>
-      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step</td>
+      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage)</td>
       <td><code>generateReply()</code> <code>generateReplyWithImage()</code></td>
     </tr>
     <tr>
       <td><span class="file-badge">prompts.ts</span></td>
-      <td>buildSystemPrompt รวม: hallucination guard, recommend_protocol (2-tier), use_case_map, reasoning_protocol (step 2.5 refinement detection) · search_tool "ค้นเว็บไม่เจอ" ใช้ <code>&#36;{handoffMsg}</code> แบบไดนามิกตามช่องทาง (ไม่ hardcode ข้อความ LINE/FB แล้ว)</td>
+      <td>buildSystemPrompt รวม: hallucination guard, recommend_protocol (2-tier), use_case_map, reasoning_protocol (step 2.5 refinement detection — แก้แล้วให้กลับไป recommend_protocol ใหม่ถ้า history ไม่มีสินค้าที่เคยแนะนำ) · search_tool "ค้นเว็บไม่เจอ" ใช้ <code>&#36;{handoffMsg}</code> แบบไดนามิกตามช่องทาง (ไม่ hardcode ข้อความ LINE/FB แล้ว)</td>
       <td><code>buildSystemPrompt()</code></td>
     </tr>
     <tr>
