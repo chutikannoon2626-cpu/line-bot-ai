@@ -308,6 +308,16 @@
       </div>
     </div>
     <div class="step">
+      <div class="step-num">9c</div>
+      <div class="step-content">
+        <div class="step-title">Order Confirm (<code>ORDER_CONFIRM_RE</code>) — ไม่ผ่าน Gemini</div>
+        <div class="step-desc">"สั่งเลย/อยากสั่ง/ต้องการซื้อ/จะซื้อ/สั่งได้ไหม/ซื้อยังไง/โอนเงิน/ชำระเงิน/จ่ายเงิน" →
+          <div class="indent"><span class="flow-no">นอกเวลาทำการ</span> (≥18 หรือ &lt;8): ans("ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการ...") → saveHistory → return ทุกครั้ง ไม่กันซ้ำ</div>
+          <div class="indent"><span class="flow-yes">ในเวลาทำการ</span>: GET <code>order_confirm:{userId}</code> · ไม่มี → SET EX 1200 (20min) → ans("กรุณารอสักครู่นะคะ") → saveHistory → return<br>มีแล้ว (ยังไม่ครบ 20 นาที) → เงียบ ไม่ตอบซ้ำ → return</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
       <div class="step-num">10</div>
       <div class="step-content">
         <div class="step-title">🤖 Gemini Reply</div>
@@ -393,6 +403,7 @@
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
     <div class="step"><div class="step-num">5b</div><div class="step-content"><div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div><div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → fbSend(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return · ไม่ handoff เลย</div></div></div>
     <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoffImmediate || isOwnerRequest ในเวลาทำการ</div><div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" · "ฟ้อง/ร้องเรียน/ไม่พอใจ" · หรือ "ขอเจ้าของ" เฉพาะเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย<br>already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
+    <div class="step"><div class="step-num">6b</div><div class="step-content"><div class="step-title">Order Confirm (<code>ORDER_CONFIRM_RE</code>) — ไม่ผ่าน Gemini</div><div class="step-desc">"สั่งเลย/อยากสั่ง/ต้องการซื้อ/จะซื้อ/สั่งได้ไหม/ซื้อยังไง/โอนเงิน/ชำระเงิน/จ่ายเงิน"<br>นอกเวลาทำการ → fbSend("ขณะนี้อยู่นอกเวลาทำการ...") ทุกครั้ง ไม่กันซ้ำ<br>ในเวลาทำการ → GET <code>order_confirm:fb:{psid}</code>: ไม่มี → SET EX 1200 + fbSend("กรุณารอสักครู่นะคะ") · มีแล้ว → เงียบ</div></div></div>
     <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s · GEMINI_UNAVAILABLE → UNAVAILABLE_MSG</div></div></div>
     <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Handle returns: CANCEL_IMEI · HANDOFF · OUT_OF_DOMAIN · NOT_FOUND · Duplicate</div><div class="step-desc">เหมือน LINE ยกเว้น: ไม่มี takeover key · ใช้ <code>notifyAdminFacebook()</code><br>NOT_FOUND: ตรวจ <code>shouldHandoffDeferred</code> ก่อนเสมอ (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ) — มี trigger → pre_handoff ทันที (ข้าม retry) · ไม่มี → retry 2 รอบตามปกติ</div></div></div>
     <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">fbSendReply(psid, reply)</div><div class="step-desc">ตรวจ URL <code>spenderclub.com</code> ใน reply → มี: Generic Template Card (title+subtitle+2 ปุ่ม) · ไม่มี: plain text<br>saveHistory · log · zincrby question_freq</div></div></div>
@@ -572,6 +583,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>handoff_notified:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>นับแจ้งแอดมิน: count=1 reply count≥2 เงียบ</td></tr>
     <tr><td><code>nonsense_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD counter · ≤1=reply ≥2=เงียบ</td></tr>
     <tr><td><code>retry:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">600s</span></td><td>NOT_FOUND: ไม่มี=retryMsg+log / มี=handoffMsg</td></tr>
+    <tr><td><code>order_confirm:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">1200s</span></td><td>กันตอบ "กรุณารอสักครู่นะคะ" ซ้ำ (เฉพาะในเวลาทำการ)</td></tr>
     <tr><td><code>last_answer:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>ป้องกัน duplicate reply</td></tr>
     <tr><td><code>repeat_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Duplicate counter: 1=reminder 2+=เงียบ</td></tr>
     <tr><td><code>history:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s</span></td><td>Conversation turns max 6 (lib/history.ts)</td></tr>
@@ -589,6 +601,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>handoff_notified:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>นับแจ้งแอดมิน FB</td></tr>
     <tr><td><code>nonsense_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD counter FB</td></tr>
     <tr><td><code>retry:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">600s</span></td><td>NOT_FOUND retry FB</td></tr>
+    <tr><td><code>order_confirm:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">1200s</span></td><td>กันตอบ "กรุณารอสักครู่นะคะ" ซ้ำ FB (เฉพาะในเวลาทำการ)</td></tr>
     <tr><td><code>last_answer:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress FB</td></tr>
     <tr><td><code>repeat_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Repeat counter FB</td></tr>
     <tr><td><code>history:fb:{psid}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s</span></td><td>Conversation history FB (lib/history.ts)</td></tr>

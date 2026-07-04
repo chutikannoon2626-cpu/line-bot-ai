@@ -28,6 +28,12 @@ const NONSENSE_TTL = 10 * 60
 const OFF_HOURS_NOTICE =
   'ขณะนี้อยู่นอกเวลาทำการ แอดมินจะตอบกลับในเวลาทำการ 08:00–17:00 น. ค่ะ 🙏\nระหว่างนี้น้องใจดีช่วยดูแลก่อนนะคะ'
 
+// ลูกค้ายืนยันสั่งซื้อ (เช่น "สั่งเลยค่ะ" หลังบอทเสนอราคา) — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
+const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
+const ORDER_CONFIRM_RE = /สั่งเลย|อยากสั่ง|ต้องการซื้อ|จะซื้อ|สั่งได้ไหม|ซื้อยังไง|โอนเงิน|ชำระเงิน|จ่ายเงิน/u
+const ORDER_CONFIRM_WAIT_MSG = 'กรุณารอสักครู่นะคะ'
+const ORDER_CONFIRM_OFF_HOURS_MSG = 'ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการในช่วงเวลา 08:00–17:00 น. นะคะ'
+
 function getHandoffMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
   return thaiHour >= 18 || thaiHour < 8
@@ -367,6 +373,35 @@ export async function POST(req: NextRequest) {
             await ans(txt(preHandoffQ))
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
             log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
+            return
+          }
+
+          // ลูกค้ายืนยันสั่งซื้อ — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
+          if (ORDER_CONFIRM_RE.test(userMessage)) {
+            const isOffHours = thaiHour >= 18 || thaiHour < 8
+            if (isOffHours) {
+              await ans(txt(ORDER_CONFIRM_OFF_HOURS_MSG))
+              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_OFF_HOURS_MSG }])
+              log.info('order_confirm.off_hours', { userId })
+              return
+            }
+
+            let alreadyReplied = false
+            try {
+              alreadyReplied = !!(await redis.get(`order_confirm:${userId}`))
+            } catch { /* Redis ล่ม */ }
+
+            if (alreadyReplied) {
+              log.info('order_confirm.suppressed', { userId })
+              return
+            }
+
+            try {
+              await redis.set(`order_confirm:${userId}`, '1', { ex: ORDER_CONFIRM_TTL })
+            } catch { /* Redis ล่ม */ }
+            await ans(txt(ORDER_CONFIRM_WAIT_MSG))
+            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_WAIT_MSG }])
+            log.info('order_confirm.wait_reply', { userId })
             return
           }
 
