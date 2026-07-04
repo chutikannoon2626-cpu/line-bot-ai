@@ -720,7 +720,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">sheet.ts</span></td>
-      <td>Fetch CSV · parse 13-col Row · 3 types: product/faq/license · license map lookup · in-memory cache 60s + stale fallback · custom CSV parser รองรับ quoted newlines</td>
+      <td>Fetch CSV · parse 12-col Row (แก้จาก 13 คอลัมน์แล้ว — เอา stock ที่ไม่มีจริงในชีตออก) · 3 types: product/faq/license · license map lookup (license_required/license_ref อ่าน index ถูกต้องแล้ว) · in-memory cache 60s + stale fallback · custom CSV parser รองรับ quoted newlines</td>
       <td><code>fetchFAQ()</code></td>
     </tr>
     <tr>
@@ -768,8 +768,9 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
 
 <!-- ─── SHEET FORMAT ─── -->
 <div class="section" id="sheet-format">
-  <h2>📊 Google Sheet Format (CSV 13 columns)</h2>
+  <h2>📊 Google Sheet Format (CSV 12 columns)</h2>
   <div class="tip">ไฟล์: <span class="file-badge">lib/sheet.ts</span> · custom CSV parser รองรับ quoted fields ที่มี newline · skip header row</div>
+  <div class="warn">(แก้บั๊กแล้ว) เดิม <code>Row</code> type มีฟิลด์ <code>stock</code> ที่ตำแหน่ง col 10 ทั้งที่ชีตจริงไม่เคยมีคอลัมน์นี้เลย (เจ้าของตั้งใจไม่ใส่ เพราะให้แอดมินตอบเรื่องสต๊อกเอง) — ทำให้ <code>license_required</code>/<code>license_ref</code> อ่านผิดคอลัมน์เลื่อนไป 1 ตำแหน่งมาตลอด (`license_required` ดันอ่านค่า license_ref, `license_ref` อ่านค่าว่าง) บรรทัด LICENSE ในข้อมูลสินค้าที่ส่งให้ Gemini เลยเป็น "-" เสมอทุกรุ่น ตอนนี้แก้ index ให้ตรงกับชีตจริง 12 คอลัมน์แล้ว (เอา stock ออก เลื่อน license_required/license_ref ขึ้นมาคนละ 1 ตำแหน่ง) และเอา logic ตรวจ <code>[OUT_OF_STOCK]</code> ออกด้วย (ไม่มีข้อมูล stock ให้เช็คอยู่แล้ว)</div>
   <table>
     <tr><th>Col</th><th>Field</th><th>Row type</th><th>หน้าที่</th></tr>
     <tr><td>0</td><td><code>id</code></td><td>product, license</td><td>reference key (license_ref lookup)</td></tr>
@@ -782,9 +783,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td>7</td><td><code>model_code</code></td><td>product</td><td>รหัสรุ่น</td></tr>
     <tr><td>8</td><td><code>price</code></td><td>product</td><td>ราคาหน่วย (- = ไม่แสดง)</td></tr>
     <tr><td>9</td><td><code>price_pack</code></td><td>product</td><td>ราคาแพ็ก / โปรโมชั่น (- = ไม่แสดง)</td></tr>
-    <tr><td>10</td><td><code>stock</code></td><td>product</td><td><code>out</code> → OUT_OF_STOCK template แทน price+info</td></tr>
-    <tr><td>11</td><td><code>license_required</code></td><td>product</td><td><code>ไม่ต้องขอ</code> / <code>ต้องขอ</code></td></tr>
-    <tr><td>12</td><td><code>license_ref</code></td><td>product</td><td>id ของ license row ที่จะ join รายละเอียดใบอนุญาต</td></tr>
+    <tr><td>10</td><td><code>license_required</code></td><td>product</td><td><code>ไม่ต้องขอ</code> / <code>ต้องขอ</code></td></tr>
+    <tr><td>11</td><td><code>license_ref</code></td><td>product</td><td>id ของ license row ที่จะ join รายละเอียดใบอนุญาต</td></tr>
   </table>
   <div class="card" style="margin-top:10px">
     <div class="card-title">Output ที่ buildSystemPrompt ส่งให้ Gemini</div>
@@ -796,13 +796,11 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
   ดูรายละเอียด/ราคาล่าสุด: https://...
   CTA: ลูกค้าสนใจสั่งเลยไหมคะ?
 
-[สินค้า] Spender XX OUT_OF_STOCK | keywords
-→ [OUT_OF_STOCK] XX ตอนนี้ของหมดชั่วคราวค่ะ สอบถามคิวกับแอดมิน / ดูรุ่นใกล้เคียง: url
-
 [ใบอนุญาต] keywords → answer ดูขั้นตอน: url
 
 [category] keywords → answer ข้อมูลเพิ่มเติม: url</pre>
   </div>
+  <div class="tip">เรื่องสินค้าหมด: ไม่ track ใน Google Sheet ตั้งใจ — ให้แอดมินตอบลูกค้าเรื่องสต๊อกเองแทน ไม่ใช่หน้าที่ของบอท</div>
 </div>
 
 <!-- ─── ADMIN PAGES ─── -->

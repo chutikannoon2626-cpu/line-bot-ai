@@ -41,7 +41,6 @@ type Row = {
   model_code: string
   price: string
   price_pack: string
-  stock: string
   license_required: string
   license_ref: string
 }
@@ -63,9 +62,8 @@ function csvToFaqText(csv: string): string {
     model_code:       cols[7]  ?? '',
     price:            cols[8]  ?? '',
     price_pack:       cols[9]  ?? '',
-    stock:            cols[10] ?? '',
-    license_required: cols[11] ?? '',
-    license_ref:      cols[12] ?? '',
+    license_required: cols[10] ?? '',
+    license_ref:      cols[11] ?? '',
   }))
 
   // Build license lookup: id → {answer, url}
@@ -107,14 +105,6 @@ function formatFaq(row: Row): string {
 // --- Format Product row ---
 function formatProduct(row: Row, licenseMap: Map<string, LicenseInfo>): string {
   const name = `${row.brand} ${row.model_code}`.trim()
-
-  // Out of stock
-  if (row.stock === 'out') {
-    const fallbackUrl = row.url || 'https://www.spenderclub.com'
-    return `[สินค้า] ${name} | ${row.keywords}
-→ [OUT_OF_STOCK] ${name} ตอนนี้ของหมดชั่วคราวค่ะ 🙏
-  รบกวนสอบถามคิวสินค้าเข้ากับแอดมิน หรือดูรุ่นใกล้เคียงได้ที่ ${fallbackUrl}`
-  }
 
   // Price
   let priceText = ''
