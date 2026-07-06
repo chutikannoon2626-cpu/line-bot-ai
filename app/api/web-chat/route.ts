@@ -23,13 +23,12 @@ const LAST_ANSWER_TTL = 2 * 60
 // fallback ทุกกรณีที่ Web Chat ตอบไม่ได้
 const FALLBACK_MSG = 'รบกวนสอบถามรายละเอียดเพิ่มเติมได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
 
-// Purchase intent
-const BUY_SUFFIX = '\n\nสนใจสั่งซื้อติดต่อได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
 const ORDER_RE = /อยากสั่ง|ต้องการซื้อ|จะซื้อ|สั่งได้ไหม|ซื้อยังไง|โอนเงิน|ชำระเงิน|จ่ายเงิน/u
 
-// Contact suffix — ต่อท้ายข้อความแรกที่บอทตอบใน session เท่านั้น
+// Contact suffix — ข้อความเดียวใช้ทั้ง 2 กรณี: ต่อท้ายข้อความแรกของ session (ไม่มีราคา)
+// และต่อท้ายทุกครั้งที่คำตอบมีราคา (บาท) — ดู withSuffix()
 // (ไม่ต่อท้าย FALLBACK_MSG เพราะมีเบอร์ติดต่อฝังอยู่แล้ว)
-const CONTACT_SUFFIX    = '\n\nสนใจสอบถามเพิ่มเติมติดต่อได้ที่ @spenderclub โทร 085-222-9111 ค่ะ'
+const CONTACT_SUFFIX    = '\n\nสอบถามรายละเอียดเพิ่มเติมติดต่อได้ที่\nแอดไลน์ @spenderclub\nเบอร์โทรติดต่อ: 085-222-9111, 089-661-2682\nจันทร์–เสาร์ เวลา 08:00–17:00 น.ค่ะ'
 const CONTACT_SHOWN_TTL = SESSION_TTL
 
 // Anti-spam
@@ -97,6 +96,18 @@ async function withContactSuffix(sid: string, replyText: string): Promise<string
   } catch {
     return replyText // Redis ล่ม — ส่งข้อความปกติโดยไม่ต่อท้าย
   }
+}
+
+// ถ้าคำตอบมีราคา (บาท) → ต่อ CONTACT_SUFFIX ทุกครั้ง (ชวนติดต่อซ้ำได้ทุกครั้งที่บอกราคา ไม่จำกัดแค่ครั้งแรก)
+// พร้อม mark ว่าโชว์เบอร์ติดต่อไปแล้ว กันต่อซ้อนกันในข้อความเดียวกันตอนเป็นข้อความแรกของ session ด้วย
+// ถ้าไม่มีราคา → ใช้ withContactSuffix ตามปกติ (โชว์แค่ครั้งแรกของ session)
+async function withSuffix(sid: string, replyText: string): Promise<string> {
+  if (!replyText) return replyText
+  if (replyText.includes('บาท')) {
+    try { await redis.set(`webchat:contact_shown:${sid}`, '1', { ex: CONTACT_SHOWN_TTL }) } catch { /* Redis ล่ม */ }
+    return replyText + CONTACT_SUFFIX
+  }
+  return withContactSuffix(sid, replyText)
 }
 
 // OPTIONS — CORS preflight
@@ -186,7 +197,7 @@ export async function POST(req: NextRequest) {
     if (exactMatch) {
       await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: exactMatch }])
       log.info('webchat.exact_match', { userId })
-      return json({ reply: await withContactSuffix(sessionId, exactMatch) }, cors)
+      return json({ reply: await withSuffix(sessionId, exactMatch) }, cors)
     }
 
     // Case 2: ลูกค้าแสดงเจตนาสั่งซื้อชัดเจน → ตอบทันที ไม่ผ่าน Gemini
@@ -270,12 +281,10 @@ export async function POST(req: NextRequest) {
     // Track frequency
     try { await redis.zincrby('question_freq', 1, message.slice(0, 100)) } catch { /* */ }
 
-    // Case 1: ถ้า reply มีราคา (บาท) → ต่อท้ายด้วย BUY_SUFFIX
-    const finalReply = reply.includes('บาท') ? reply + BUY_SUFFIX : reply
-    await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: finalReply }])
-    log.info('webchat.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
-    logChat({ userId, channel: 'Web', role: 'bot', message: finalReply, ts: Date.now() })
-    return json({ reply: await withContactSuffix(sessionId, finalReply) }, cors)
+    await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reply }])
+    log.info('webchat.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
+    logChat({ userId, channel: 'Web', role: 'bot', message: reply, ts: Date.now() })
+    return json({ reply: await withSuffix(sessionId, reply) }, cors)
 
   } catch (err) {
     log.error('webchat.error', { err: (err as Error).message, userId })
