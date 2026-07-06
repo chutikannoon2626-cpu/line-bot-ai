@@ -77,9 +77,9 @@ export async function findExactMatch(userMessage: string): Promise<string | null
     if (matches.length !== 1) return null // ไม่เจอ หรือเจอหลายรุ่น (กำกวม) → ปล่อยให้ Gemini จัดการ
 
     const row = matches[0]
-    if (row.type === 'product') return formatProduct(row, licenseMap)
-    if (row.type === 'faq')     return formatFaq(row)
-    if (row.type === 'license') return formatLicense(row)
+    if (row.type === 'product') return customerProduct(row, licenseMap)
+    if (row.type === 'faq')     return customerFaq(row)
+    if (row.type === 'license') return customerLicense(row)
   } catch { /* sheet โหลดไม่ได้ — ปล่อยผ่านไป Gemini ตามปกติ */ }
 
   return null
@@ -180,6 +180,54 @@ function formatProduct(row: Row, licenseMap: Map<string, LicenseInfo>): string {
   LICENSE: ${licenseText || '-'} รับประกัน 2 ปี
   ${urlLine}
   CTA: ลูกค้าสนใจสั่งเลยไหมคะ?`
+}
+
+// --- Customer-facing formatters (เฉพาะ findExactMatch — ต่างจาก formatProduct/formatFaq/formatLicense
+// ด้านบนที่เป็น "บริบทดิบ" ให้ Gemini อ่านแล้วแปลงเป็นประโยคเองอีกที ไม่ใช่ข้อความส่งลูกค้าโดยตรง) ---
+function customerProduct(row: Row, licenseMap: Map<string, LicenseInfo>): string {
+  const name = `${row.brand} ${row.model_code}`.trim()
+
+  let priceText = ''
+  const hasPrice = row.price && row.price !== '-'
+  const hasPack  = row.price_pack && row.price_pack !== '-'
+
+  if (hasPrice && hasPack) {
+    priceText = `ราคา ${row.price} บาท หรือ ${row.price_pack} (โปรโมชั่นสุดคุ้ม)`
+  } else if (hasPrice) {
+    priceText = `ราคา ${row.price} บาท`
+  } else if (hasPack) {
+    priceText = row.price_pack
+  } else {
+    priceText = 'สอบถามราคากับแอดมินได้เลยค่ะ'
+  }
+
+  let licenseText = ''
+  if (row.license_required === 'ไม่ต้องขอ') {
+    licenseText = 'ไม่ต้องขอใบอนุญาต ใช้ได้ถูกกฎหมาย'
+  } else if (row.license_required === 'ต้องขอ') {
+    const licInfo = row.license_ref ? licenseMap.get(row.license_ref) : undefined
+    licenseText = licInfo
+      ? `ต้องทำใบอนุญาต — ${licInfo.answer}${licInfo.url ? ' ดูขั้นตอน: ' + licInfo.url : ''}`
+      : 'ต้องทำใบอนุญาต สอบถามรายละเอียดได้ค่ะ'
+  }
+
+  return [
+    `${name} ${priceText} ค่ะ 📻`,
+    `• ${clean(row.answer)}`,
+    `• ${licenseText ? licenseText + ' ' : ''}รับประกัน 2 ปี`,
+    row.url,
+    'ลูกค้าสนใจสั่งเลยไหมคะ?',
+  ].filter(Boolean).join('\n')
+}
+
+function customerFaq(row: Row): string {
+  const urlLine = row.url ? `ดูรายละเอียดเพิ่มเติม: ${row.url}` : ''
+  return [clean(row.answer), urlLine].filter(Boolean).join('\n')
+}
+
+function customerLicense(row: Row): string {
+  const urlLine = row.url ? `ดูขั้นตอน: ${row.url}` : ''
+  return [clean(row.answer), urlLine].filter(Boolean).join('\n')
 }
 
 function clean(text: string): string {

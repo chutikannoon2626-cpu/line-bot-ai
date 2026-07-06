@@ -312,7 +312,7 @@
       <div class="step-num">9b2</div>
       <div class="step-content">
         <div class="step-title">Exact Keyword Match (<code>findExactMatch</code>) — ไม่ผ่าน Gemini</div>
-        <div class="step-desc">ตรวจ keyword ตรงชีตแบบ deterministic (2 ชั้น: สั้น+ตรง / ไม่มีคำบ่งบอกความต้องการอื่น) — match เจอ 1 แถวพอดี → ans(คำตอบจาก formatProduct/formatFaq/formatLicense) → saveHistory → return<br>ไม่ match (ไม่เจอ/กำกวม/มีคำอื่นปน) → ไปต่อขั้นถัดไปตามปกติ · ดูรายละเอียดที่หัวข้อ "Exact Keyword Match"</div>
+        <div class="step-desc">ตรวจ keyword ตรงชีตแบบ deterministic (2 ชั้น: สั้น+ตรง / ไม่มีคำบ่งบอกความต้องการอื่น) — match เจอ 1 แถวพอดี → ans(คำตอบจาก <code>customerProduct</code>/<code>customerFaq</code>/<code>customerLicense</code>) → saveHistory → return<br>ไม่ match (ไม่เจอ/กำกวม/มีคำอื่นปน) → ไปต่อขั้นถัดไปตามปกติ · ดูรายละเอียดที่หัวข้อ "Exact Keyword Match"</div>
       </div>
     </div>
     <div class="step">
@@ -830,9 +830,10 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <div class="flow-box"><strong>เช็คจำนวน row ที่ match</strong>
 match = 0 แถว → null (ไม่เจอ ปล่อย Gemini)
 match ≥ 2 แถว → null (กำกวม เช่น "245" ตรงหลายรุ่น → ปล่อย Gemini ถามยืนยันรุ่นตามปกติ)
-match = 1 แถวพอดี → ตอบทันทีด้วย <code>formatProduct()</code>/<code>formatFaq()</code>/<code>formatLicense()</code> เดิม (ฟังก์ชันเดียวกับที่ build FAQ text ให้ Gemini) — <strong>ไม่เรียก Gemini เลย</strong></div>
+match = 1 แถวพอดี → ตอบทันทีด้วย <code>customerProduct()</code>/<code>customerFaq()</code>/<code>customerLicense()</code> — <strong>ไม่เรียก Gemini เลย</strong></div>
   </div>
-  <div class="tip">ทดสอบกับชีตจริงแล้ว (2026-07-04): "TC-11HW" / "มีรุ่น11HW ไหมคะ" → match ตอบทันที · "TC-11HW เสียซ่อมยังไง" / "...ต่างกันยังไง" / "แนะนำ..." / "ไม่เอา..." → block ถูกต้อง (ไม่ match) · "245" (กำกวม) → null ถูกต้อง</div>
+  <div class="warn">(แก้บั๊กแล้ว) เดิม match แล้วเรียก <code>formatProduct()</code>/<code>formatFaq()</code>/<code>formatLicense()</code> ตัวเดียวกับที่ใช้ build FAQ text ฝังในพรอมต์ — ฟังก์ชันกลุ่มนี้สร้าง "บริบทดิบ" ให้ Gemini อ่าน (มี label กำกับ เช่น <code>[สินค้า] ... → PRICE: ... INFO: ... LICENSE: ... CTA: ...</code>) ไม่ใช่ข้อความธรรมชาติสำหรับส่งลูกค้าโดยตรง ลูกค้าเลยเห็นข้อความดิบแบบนี้ตรงๆ แทนประโยคปกติที่ Gemini ปกติจะแปลงให้ ตอนนี้แยกฟังก์ชันใหม่ <code>customerProduct()</code>/<code>customerFaq()</code>/<code>customerLicense()</code> ที่สร้างข้อความตาม <code>&lt;product_template&gt;</code> เดียวกับที่ Gemini ใช้จริง (เช่น "Spender TC-11HW ราคา 4,400 บาท ค่ะ 📻 • ... • ... รับประกัน 2 ปี ... ลูกค้าสนใจสั่งเลยไหมคะ?") แล้ว</div>
+  <div class="tip">ทดสอบกับชีตจริงแล้ว (2026-07-04): "TC-11HW" / "มีรุ่น11HW ไหมคะ" / "11HWราคาเท่าไหร่" → match ตอบทันทีด้วยประโยคธรรมชาติถูกต้อง · "TC-11HW เสียซ่อมยังไง" / "...ต่างกันยังไง" / "แนะนำ..." / "ไม่เอา..." → block ถูกต้อง (ไม่ match) · "245" (กำกวม) → null ถูกต้อง</div>
   <div class="card" style="margin-top:10px">
     <div class="card-title">จุดที่เรียกใช้ (เหมือนกันทั้ง 3 ไฟล์ — ก่อน fetchFAQ()/generateReply() เสมอ)</div>
     <pre>const exactMatch = await findExactMatch(userMessage)
