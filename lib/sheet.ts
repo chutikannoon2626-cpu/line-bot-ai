@@ -70,7 +70,7 @@ export async function findExactMatch(userMessage: string): Promise<string | null
 
     const matches = rows.filter((row) => {
       if (!row.keywords || !row.answer) return false
-      const keywords = row.keywords.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean)
+      const keywords = row.keywords.split(/[,/|]/).map((k) => k.trim().toLowerCase()).filter(Boolean)
       return keywords.some((k) => msg.includes(k) && msg.length <= k.length + MAX_EXTRA_CHARS)
     })
 
@@ -222,16 +222,26 @@ function customerProduct(row: Row, licenseMap: Map<string, LicenseInfo>): string
 
 function customerFaq(row: Row): string {
   const urlLine = row.url ? `ดูรายละเอียดเพิ่มเติม: ${row.url}` : ''
-  return [clean(row.answer), urlLine].filter(Boolean).join('\n')
+  return [cleanKeepLines(row.answer), urlLine].filter(Boolean).join('\n')
 }
 
 function customerLicense(row: Row): string {
   const urlLine = row.url ? `ดูขั้นตอน: ${row.url}` : ''
-  return [clean(row.answer), urlLine].filter(Boolean).join('\n')
+  return [cleanKeepLines(row.answer), urlLine].filter(Boolean).join('\n')
 }
 
 function clean(text: string): string {
   return text.replace(/\r?\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
+}
+
+// สำหรับข้อความส่งลูกค้าโดยตรง — รักษาบรรทัดใหม่ที่ตั้งใจพิมพ์ไว้ในชีต
+// (ต่างจาก clean() ที่รวมเป็นบรรทัดเดียวเพื่อประหยัด token ตอนส่งบริบทให้ Gemini)
+function cleanKeepLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s{2,}/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
 }
 
 // --- CSV parser (handles quoted fields with newlines) ---

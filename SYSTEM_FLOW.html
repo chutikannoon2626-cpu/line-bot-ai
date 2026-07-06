@@ -825,7 +825,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
   <div class="card">
     <div class="flow-box"><strong>ชั้นที่ 1 — ต้องสั้นและตรง keyword ชัดเจน</strong>
 ข้อความ (lowercase, trim) ยาวไม่เกิน 40 ตัวอักษร
-มี keyword (จากคอลัมน์ keywords คั่นด้วย comma) เป็น substring ของข้อความ
+มี keyword (จากคอลัมน์ keywords คั่นด้วย comma/slash/pipe — <code>,</code> <code>/</code> <code>|</code>) เป็น substring ของข้อความ
 ความยาวข้อความต้องไม่เกิน keyword ที่ match + 15 ตัวอักษร (กันข้อความยาวที่มีบริบทอื่นปน)</div>
     <div class="flow-arrow">↓</div>
     <div class="flow-box"><strong>ชั้นที่ 2 — ต้องไม่มีคำที่บ่งบอกความต้องการอื่น (BLOCK_INTENT_RE)</strong>
@@ -839,6 +839,7 @@ match = 1 แถวพอดี → ตอบทันทีด้วย <code>c
   </div>
   <div class="warn">(แก้บั๊กแล้ว) เดิม match แล้วเรียก <code>formatProduct()</code>/<code>formatFaq()</code>/<code>formatLicense()</code> ตัวเดียวกับที่ใช้ build FAQ text ฝังในพรอมต์ — ฟังก์ชันกลุ่มนี้สร้าง "บริบทดิบ" ให้ Gemini อ่าน (มี label กำกับ เช่น <code>[สินค้า] ... → PRICE: ... INFO: ... LICENSE: ... CTA: ...</code>) ไม่ใช่ข้อความธรรมชาติสำหรับส่งลูกค้าโดยตรง ลูกค้าเลยเห็นข้อความดิบแบบนี้ตรงๆ แทนประโยคปกติที่ Gemini ปกติจะแปลงให้ ตอนนี้แยกฟังก์ชันใหม่ <code>customerProduct()</code>/<code>customerFaq()</code>/<code>customerLicense()</code> ที่สร้างข้อความตาม <code>&lt;product_template&gt;</code> เดียวกับที่ Gemini ใช้จริง (เช่น "Spender TC-11HW ราคา 4,400 บาท ค่ะ 📻 • ... • ... รับประกัน 2 ปี ... ลูกค้าสนใจสั่งเลยไหมคะ?") แล้ว</div>
   <div class="tip">ทดสอบกับชีตจริงแล้ว (2026-07-04): "TC-11HW" / "มีรุ่น11HW ไหมคะ" / "11HWราคาเท่าไหร่" → match ตอบทันทีด้วยประโยคธรรมชาติถูกต้อง · "TC-11HW เสียซ่อมยังไง" / "...ต่างกันยังไง" / "แนะนำ..." / "ไม่เอา..." → block ถูกต้อง (ไม่ match) · "245" (กำกวม) → null ถูกต้อง</div>
+  <div class="warn">(แก้บั๊กแล้ว 2026-07-06) เดิม <code>row.keywords.split(',')</code> รองรับแค่ comma ตัวคั่นเดียว — แถวในชีตที่ใช้ <code>/</code> หรือ <code>|</code> คั่น keyword (เช่น "ติดต่อ/ติดต่อแอดมิน/ขอเบอร์ติดต่อ") จะไม่ถูก split เลย ทำให้ทั้งก้อนกลายเป็น keyword เดียวยาวๆ ที่ไม่มีทาง match ข้อความสั้นของลูกค้าได้ → แก้เป็น <code>row.keywords.split(/[,/|]/)</code> รองรับ 3 ตัวคั่นพร้อมกัน · พร้อมกันนี้แก้ <code>customerFaq()</code>/<code>customerLicense()</code> ให้ใช้ <code>cleanKeepLines()</code> แทน <code>clean()</code> — รักษาบรรทัดใหม่ที่ตั้งใจพิมพ์ไว้ในชีต (เดิม <code>clean()</code> รวมทุกบรรทัดเป็นบรรทัดเดียวเพื่อประหยัด token ตอนฝังบริบทให้ Gemini อ่าน ซึ่งเหมาะกับ <code>formatFaq()</code>/<code>formatLicense()</code> แต่ไม่เหมาะกับข้อความส่งลูกค้าโดยตรงที่ควรคงการขึ้นบรรทัดใหม่ไว้) · ทดสอบกับชีตจริงแล้ว: "ติดต่อ" / "ติดต่อแอดมิน" / "ขอเบอร์ติดต่อ" → match แถว <code>contact-hours-04</code> (slash-separated) ตอบทันทีแบบหลายบรรทัดถูกต้อง</div>
   <div class="card" style="margin-top:10px">
     <div class="card-title">จุดที่เรียกใช้ (เหมือนกันทั้ง 3 ไฟล์ — ก่อน fetchFAQ()/generateReply() เสมอ)</div>
     <pre>const exactMatch = await findExactMatch(userMessage)
