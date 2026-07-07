@@ -54,6 +54,7 @@ const DEFERRED_HANDOFF_TRIGGERS = [
   'ขอใบเสนอราคา',
   'quotation',
   'ขอ quote',
+  'ขออนุญาต',
   'franchise',
   'ตัวแทนจำหน่าย',
   'dealer',
