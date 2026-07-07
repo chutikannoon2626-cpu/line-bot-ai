@@ -113,6 +113,7 @@
 </ol>
 <div class="note">ถ้า ADMIN_GROUP_ID ไม่ได้ตั้งค่า → บอทเงียบแต่แอดมินไม่รู้ — ต้องตั้งค่าให้ถูกต้อง</div>
 <div class="warn">คำอื่นที่เคยอยู่ในกลุ่มนี้ (ขายส่ง/wholesale, ใบเสนอราคา/quotation, ตัวแทนจำหน่าย/dealer/franchise, ติดต่อสื่อ, เพิ่มกลุ่ม ฯลฯ) <strong>ย้ายไปเป็น handoff ทีหลัง</strong> — ต้องค้นชีตและค้นเว็บในขั้น 7 ก่อนเสมอ ถ้าไม่เจอจริงถึงจะเข้า flow ขอรายละเอียด+handoff (ดูขั้น 7 ผลลัพธ์ "ไม่พบข้อมูล")</div>
+<div class="warn">(แก้บั๊กแล้ว 2026-07-07) แม้โค้ดจะออกแบบให้ "ขายส่ง/ใบเสนอราคา" ค้นชีตก่อนตามที่อธิบายด้านบน แต่ prompt ที่ส่งให้ Gemini (<code>&lt;out_of_scope_triggers&gt;</code> ใน <code>lib/prompts.ts</code>) กลับสั่งให้ Gemini ตอบ handoffMsg ทันทีเมื่อเจอคำเหล่านี้ ทำให้ Gemini ข้ามการค้น FAQ ไปเลยจริงๆ ทั้งที่ในชีตมีคำตอบอยู่ (เช่น "ขอใบเสนอราคา" มีคำตอบพร้อมในชีตแถว <code>documents-01</code>) ตอนนี้เอา 2 กลุ่มคำนี้ออกจาก <code>out_of_scope_triggers</code> แล้ว ทำให้ Gemini ค้น FAQ/เว็บก่อนจริงตามที่ตั้งใจไว้ · แก้เฉพาะ LINE/Facebook (ใช้ <code>lib/prompts.ts</code> ร่วมกัน) — Web Chat ไม่กระทบเพราะมี <code>shouldHandoff()</code> ใน <code>app/api/web-chat/route.ts</code> กันไว้ก่อนเรียก Gemini อยู่แล้ว จึงไม่มีวันไปถึง Gemini สำหรับคำเหล่านี้ตั้งแต่แรก</div>
 
 <h3><span class="step-num">6b</span>"ขอเจ้าของ" — ทำงานตามเวลาทำการ (Asia/Bangkok)</h3>
 <p><span class="label">เงื่อนไข:</span> ลูกค้าพิมพ์ "ขอเจ้าของ" — พฤติกรรมแยกจากกลุ่มอื่นทั้งหมด ขึ้นกับเวลาที่ทักเข้ามา</p>
