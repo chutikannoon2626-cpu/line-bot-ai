@@ -28,6 +28,7 @@
   .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: bold; }
   .badge-line { background: #e8f5e9; color: #2e7d32; }
   .badge-fb   { background: #e3f2fd; color: #1565c0; }
+  .badge-web  { background: #fff3e0; color: #e65100; }
   .badge-gray { background: #eee; color: #666; }
 
   code { background: #f0f4f8; padding: 2px 7px; border-radius: 4px; font-family: monospace; font-size: 13px; color: #1a3a5c; }
@@ -56,7 +57,7 @@
 <div class="container">
 
   <h1>📋 สรุปหน้า Admin Unanswered — น้องใจดี</h1>
-  <p class="subtitle">อัปเดต 30 มิถุนายน 2569 · รายงานคำถามจาก LINE OA และ Facebook รวมกัน</p>
+  <p class="subtitle">อัปเดต 10 กรกฎาคม 2569 · รายงานคำถามจาก LINE OA · Facebook · Web Chat รวมกัน</p>
 
   <!-- ===== หน้าตาที่เห็น ===== -->
   <h2>1. หน้าตาที่จะเห็น</h2>
@@ -66,6 +67,7 @@
     <div class="mockup-tabs">
       <div class="mockup-tab active">❓ ตอบไม่ได้ (5)</div>
       <div class="mockup-tab inactive">🔥 ถามบ่อย (30)</div>
+      <div class="mockup-tab inactive">💬 ประวัติแชท (100)</div>
     </div>
     <div class="mockup-body">
       <div style="margin-bottom:10px;text-align:right">
@@ -100,6 +102,7 @@
     <div class="mockup-tabs">
       <div class="mockup-tab inactive">❓ ตอบไม่ได้ (5)</div>
       <div class="mockup-tab active">🔥 ถามบ่อย (30)</div>
+      <div class="mockup-tab inactive">💬 ประวัติแชท (100)</div>
     </div>
     <div class="mockup-body">
       <p style="font-size:13px;color:#666;margin-bottom:10px">นับจากคำถามที่บอทตอบได้สำเร็จ</p>
@@ -156,13 +159,13 @@
   <!-- ===== Tab ตอบไม่ได้ ===== -->
   <h2>3. Tab ❓ ตอบไม่ได้</h2>
   <div class="card">
-    <p><strong>เมื่อไหรที่บันทึก:</strong> บอทหาคำตอบใน Google Sheet ไม่เจอ (reply = [NOT_FOUND]) ทั้ง LINE OA และ Facebook</p>
+    <p><strong>เมื่อไหรที่บันทึก:</strong> บอทหาคำตอบใน Google Sheet ไม่เจอ (reply = [NOT_FOUND]) ทั้ง LINE OA, Facebook และ Web Chat</p>
     <br>
     <table>
       <tr><th>ฟิลด์</th><th>ความหมาย</th></tr>
       <tr>
-        <td><span class="badge badge-line">LINE OA</span> / <span class="badge badge-fb">Facebook</span></td>
-        <td>ดูจาก userId — LINE ขึ้นต้นด้วย <code>U...</code>, Facebook ขึ้นต้นด้วย <code>fb:...</code></td>
+        <td><span class="badge badge-line">LINE OA</span> / <span class="badge badge-fb">Facebook</span> / <span class="badge badge-web">Web</span></td>
+        <td>ดูจาก userId — LINE ขึ้นต้นด้วย <code>U...</code>, Facebook ขึ้นต้นด้วย <code>fb:...</code>, Web ขึ้นต้นด้วย <code>web:...</code></td>
       </tr>
       <tr>
         <td>วันเวลา</td>
@@ -174,7 +177,7 @@
       </tr>
     </table>
     <br>
-    <p>📌 เก็บสูงสุด <strong>500 รายการ</strong> ล่าสุด (ใหม่สุดขึ้นก่อน) · กด <strong>ล้างทั้งหมด</strong> เพื่อรีเซ็ต</p>
+    <p>📌 เก็บสูงสุด <strong>500 รายการ</strong> ล่าสุด (ใหม่สุดขึ้นก่อน) · ปุ่ม <strong>⬇ Export Excel</strong> (2026-07-07 เปลี่ยนจาก CSV) · กด <strong>ล้างทั้งหมด</strong> เพื่อรีเซ็ต</p>
   </div>
 
   <div class="card card-green">
@@ -193,19 +196,36 @@
       <tr><th>ข้อมูล</th><th>รายละเอียด</th></tr>
       <tr><td>อันดับ 1–3</td><td>badge สีเข้ม (navy)</td></tr>
       <tr><td>อันดับ 4+</td><td>badge สีเทา</td></tr>
-      <tr><td>จำนวนครั้ง</td><td>นับรวม LINE OA + Facebook</td></tr>
+      <tr><td>จำนวนครั้ง</td><td>นับรวม LINE OA + Facebook + Web Chat</td></tr>
       <tr><td>แสดงสูงสุด</td><td>30 อันดับ</td></tr>
     </table>
     <br>
-    <p>📌 ข้อมูลสะสมจากวันที่ deploy เป็นต้นไป — ไม่มีข้อมูลย้อนหลัง · กด <strong>ล้างสถิติ</strong> เพื่อเริ่มนับใหม่</p>
+    <p>📌 ข้อมูลสะสมจากวันที่ deploy เป็นต้นไป — ไม่มีข้อมูลย้อนหลัง · ปุ่ม <strong>⬇ Export Excel</strong> (2026-07-07 เปลี่ยนจาก CSV) · กด <strong>ล้างสถิติ</strong> เพื่อเริ่มนับใหม่</p>
   </div>
 
   <div class="card card-green">
     <p><strong>ประโยชน์:</strong> รู้ว่าลูกค้าสนใจสินค้า/บริการอะไรมากที่สุด → นำไปปรับปรุง Google Sheet หรือออกโปรโมชั่นได้ตรงจุด</p>
   </div>
 
+  <!-- ===== Tab ประวัติแชท ===== -->
+  <h2>5. Tab 💬 ประวัติแชท</h2>
+  <div class="card">
+    <p><strong>เมื่อไหรที่บันทึก:</strong> ทุกข้อความที่ลูกค้าและบอทคุยกัน (ทั้งฝั่งลูกค้าและฝั่งบอท) ทั้ง 3 ช่องทาง</p>
+    <br>
+    <table>
+      <tr><th>ข้อมูล</th><th>รายละเอียด</th></tr>
+      <tr><td>รายการหลัก</td><td>100 conversation ล่าสุด (เรียงตามข้อความล่าสุดของแต่ละคน)</td></tr>
+      <tr><td>Dropdown filter</td><td>ทุกช่องทาง / LINE OA / Facebook / Web</td></tr>
+      <tr><td>ตาราง</td><td>ช่องทาง | ข้อความล่าสุด | จำนวน | เวลา | ⬇</td></tr>
+      <tr><td>กดแถว</td><td>ขยายดูบทสนทนาทั้งหมดแบบ chat bubble</td></tr>
+      <tr><td>⬇ ต่อแถว</td><td>ดาวน์โหลด Excel เฉพาะบทสนทนาของคนนั้น (ไม่จำกัดวัน สูงสุด 200 ข้อความล่าสุด)</td></tr>
+      <tr><td>⬇ ดาวน์โหลดวันนี้</td><td>Excel รวมทุกช่องทางของวันนี้เท่านั้น (ไม่ผูกกับ dropdown filter)</td></tr>
+      <tr><td>⬇ ดาวน์โหลดทั้งหมด</td><td>(2026-07-07 เพิ่มใหม่) Excel รวมทุกช่องทางทุกวัน — จำกัดตาม TTL 30 วัน + 200 ข้อความ/user ที่ระบบเก็บไว้จริง ไม่ใช่ไม่มีที่สิ้นสุด</td></tr>
+    </table>
+  </div>
+
   <!-- ===== Redis Keys ===== -->
-  <h2>5. ข้อมูลที่เก็บใน Redis</h2>
+  <h2>6. ข้อมูลที่เก็บใน Redis</h2>
   <div class="card">
     <table>
       <tr><th>Key</th><th>ประเภท</th><th>เนื้อหา</th><th>ขนาดสูงสุด</th></tr>
@@ -221,25 +241,47 @@
         <td>member = คำถาม, score = จำนวนครั้ง</td>
         <td>ไม่จำกัด</td>
       </tr>
+      <tr>
+        <td><code>chatlog:convs</code></td>
+        <td>Sorted Set</td>
+        <td>member = userId, score = เวลาข้อความล่าสุด</td>
+        <td>ไม่จำกัด (TTL 30 วันต่อ user ผ่าน <code>chatlog:u:*</code>)</td>
+      </tr>
+      <tr>
+        <td><code>chatlog:u:{'{userId}'}</code></td>
+        <td>List</td>
+        <td>JSON: <code>{'{'} userId, channel, role, message, ts {'}'}</code></td>
+        <td>200 ข้อความ/user · TTL 30 วัน</td>
+      </tr>
+      <tr>
+        <td><code>chatlog:uchan</code></td>
+        <td>Hash</td>
+        <td>userId → channel</td>
+        <td>ไม่จำกัด</td>
+      </tr>
     </table>
     <br>
     <p style="font-size:13px;color:#555">ดูได้โดยตรงที่ <strong>Upstash Dashboard → Data Browser</strong> เช่นกัน</p>
   </div>
 
   <!-- ===== ไฟล์โค้ด ===== -->
-  <h2>6. ไฟล์โค้ดที่เกี่ยวข้อง</h2>
+  <h2>7. ไฟล์โค้ดที่เกี่ยวข้อง</h2>
   <div class="card">
     <table>
       <tr><th>ไฟล์</th><th>หน้าที่</th></tr>
       <tr><td><code>app/api/admin/unanswered/route.ts</code></td><td>GET ดึงข้อมูล, DELETE ล้างข้อมูล (auth ด้วย ADMIN_SCHEDULE_PASSWORD)</td></tr>
-      <tr><td><code>app/admin/unanswered/page.tsx</code></td><td>หน้า UI 2 tabs: ตอบไม่ได้ / ถามบ่อย</td></tr>
-      <tr><td><code>app/api/line-webhook/route.ts</code></td><td>zincrby question_freq +1 หลังตอบ LINE สำเร็จ</td></tr>
-      <tr><td><code>app/api/fb-webhook/route.ts</code></td><td>zincrby question_freq +1 หลังตอบ Facebook สำเร็จ</td></tr>
+      <tr><td><code>app/admin/unanswered/page.tsx</code></td><td>หน้า UI 3 tabs: ตอบไม่ได้ / ถามบ่อย / ประวัติแชท · Export Excel ทั้ง 3 tab</td></tr>
+      <tr><td><code>app/api/admin/chatlog/route.ts</code></td><td>GET รายการ 100 conversation ล่าสุด + messages ของ user คนหนึ่ง</td></tr>
+      <tr><td><code>app/api/admin/chatlog/export/route.ts</code></td><td>GET สร้างไฟล์ Excel — รายวัน (<code>date=</code>) / ทั้งหมด (<code>all=1</code>) / รายคน (<code>userId=</code>)</td></tr>
+      <tr><td><code>lib/chatlog.ts</code></td><td><code>logChat()</code> บันทึกทุกข้อความเข้า <code>chatlog:convs</code>/<code>chatlog:u:*</code>/<code>chatlog:uchan</code></td></tr>
+      <tr><td><code>app/api/line-webhook/route.ts</code></td><td>zincrby question_freq +1 หลังตอบ LINE สำเร็จ + logChat()</td></tr>
+      <tr><td><code>app/api/fb-webhook/route.ts</code></td><td>zincrby question_freq +1 หลังตอบ Facebook สำเร็จ + logChat()</td></tr>
+      <tr><td><code>app/api/web-chat/route.ts</code></td><td>zincrby question_freq +1 หลังตอบ Web Chat สำเร็จ + logChat()</td></tr>
     </table>
   </div>
 
   <!-- ===== หน้า Admin ทั้งหมด ===== -->
-  <h2>7. หน้า Admin ทั้งหมดที่มีตอนนี้</h2>
+  <h2>8. หน้า Admin ทั้งหมดที่มีตอนนี้</h2>
   <div class="card card-blue">
     <table>
       <tr><th>URL</th><th>ฟังก์ชัน</th></tr>
