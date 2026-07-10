@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
 
     // Gemini
     const reply = await Promise.race([
-      generateReply(message, faqText, history, FALLBACK_MSG),
+      generateReply(message, faqText, history, FALLBACK_MSG, 'web'),
       new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
     ]).catch(() => GEMINI_UNAVAILABLE)
 

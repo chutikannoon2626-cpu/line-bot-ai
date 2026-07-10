@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
               const base64Image = Buffer.concat(chunks).toString('base64')
               const faqText = await fetchFAQ()
               const reply = await Promise.race([
-                generateReplyWithImage(base64Image, faqText, userMessage),
+                generateReplyWithImage(base64Image, faqText, userMessage, 'line'),
                 new Promise<string>((_, reject) =>
                   setTimeout(() => reject(new Error('gemini_timeout')), 15000)
                 ),
@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
 
               const faqText = await fetchFAQ()
               const reply = await Promise.race([
-                generateReplyWithImage(base64Image, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
+                generateReplyWithImage(base64Image, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน', 'line'),
                 new Promise<string>((_, reject) =>
                   setTimeout(() => reject(new Error('gemini_timeout')), 15000)
                 ),
@@ -416,7 +416,7 @@ export async function POST(req: NextRequest) {
 
           const faqText = await fetchFAQ()
           const reply = await Promise.race([
-            generateReply(userMessage, faqText, history, handoffMsg),
+            generateReply(userMessage, faqText, history, handoffMsg, 'line'),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('gemini_timeout')), 10000)
             ),

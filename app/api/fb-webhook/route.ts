@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
                   const b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64')
                   const faqText = await fetchFAQ()
                   const reply = await Promise.race([
-                    generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน'),
+                    generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน', 'facebook'),
                     new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
                   ]).catch(() => UNAVAILABLE_MSG)
                   await fbSendReply(psid, reply)
@@ -383,7 +383,7 @@ export async function POST(req: NextRequest) {
 
             const faqText = await fetchFAQ()
             const reply = await Promise.race([
-              generateReply(userMessage, faqText, history, handoffMsg),
+              generateReply(userMessage, faqText, history, handoffMsg, 'facebook'),
               new Promise<string>((_, reject) =>
                 setTimeout(() => reject(new Error('gemini_timeout')), 10000)
               ),
@@ -545,7 +545,7 @@ export async function POST(req: NextRequest) {
             if (caption) {
               const faqText = await fetchFAQ()
               const reply = await Promise.race([
-                generateReplyWithImage(b64, faqText, caption),
+                generateReplyWithImage(b64, faqText, caption, 'facebook'),
                 new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
               ]).catch(() => UNAVAILABLE_MSG)
               await fbSend(psid, reply)
@@ -617,7 +617,7 @@ export async function POST(req: NextRequest) {
             }
 
             const reply = await Promise.race([
-              generateReply(queryText, faqText, history, handoffMsg),
+              generateReply(queryText, faqText, history, handoffMsg, 'facebook'),
               new Promise<string>((_, reject) =>
                 setTimeout(() => reject(new Error('gemini_timeout')), 7000)
               ),

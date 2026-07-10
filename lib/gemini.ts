@@ -38,7 +38,8 @@ export async function generateReply(
   userMessage: string,
   faqText: string,
   history: Turn[] = [],
-  handoffMsg: string = ''
+  handoffMsg: string = '',
+  channel: 'line' | 'facebook' | 'web' = 'web'
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
@@ -49,7 +50,8 @@ export async function generateReply(
     faqText,
     DEFAULT_REPLY,
     'สุภาพ เป็นมิตร ลงท้ายด้วย "ค่ะ" เสมอ',
-    handoffMsg
+    handoffMsg,
+    channel
   )
 
   const contents = [
@@ -152,7 +154,8 @@ export async function generateReply(
 export async function generateReplyWithImage(
   base64Image: string,
   faqText: string,
-  userQuestion?: string
+  userQuestion?: string,
+  channel: 'line' | 'facebook' = 'line'
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
@@ -209,7 +212,8 @@ export async function generateReplyWithImage(
     faqText,
     DEFAULT_REPLY,
     'สุภาพ เป็นมิตร ลงท้ายด้วย "ค่ะ" เสมอ',
-    imgHandoffMsg
+    imgHandoffMsg,
+    channel
   )
 
   const ocrContext = ocrText ? `\n\nข้อความที่อ่านได้จากรูป (OCR):\n${ocrText}` : ''
