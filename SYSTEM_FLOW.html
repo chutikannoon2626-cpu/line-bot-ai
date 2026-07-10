@@ -184,8 +184,9 @@
     <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=&amp;userId=</code> — messages ของ user คนนั้น
   </div>
   <div class="endpoint channel-admin">
-    <span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;userId=</code> — XLSX บทสนทนา user
-    <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;date=YYYY-MM-DD</code> — XLSX รายวัน (Bangkok TZ)
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;userId=</code> — XLSX บทสนทนา user (ไม่จำกัดวัน สูงสุด 200 ข้อความล่าสุด)
+    <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;date=YYYY-MM-DD</code> — XLSX รายวัน (Bangkok TZ) · ไม่ระบุ date = วันนี้
+    <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog/export?key=&amp;all=1</code> — XLSX ทุกบทสนทนาทุกวัน (2026-07-07 เพิ่มใหม่ — จำกัดตาม TTL 30 วัน + 200 ข้อความ/user ที่ <code>lib/chatlog.ts</code> เก็บไว้จริง ไม่ใช่ไม่มีที่สิ้นสุด)
   </div>
   <div class="endpoint channel-admin">
     <span class="endpoint-method method-get">GET</span><code>/api/admin/schedule?key=&amp;channel=line|fb|web</code>
@@ -870,8 +871,9 @@ if (exactMatch) {
             <li>Dropdown filter: LINE / Facebook / Web</li>
             <li>Table: ช่องทาง | ข้อความล่าสุด | จำนวน | เวลา | ⬇</li>
             <li>กดแถว → expand chat-bubble thread</li>
-            <li>⬇ icon per row → XLSX บทสนทนานั้น</li>
-            <li>ปุ่มเขียว → Export รายวัน (date Bangkok TZ)</li>
+            <li>⬇ icon per row → XLSX บทสนทนานั้น (ไม่จำกัดวัน)</li>
+            <li>ปุ่มเขียว "ดาวน์โหลดวันนี้" → Export รายวัน (date Bangkok TZ)</li>
+            <li>ปุ่มน้ำเงิน "ดาวน์โหลดทั้งหมด" (2026-07-07 เพิ่มใหม่) → Export ทุกบทสนทนาทุกวัน (จำกัดตาม TTL 30 วัน + 200 ข้อความ/user) · dropdown filter ช่องทางไม่มีผลกับปุ่มทั้ง 2 นี้ (ดาวน์โหลดทุกช่องทางเสมอ)</li>
           </ul>
         </div>
       </div>

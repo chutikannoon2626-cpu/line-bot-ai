@@ -296,7 +296,14 @@ export default function AdminPage() {
                 disabled={chatConvs.length === 0}
                 style={{ ...btn('#1a7c4e'), display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
               >
-                ⬇ ดาวน์โหลด Excel
+                ⬇ ดาวน์โหลดวันนี้
+              </button>
+              <button
+                onClick={() => openXlsx('all=1')}
+                disabled={chatConvs.length === 0}
+                style={{ ...btn('#1a5c9e'), display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
+              >
+                ⬇ ดาวน์โหลดทั้งหมด
               </button>
             </div>
           </div>

@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   const key    = req.nextUrl.searchParams.get('key')!
   const userId = req.nextUrl.searchParams.get('userId')
   const date   = req.nextUrl.searchParams.get('date')  // YYYY-MM-DD (Bangkok)
+  const all    = req.nextUrl.searchParams.get('all') === '1'
 
   let rows: ChatLogEntry[] = []
   let filename = ''
@@ -38,6 +39,28 @@ export async function GET(req: NextRequest) {
       .filter((e): e is ChatLogEntry => e !== null)
       .reverse()
     filename = `chat_${userId.slice(-8)}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  } else if (all) {
+    // ── ทุกบทสนทนา ทุกวัน (จำกัดตาม TTL 30 วัน + 200 ข้อความ/user ที่ lib/chatlog.ts เก็บไว้) ──
+    const rawUsers = await redis.zrange('chatlog:convs', 0, -1) as unknown[]
+    const userArr: string[] = Array.isArray(rawUsers)
+      ? rawUsers.filter(x => typeof x === 'string').map(String)
+      : []
+
+    if (userArr.length) {
+      const pipe = redis.pipeline()
+      for (const uid of userArr) pipe.lrange(`chatlog:u:${uid}`, 0, 199)
+      const allLists = await pipe.exec() as (unknown[] | null)[]
+
+      for (const list of allLists) {
+        if (!list) continue
+        const entries = list
+          .map(s => { try { return (typeof s === 'string' ? JSON.parse(s) : s) as ChatLogEntry } catch { return null } })
+          .filter((e): e is ChatLogEntry => e !== null)
+        rows.push(...entries)
+      }
+      rows.sort((a, b) => a.ts - b.ts)
+    }
+    filename = `chat_all_${new Date().toISOString().slice(0, 10)}.xlsx`
   } else {
     // ── All conversations for date (default = today Bangkok) ──
     const dateStr = date ?? new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)
