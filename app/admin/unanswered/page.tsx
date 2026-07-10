@@ -1,6 +1,7 @@
 'use client'
 import { Fragment, useState } from 'react'
 import type { CSSProperties } from 'react'
+import * as XLSX from 'xlsx'
 
 type Tab        = 'unanswered' | 'frequent' | 'chat'
 type ChanFilter = 'all' | 'LINE' | 'Facebook' | 'Web'
@@ -56,11 +57,12 @@ function ChBadge({ ch }: { ch: string }) {
   )
 }
 
-function exportCSV(filename: string, headers: string[], rows: string[][]): void {
-  const lines = [headers, ...rows].map(r =>
-    r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')
-  ).join('\n')
-  const blob = new Blob(['﻿' + lines], { type: 'text/csv;charset=utf-8;' })
+function exportXLSX(filename: string, sheetName: string, headers: string[], rows: string[][]): void {
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  const body = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+  const blob = new Blob([body], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
   a.href = url; a.download = filename; a.click()
@@ -219,9 +221,9 @@ export default function AdminPage() {
         <>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12 }}>
             <button
-              onClick={() => exportCSV(`unanswered_${new Date().toISOString().slice(0,10)}.csv`, ['เวลา','ช่องทาง','คำถาม'], unanswered.map(r => [formatThai(r.ts), platform(r.userId), r.question]))}
+              onClick={() => exportXLSX(`unanswered_${new Date().toISOString().slice(0,10)}.xlsx`, 'ตอบไม่ได้', ['เวลา','ช่องทาง','คำถาม'], unanswered.map(r => [formatThai(r.ts), platform(r.userId), r.question]))}
               disabled={unanswered.length === 0} style={outBtn('#1a3a5c')}
-            >⬇ Export CSV</button>
+            >⬇ Export Excel</button>
             <button onClick={() => clearList('unanswered')} disabled={clearing || unanswered.length === 0} style={outBtn()}>ล้างทั้งหมด</button>
           </div>
           {unanswered.length === 0
@@ -246,9 +248,9 @@ export default function AdminPage() {
             <p style={{ margin: 0, fontSize: 13, color: '#666' }}>นับจากคำถามที่บอทตอบได้สำเร็จ</p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => exportCSV(`frequent_${new Date().toISOString().slice(0,10)}.csv`, ['อันดับ','คำถาม','จำนวนครั้ง'], frequent.map((r, i) => [String(i+1), r.member, String(r.score)]))}
+                onClick={() => exportXLSX(`frequent_${new Date().toISOString().slice(0,10)}.xlsx`, 'ถามบ่อย', ['อันดับ','คำถาม','จำนวนครั้ง'], frequent.map((r, i) => [String(i+1), r.member, String(r.score)]))}
                 disabled={frequent.length === 0} style={outBtn('#1a3a5c')}
-              >⬇ Export CSV</button>
+              >⬇ Export Excel</button>
               <button onClick={() => clearList('freq')} disabled={clearing || frequent.length === 0} style={outBtn()}>ล้างสถิติ</button>
             </div>
           </div>
