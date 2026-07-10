@@ -235,8 +235,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
-      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: FALLBACK_MSG }])
-      return json({ reply: FALLBACK_MSG }, cors)
+      // repair_protocol ส่ง "HANDOFF: ซ่อม/เคลม | ..." มาเฉพาะกรณีอาการเสียเฉพาะเจาะจงที่ไม่มีใน FAQ
+      // ให้ตอบ CLAIM_MSG (ติดต่อแอดมินโดยตรง) แทน FALLBACK_MSG ทั่วไป — เคสอื่น (เช่น imei_protocol) ยังใช้ FALLBACK_MSG เหมือนเดิม
+      const msg = /^HANDOFF:\s*ซ่อม\/เคลม/i.test(reply) ? CLAIM_MSG : FALLBACK_MSG
+      await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: msg }])
+      return json({ reply: msg }, cors)
     }
 
     // Out of domain
