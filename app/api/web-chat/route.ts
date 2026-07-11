@@ -197,9 +197,32 @@ export async function POST(req: NextRequest) {
       return json({ reply: FALLBACK_MSG }, cors)
     }
 
+    // กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" เช็คก่อน findExactMatch() ด้วย
+    // (ไม่ใช่แค่ก่อน Gemini) เพราะ findExactMatch() เองก็ไม่มีระบบกันซ้ำเลย — คำถามที่ตรง keyword
+    // ในชีต (เช่น "สอบถามเพิ่มเติม") จะตอบซ้ำเป๊ะไปเรื่อยๆ ไม่มีวันเงียบถ้าไม่กันตรงนี้ก่อน
+    try {
+      const lastQuestion = await redis.get<string>(`webchat:last_question:${sessionId}`)
+      if (lastQuestion && lastQuestion === message) {
+        const [cnt] = await redis.pipeline()
+          .incr(`webchat:repeat:${sessionId}`)
+          .expire(`webchat:repeat:${sessionId}`, LAST_ANSWER_TTL)
+          .exec() as [number, number]
+        if (cnt === 1) {
+          const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ มีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reminder }])
+          return json({ reply: await withContactSuffix(sessionId, reminder) }, cors)
+        }
+        return json({ reply: '' }, cors)
+      }
+    } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
+
     // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
     const exactMatch = await findExactMatch(message)
     if (exactMatch) {
+      try {
+        await redis.set(`webchat:last_question:${sessionId}`, message, { ex: LAST_ANSWER_TTL })
+        await redis.del(`webchat:repeat:${sessionId}`)
+      } catch { /* Redis ล่ม */ }
       await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: exactMatch }])
       log.info('webchat.exact_match', { userId })
       return json({ reply: await withSuffix(sessionId, exactMatch) }, cors)
@@ -219,23 +242,6 @@ export async function POST(req: NextRequest) {
       return json({ reply: CLAIM_MSG }, cors)
     }
 
-    // กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" (Gemini temperature 1.0 ทำให้คำตอบ
-    // ไม่เหมือนเดิมทุกตัวอักษรได้แม้ถามซ้ำเป๊ะ เทียบคำถามแม่นยำกว่า + ประหยัด token เพราะข้าม Gemini ไปเลยถ้าซ้ำ)
-    try {
-      const lastQuestion = await redis.get<string>(`webchat:last_question:${sessionId}`)
-      if (lastQuestion && lastQuestion === message) {
-        const [cnt] = await redis.pipeline()
-          .incr(`webchat:repeat:${sessionId}`)
-          .expire(`webchat:repeat:${sessionId}`, LAST_ANSWER_TTL)
-          .exec() as [number, number]
-        if (cnt === 1) {
-          const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ มีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reminder }])
-          return json({ reply: await withContactSuffix(sessionId, reminder) }, cors)
-        }
-        return json({ reply: '' }, cors)
-      }
-    } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
 
     // Gemini
     const reply = await Promise.race([

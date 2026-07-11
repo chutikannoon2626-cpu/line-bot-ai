@@ -343,9 +343,35 @@ export async function POST(req: NextRequest) {
               return
             }
 
+            // ชั้น 1: กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" เช็คก่อน findExactMatch()
+            // ด้วย (ไม่ใช่แค่ก่อน Gemini) เพราะ findExactMatch() เองก็ไม่มีระบบกันซ้ำเลย — คำถามที่ตรง
+            // keyword ในชีต (เช่น "สอบถามเพิ่มเติม") จะตอบซ้ำเป๊ะไปเรื่อยๆ ไม่มีวันเงียบถ้าไม่กันตรงนี้ก่อน
+            try {
+              const lastQuestion = await redis.get<string>(`last_question:${userId}`)
+              if (lastQuestion && lastQuestion === userMessage) {
+                const [repeatCount] = await redis.pipeline()
+                  .incr(`repeat_count:${userId}`)
+                  .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                  .exec() as [number, number]
+                if (repeatCount === 1) {
+                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                  await fbSend(psid, reminder)
+                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                  log.info('fb.reply.duplicate_reminded', { userId })
+                } else {
+                  log.info('fb.reply.duplicate_suppressed', { userId, repeatCount })
+                }
+                return
+              }
+            } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
+
             // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
             const exactMatch = await findExactMatch(userMessage)
             if (exactMatch) {
+              try {
+                await redis.set(`last_question:${userId}`, userMessage, { ex: LAST_ANSWER_TTL })
+                await redis.del(`repeat_count:${userId}`)
+              } catch { /* Redis ล่ม */ }
               await fbSend(psid, exactMatch)
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
               log.info('fb.exact_match.sent', { userId, latencyMs: Date.now() - startTime })
@@ -381,26 +407,6 @@ export async function POST(req: NextRequest) {
               return
             }
 
-            // ชั้น 1: กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" (Gemini temperature 1.0
-            // ทำให้คำตอบไม่เหมือนเดิมทุกตัวอักษรได้แม้ถามซ้ำเป๊ะ เทียบคำถามแม่นยำกว่า + ประหยัด token)
-            try {
-              const lastQuestion = await redis.get<string>(`last_question:${userId}`)
-              if (lastQuestion && lastQuestion === userMessage) {
-                const [repeatCount] = await redis.pipeline()
-                  .incr(`repeat_count:${userId}`)
-                  .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
-                  .exec() as [number, number]
-                if (repeatCount === 1) {
-                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-                  await fbSend(psid, reminder)
-                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
-                  log.info('fb.reply.duplicate_reminded', { userId })
-                } else {
-                  log.info('fb.reply.duplicate_suppressed', { userId, repeatCount })
-                }
-                return
-              }
-            } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
 
             const faqText = await fetchFAQ()
             const reply = await Promise.race([
