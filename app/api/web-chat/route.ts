@@ -219,6 +219,24 @@ export async function POST(req: NextRequest) {
       return json({ reply: CLAIM_MSG }, cors)
     }
 
+    // กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" (Gemini temperature 1.0 ทำให้คำตอบ
+    // ไม่เหมือนเดิมทุกตัวอักษรได้แม้ถามซ้ำเป๊ะ เทียบคำถามแม่นยำกว่า + ประหยัด token เพราะข้าม Gemini ไปเลยถ้าซ้ำ)
+    try {
+      const lastQuestion = await redis.get<string>(`webchat:last_question:${sessionId}`)
+      if (lastQuestion && lastQuestion === message) {
+        const [cnt] = await redis.pipeline()
+          .incr(`webchat:repeat:${sessionId}`)
+          .expire(`webchat:repeat:${sessionId}`, LAST_ANSWER_TTL)
+          .exec() as [number, number]
+        if (cnt === 1) {
+          const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ มีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reminder }])
+          return json({ reply: await withContactSuffix(sessionId, reminder) }, cors)
+        }
+        return json({ reply: '' }, cors)
+      }
+    } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
+
     // Gemini
     const reply = await Promise.race([
       generateReply(message, faqText, history, FALLBACK_MSG, 'web'),
@@ -274,22 +292,9 @@ export async function POST(req: NextRequest) {
       return json({ reply: FALLBACK_MSG }, cors)
     }
 
-    // Duplicate suppression
+    // จำคำถามล่าสุดไว้เทียบซ้ำรอบหน้า (เฉพาะตอบสำเร็จ — HANDOFF/NOT_FOUND ฯลฯ ไม่นับ เพราะ return ไปก่อนแล้ว)
     try {
-      const last = await redis.get<string>(`webchat:last_answer:${sessionId}`)
-      if (last && last === reply) {
-        const [cnt] = await redis.pipeline()
-          .incr(`webchat:repeat:${sessionId}`)
-          .expire(`webchat:repeat:${sessionId}`, LAST_ANSWER_TTL)
-          .exec() as [number, number]
-        if (cnt === 1) {
-          const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ มีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-          await saveHistory(sessionId, [...history, { role: 'user', text: message }, { role: 'model', text: reminder }])
-          return json({ reply: await withContactSuffix(sessionId, reminder) }, cors)
-        }
-        return json({ reply: '' }, cors)
-      }
-      await redis.set(`webchat:last_answer:${sessionId}`, reply, { ex: LAST_ANSWER_TTL })
+      await redis.set(`webchat:last_question:${sessionId}`, message, { ex: LAST_ANSWER_TTL })
       await redis.del(`webchat:repeat:${sessionId}`)
     } catch { /* Redis ล่ม — ส่งปกติ */ }
 

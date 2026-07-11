@@ -327,6 +327,14 @@
       </div>
     </div>
     <div class="step">
+      <div class="step-num">9d</div>
+      <div class="step-content">
+        <div class="step-title">กันถามซ้ำเป๊ะ — เช็คก่อนเรียก Gemini</div>
+        <div class="step-desc">GET <code>last_question:{userId}</code> · ตรงกับ <code>userMessage</code> เป๊ะ → INCR <code>repeat_count:{userId}</code> EX 120s · count=1: ans(reminder) → return · count≥2: เงียบ → return (ไม่เรียก Gemini เลยทั้ง 2 กรณี — ประหยัด token ด้วย)<br>ไม่ตรง → ไปต่อขั้นถัดไปตามปกติ</div>
+        <div class="ok">(แก้บั๊กแล้ว 2026-07-11) เดิมเช็คหลังเรียก Gemini เสร็จ โดยเทียบ "คำตอบ" ที่ได้กับคำตอบก่อนหน้า — Gemini ตั้ง <code>temperature: 1.0</code> ทำให้คำตอบไม่เหมือนเดิมทุกตัวอักษรได้แม้ถามคำถามคลุมเครือซ้ำเป๊ะ (เช่น "สอบถามเพิ่มเติม") เลยหลุดจากการเช็ค ตอบเต็มรูปแบบซ้ำไปเรื่อยๆ ไม่มีวันเงียบ — ตอนนี้ย้ายมาเช็คก่อนเรียก Gemini แทน โดยเทียบ "คำถามลูกค้า" (ค่าที่แน่นอน ไม่มีความสุ่ม) แทนคำตอบ แม่นยำกว่าและประหยัด token เพราะข้ามการเรียก Gemini ไปเลยถ้าซ้ำ — เปลี่ยน key จาก <code>last_answer</code> เป็น <code>last_question</code> ทุกช่องทาง (LINE/FB text/FB postback/Web Chat)</div>
+      </div>
+    </div>
+    <div class="step">
       <div class="step-num">10</div>
       <div class="step-content">
         <div class="step-title">🤖 Gemini Reply</div>
@@ -356,18 +364,11 @@
     <div class="step">
       <div class="step-num">12</div>
       <div class="step-content">
-        <div class="step-title">Duplicate Answer Suppression</div>
-        <div class="step-desc">GET <code>last_answer:{userId}</code> · ซ้ำ: INCR <code>repeat_count:{userId}</code> EX 120s · count=1: ans(reminder) · count≥2: เงียบ → return</div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">13</div>
-      <div class="step-content">
         <div class="step-title">Send Reply — ans()</div>
         <div class="step-desc">
           <strong>greetFirst=true</strong>: safeReply([offHours?, WELCOME_MSG]) → safePush([answer]) · ส่งแยก 2 ข้อความ<br>
           <strong>greetFirst=false</strong>: safeReply([offHours?, answer])<br>
-          ต่อจากนั้น: SET <code>last_answer:{userId}</code> EX 120s + DEL repeat_count · saveHistory · log · zincrby <code>question_freq</code>
+          ต่อจากนั้น: SET <code>last_question:{userId}</code> EX 120s (เก็บ <code>userMessage</code> ไว้เทียบซ้ำรอบหน้า — ดูขั้น 9d) + DEL repeat_count · saveHistory · log · zincrby <code>question_freq</code>
         </div>
       </div>
     </div>
@@ -452,12 +453,14 @@ CONTACT_SERVICE → 'ติดต่อศูนย์บริการ'
 (ไม่ตรง payload ใดเลย → ใช้ title โดยตรง)</div>
     <div class="flow-arrow">↓</div>
     <div class="flow-box">shouldHandoff(queryText) → fbSend(handoffMsg) → return
-ไม่ใช่ → generateReply(queryText, ...) timeout 7s
+→ ชั้น 1 กันถามซ้ำเป๊ะ (GET <code>last_question:{userId}</code> เทียบ <code>queryText</code> ก่อนเรียก Gemini เลย — คีย์เดียวกับ text flow) → ซ้ำครั้งที่ 2: reminder → return (ข้าม Gemini) · ครั้งที่ 3+: เงียบ → return (ข้าม Gemini)
+ไม่ซ้ำ → generateReply(queryText, ...) timeout 7s
 NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
-→ ชั้น 1 กันตอบซ้ำ (ใช้ last_answer:{userId}/repeat_count:{userId} คีย์เดียวกับ text flow) → ซ้ำครั้งที่ 2: reminder · ครั้งที่ 3+: เงียบ
+→ SET last_question:{userId} EX 120s (เก็บ queryText ไว้เทียบรอบหน้า)
 → fbSendReply(psid, finalReply) → saveHistory</div>
   </div>
-  <div class="ok">(แก้บั๊กแล้ว 2026-07-11) เดิม POSTBACK flow ไม่มีระบบกันตอบซ้ำเลย ต่างจาก text flow — กดปุ่มเดิมซ้ำๆ (เช่น "สอบถามเพิ่มเติม") จะได้คำตอบเต็มรูปแบบซ้ำไปเรื่อยๆ ไม่มีวันเงียบ (เห็นจริงจากการทดสอบ 3 ครั้งติดกันได้คำตอบเดิมเป๊ะทุกครั้ง) ตอนนี้เพิ่ม logic เดียวกับ text flow เข้าไปแล้ว ครอบคลุมทุกปุ่ม postback ไม่ใช่แค่ "สอบถามเพิ่มเติม"</div>
+  <div class="ok">(แก้บั๊กแล้ว 2026-07-11) เดิม POSTBACK flow ไม่มีระบบกันตอบซ้ำเลย ต่างจาก text flow — กดปุ่มเดิมซ้ำๆ (เช่น "สอบถามเพิ่มเติม") จะได้คำตอบเต็มรูปแบบซ้ำไปเรื่อยๆ ไม่มีวันเงียบ (เห็นจริงจากการทดสอบ 3 ครั้งติดกันได้คำตอบเดิมเป๊ะทุกครั้ง) ตอนนี้เพิ่ม logic กันซ้ำเข้าไปแล้ว ครอบคลุมทุกปุ่ม postback ไม่ใช่แค่ "สอบถามเพิ่มเติม"</div>
+  <div class="ok">(แก้เพิ่ม 2026-07-11) ตอนแรกเช็คหลังเรียก Gemini (เทียบ <code>finalReply</code>) เหมือน text flow เดิม แต่พบว่า Gemini (temperature 1.0) ตอบคำถามคลุมเครือซ้ำๆ ด้วยถ้อยคำไม่เหมือนเดิมทุกตัวอักษร ทำให้หลุดจากการเช็ค — ย้ายมาเช็คก่อนเรียก Gemini แทน โดยเทียบ <code>queryText</code> (ค่าที่แน่นอน) แทน <code>finalReply</code> เหมือนที่แก้ text flow ด้วย</div>
 </div>
 
 <!-- ─── WEB CHAT FLOW ─── -->
@@ -477,6 +480,8 @@ NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
     <div class="step"><div class="step-num">9b</div><div class="step-content"><div class="step-title">Exact Keyword Match (<code>findExactMatch</code>)</div><div class="step-desc">ตรวจ keyword ตรงชีตแบบ deterministic (2 ชั้น) — match เจอ 1 แถวพอดี → saveHistory + return คำตอบผ่าน <code>withSuffix()</code> (มีคำว่า "บาท" → +CONTACT_SUFFIX ทุกครั้ง / ไม่มี → +CONTACT_SUFFIX ครั้งแรกของ session เท่านั้น) ไม่ผ่าน Gemini · ไม่ match → ไปต่อตามปกติ · ดูหัวข้อ "Exact Keyword Match"</div></div></div>
     <div class="step"><div class="step-num">10</div><div class="step-content"><div class="step-title">Order Intent</div><div class="step-desc">regex <code>ORDER_RE</code> (อยากสั่ง/จะซื้อ/โอนเงิน ฯลฯ) → saveHistory + return FALLBACK_MSG ทันที ไม่ผ่าน Gemini</div></div></div>
     <div class="step"><div class="step-num">10b</div><div class="step-content"><div class="step-title">Claim / ส่งซ่อม (<code>CLAIM_RE</code>) — keyword ตรงตัวเท่านั้น</div><div class="step-desc">regex <code>เคลม|ส่งซ่อม|claim</code> → saveHistory + return <code>CLAIM_MSG</code> ("เรื่องเคลม/ส่งซ่อมรบกวนติดต่อแอดมินโดยตรงเลยนะคะ" + เบอร์ติดต่อ) ทันที ไม่ผ่าน Gemini เลย — ดักเฉพาะข้อความที่มีคำนี้ตรงตัว (เช่น "จะส่งเครื่องเคลมครับ") ข้อความที่แจ้งอาการโดยไม่มีคำเหล่านี้ (เช่น "PTT กดไม่ติดครับ") จะไม่ถูกดักตรงนี้ ไหลไปเรียก Gemini ตามปกติ (ดูขั้น 11-12 ผลลัพธ์ <code>HANDOFF: ซ่อม/เคลม</code>)</div></div></div>
+    <div class="step"><div class="step-num">10c</div><div class="step-content"><div class="step-title">กันถามซ้ำเป๊ะ — เช็คก่อนเรียก Gemini</div><div class="step-desc">GET <code>webchat:last_question:{sessionId}</code> · ตรงกับ <code>message</code> เป๊ะ → INCR <code>webchat:repeat:{sessionId}</code> EX 120s · count=1: reminder <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span> → return · count≥2: <code>{'{'}reply:""{'}'}</code> → return (ทั้ง 2 กรณีข้าม Gemini เลย)<br>ไม่ตรง → ไปต่อขั้นถัดไปตามปกติ</div>
+    <div class="ok">(แก้บั๊กแล้ว 2026-07-11) เดิมเช็คหลังเรียก Gemini เสร็จ โดยเทียบ "คำตอบ" — Gemini ตั้ง <code>temperature: 1.0</code> ทำให้คำตอบไม่เหมือนเดิมทุกตัวอักษรได้แม้ถามคำถามคลุมเครือซ้ำเป๊ะ ตอนนี้ย้ายมาเช็คก่อนเรียก Gemini แทน เทียบ "คำถามลูกค้า" แทนคำตอบ แม่นยำกว่า + ประหยัด token (เปลี่ยน key จาก <code>webchat:last_answer</code> เป็น <code>webchat:last_question</code>)</div></div></div>
     <div class="step"><div class="step-num">11</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s</div><div class="step-desc"><code>generateReply(message, faq, history, FALLBACK_MSG, 'web')</code> — ส่ง channel='web' ให้ <code>&lt;repair_protocol&gt;</code> ขั้น 2 ข้ามการถามรุ่น/อาการ/ระยะเวลาซื้อ ตอบ <code>HANDOFF: ซ่อม/เคลม</code> ทันทีคำเดียว (2026-07-10)</div></div></div>
     <div class="step"><div class="step-num">12</div><div class="step-content"><div class="step-title">Handle Gemini Returns</div><div class="step-desc">
       <span class="flow-no">GEMINI_UNAVAILABLE</span> → FALLBACK_MSG<br>
@@ -486,8 +491,7 @@ NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
       <div class="indent">≥5 → SET <code>web_blocked:{sessionId}</code> EX 30min → reply "ตอบได้เฉพาะวิทยุ" <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span><br>2–4 → <code>{reply:""}</code> เงียบ<br>≤1 → reply OOD msg <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span></div>
       <span class="flow-no">NOT_FOUND</span>: lpush <code>unanswered_log</code> + ltrim 500 → saveHistory + return FALLBACK_MSG เสมอ (ไม่มี retry flag แล้ว)
     </div></div></div>
-    <div class="step"><div class="step-num">13</div><div class="step-content"><div class="step-title">Duplicate Suppression</div><div class="step-desc">GET <code>webchat:last_answer:{sessionId}</code> EX 120s · ซ้ำ count=1: reminder <span class="badge badge-blue">+CONTACT_SUFFIX ครั้งแรก</span> · count≥2: <code>{reply:""}</code></div></div></div>
-    <div class="step"><div class="step-num">14</div><div class="step-content"><div class="step-title">Reply + Track + Save</div><div class="step-desc">zincrby <code>question_freq</code> · SET last_answer + DEL repeat · saveHistory (slice -20, เก็บ <code>reply</code> ดิบ ไม่รวม suffix ใดๆ) · logChat(bot) · return <code>{'{'}reply: withSuffix(reply){'}'}</code></div></div></div>
+    <div class="step"><div class="step-num">13</div><div class="step-content"><div class="step-title">Reply + Track + Save</div><div class="step-desc">SET <code>webchat:last_question:{sessionId}</code> EX 120s (เก็บ <code>message</code> ไว้เทียบซ้ำรอบหน้า — ดูขั้น 10c) + DEL repeat · zincrby <code>question_freq</code> · saveHistory (slice -20, เก็บ <code>reply</code> ดิบ ไม่รวม suffix ใดๆ) · logChat(bot) · return <code>{'{'}reply: withSuffix(reply){'}'}</code></div></div></div>
   </div>
   <div class="tip"><strong>CONTACT_SUFFIX</strong> (ค่าเดียวใช้ทั้ง 2 กรณี ผ่าน <code>withSuffix()</code>): <br>"สอบถามรายละเอียดเพิ่มเติมติดต่อได้ที่ แอดไลน์ @spenderclub เบอร์โทรติดต่อ: 085-222-9111, 089-661-2682 จันทร์–เสาร์ เวลา 08:00–17:00 น.ค่ะ"<br>
     <span class="flow-yes">reply มีคำว่า "บาท"</span>: ต่อท้าย<u>ทุกครั้ง</u>ที่บอกราคา (ไม่จำกัดแค่ครั้งแรกของ session) พร้อม SET flag <code>webchat:contact_shown:{sessionId}</code> EX 30min ไปด้วยกันตอนนั้นเลย<br>
@@ -609,7 +613,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>nonsense_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD counter · ≤1=reply ≥2=เงียบ</td></tr>
     <tr><td><code>retry:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">600s</span></td><td>NOT_FOUND: ไม่มี=retryMsg+log / มี=handoffMsg</td></tr>
     <tr><td><code>order_confirm:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">1200s</span></td><td>กันตอบ "กรุณารอสักครู่นะคะ" ซ้ำ (เฉพาะในเวลาทำการ)</td></tr>
-    <tr><td><code>last_answer:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>ป้องกัน duplicate reply</td></tr>
+    <tr><td><code>last_question:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>ป้องกัน duplicate reply (เทียบคำถาม เช็คก่อนเรียก Gemini)</td></tr>
     <tr><td><code>repeat_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Duplicate counter: 1=reminder 2+=เงียบ</td></tr>
     <tr><td><code>history:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s</span></td><td>Conversation turns max 6 (lib/history.ts)</td></tr>
   </table>
@@ -627,7 +631,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>nonsense_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD counter FB</td></tr>
     <tr><td><code>retry:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">600s</span></td><td>NOT_FOUND retry FB</td></tr>
     <tr><td><code>order_confirm:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">1200s</span></td><td>กันตอบ "กรุณารอสักครู่นะคะ" ซ้ำ FB (เฉพาะในเวลาทำการ)</td></tr>
-    <tr><td><code>last_answer:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress FB</td></tr>
+    <tr><td><code>last_question:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress FB (text + postback ใช้ key เดียวกัน)</td></tr>
     <tr><td><code>repeat_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Repeat counter FB</td></tr>
     <tr><td><code>history:fb:{psid}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s</span></td><td>Conversation history FB (lib/history.ts)</td></tr>
   </table>
@@ -640,7 +644,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>webchat:rate:{sessionId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Session rate limit 5/10s</td></tr>
     <tr><td><code>webchat:hist:{sessionId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">30m</span></td><td>Session history max 20 turns (slice -20)</td></tr>
     <tr><td><code>webchat:nonsense:{sessionId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>OOD: ≥5=block, 2-4=เงียบ, ≤1=reply</td></tr>
-    <tr><td><code>webchat:last_answer:{sessionId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress</td></tr>
+    <tr><td><code>webchat:last_question:{sessionId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress (เทียบคำถาม เช็คก่อนเรียก Gemini)</td></tr>
     <tr><td><code>webchat:repeat:{sessionId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Repeat counter</td></tr>
     <tr><td><code>webchat:contact_shown:{sessionId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">30m</span></td><td>CONTACT_SUFFIX แสดงไปแล้วใน session นี้หรือยัง</td></tr>
   </table>

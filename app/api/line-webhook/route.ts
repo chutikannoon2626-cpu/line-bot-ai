@@ -414,6 +414,28 @@ export async function POST(req: NextRequest) {
             return
           }
 
+          // ชั้น 1: กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" (Gemini temperature 1.0
+          // ทำให้คำตอบไม่เหมือนเดิมทุกตัวอักษรได้แม้ถามซ้ำเป๊ะ เทียบคำถามแม่นยำกว่า + ประหยัด token
+          // เพราะข้าม Gemini ไปเลยถ้าซ้ำ ไม่ต้องรอคำตอบมาก่อนแล้วค่อยทิ้ง)
+          try {
+            const lastQuestion = await redis.get<string>(`last_question:${userId}`)
+            if (lastQuestion && lastQuestion === userMessage) {
+              const [repeatCount] = await redis.pipeline()
+                .incr(`repeat_count:${userId}`)
+                .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                .exec() as [number, number]
+              if (repeatCount === 1) {
+                const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                await ans(txt(reminder))
+                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                log.info('reply.duplicate_reminded', { userId })
+              } else {
+                log.info('reply.duplicate_suppressed', { userId, repeatCount })
+              }
+              return
+            }
+          } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
+
           const faqText = await fetchFAQ()
           const reply = await Promise.race([
             generateReply(userMessage, faqText, history, handoffMsg, 'line'),
@@ -525,25 +547,9 @@ export async function POST(req: NextRequest) {
             return
           }
 
-          // ชั้น 1: กันตอบซ้ำเป๊ะ — ครั้งที่ 2 reminder, ครั้งที่ 3+ เงียบ
+          // จำคำถามล่าสุดไว้เทียบซ้ำรอบหน้า (เฉพาะตอบสำเร็จ — HANDOFF/NOT_FOUND ฯลฯ ไม่นับ)
           try {
-            const lastAnswer = await redis.get<string>(`last_answer:${userId}`)
-            if (lastAnswer && lastAnswer === reply) {
-              const [repeatCount] = await redis.pipeline()
-                .incr(`repeat_count:${userId}`)
-                .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
-                .exec() as [number, number]
-              if (repeatCount === 1) {
-                const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-                await ans(txt(reminder))
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
-                log.info('reply.duplicate_reminded', { userId })
-              } else {
-                log.info('reply.duplicate_suppressed', { userId, repeatCount })
-              }
-              return
-            }
-            await redis.set(`last_answer:${userId}`, reply, { ex: LAST_ANSWER_TTL })
+            await redis.set(`last_question:${userId}`, userMessage, { ex: LAST_ANSWER_TTL })
             await redis.del(`repeat_count:${userId}`)
           } catch { /* Redis ล่ม — ส่งปกติ */ }
 
