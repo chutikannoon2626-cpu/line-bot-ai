@@ -421,7 +421,8 @@
     <div class="step"><div class="step-num">6b</div><div class="step-content"><div class="step-title">Order Confirm (<code>ORDER_CONFIRM_RE</code>) — ไม่ผ่าน Gemini</div><div class="step-desc">"สั่งเลย/อยากสั่ง/ต้องการซื้อ/จะซื้อ/สั่งได้ไหม/ซื้อยังไง/โอนเงิน/ชำระเงิน/จ่ายเงิน"<br>นอกเวลาทำการ → fbSend("ขณะนี้อยู่นอกเวลาทำการ...") ทุกครั้ง ไม่กันซ้ำ<br>ในเวลาทำการ → GET <code>order_confirm:fb:{psid}</code>: ไม่มี → SET EX 1200 + fbSend("กรุณารอสักครู่นะคะ") · มีแล้ว → เงียบ</div></div></div>
     <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">🤖 Gemini timeout 10s · GEMINI_UNAVAILABLE → UNAVAILABLE_MSG</div><div class="step-desc">ใช้ <code>lib/prompts.ts</code> เดียวกับ LINE — (แก้บั๊กแล้ว 2026-07-07) "ขายส่ง/ใบเสนอราคา" เอาออกจาก <code>out_of_scope_triggers</code> แล้ว Gemini ค้น FAQ ก่อนเสมอ (ดูรายละเอียดที่หัวข้อ LINE ขั้น 10)</div></div></div>
     <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Handle returns: CANCEL_IMEI · HANDOFF · OUT_OF_DOMAIN · NOT_FOUND · Duplicate</div><div class="step-desc">เหมือน LINE ยกเว้น: ไม่มี takeover key · ใช้ <code>notifyAdminFacebook()</code><br>NOT_FOUND: ตรวจ <code>shouldHandoffDeferred</code> ก่อนเสมอ (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ) — มี trigger → pre_handoff ทันที (ข้าม retry) · ไม่มี → retry 2 รอบตามปกติ</div></div></div>
-    <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">fbSendReply(psid, reply)</div><div class="step-desc">ตรวจ URL <code>spenderclub.com</code> ใน reply → มี: Generic Template Card (title+subtitle+2 ปุ่ม) · ไม่มี: plain text<br>saveHistory · log · zincrby question_freq</div></div></div>
+    <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">fbSendReply(psid, reply)</div><div class="step-desc">ตรวจ URL <code>spenderclub.com</code> ใน reply → มี: Generic Template Card (title+subtitle+2 ปุ่ม: "ดูรายละเอียด/ราคา" web_url + "สอบถามเพิ่มเติม" postback payload <code>CONTACT_ADMIN</code>) · ไม่มี: plain text<br>saveHistory · log · zincrby question_freq</div>
+    <div class="warn">(แก้บั๊กแล้ว 2026-07-11) ปุ่มที่ 2 เดิมชื่อ "ติดต่อแอดมิน" กดแล้วเข้า <code>shouldHandoff()</code> ตอบ handoffMsg ทันที <strong>โดยไม่เคยเรียก <code>notifyAdminFacebook()</code></strong> ลูกค้าคิดว่ามีคนได้รับแจ้งแต่จริงๆ ไม่มีใครรู้เรื่องเลย — เปลี่ยนป้ายเป็น "สอบถามเพิ่มเติม" แทน (payload เดิม <code>CONTACT_ADMIN</code> ไม่ตรงกับ 5 payload ที่รู้จักอยู่แล้ว จึงไม่ชน <code>shouldHandoff()</code> ไหลไปเรียก Gemini จริงแทน)</div></div></div>
   </div>
 
   <h3 style="margin-top:14px">IMAGE — Flow</h3>
@@ -453,8 +454,10 @@ CONTACT_SERVICE → 'ติดต่อศูนย์บริการ'
     <div class="flow-box">shouldHandoff(queryText) → fbSend(handoffMsg) → return
 ไม่ใช่ → generateReply(queryText, ...) timeout 7s
 NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
+→ ชั้น 1 กันตอบซ้ำ (ใช้ last_answer:{userId}/repeat_count:{userId} คีย์เดียวกับ text flow) → ซ้ำครั้งที่ 2: reminder · ครั้งที่ 3+: เงียบ
 → fbSendReply(psid, finalReply) → saveHistory</div>
   </div>
+  <div class="ok">(แก้บั๊กแล้ว 2026-07-11) เดิม POSTBACK flow ไม่มีระบบกันตอบซ้ำเลย ต่างจาก text flow — กดปุ่มเดิมซ้ำๆ (เช่น "สอบถามเพิ่มเติม") จะได้คำตอบเต็มรูปแบบซ้ำไปเรื่อยๆ ไม่มีวันเงียบ (เห็นจริงจากการทดสอบ 3 ครั้งติดกันได้คำตอบเดิมเป๊ะทุกครั้ง) ตอนนี้เพิ่ม logic เดียวกับ text flow เข้าไปแล้ว ครอบคลุมทุกปุ่ม postback ไม่ใช่แค่ "สอบถามเพิ่มเติม"</div>
 </div>
 
 <!-- ─── WEB CHAT FLOW ─── -->

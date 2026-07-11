@@ -625,6 +625,29 @@ export async function POST(req: NextRequest) {
 
             const finalReply = (reply === NOT_FOUND || reply === OUT_OF_DOMAIN || reply === GEMINI_UNAVAILABLE)
               ? UNAVAILABLE_MSG : reply
+
+            // ชั้น 1: กันตอบซ้ำเป๊ะ — ครั้งที่ 2 reminder, ครั้งที่ 3+ เงียบ (เหมือน text flow ด้านบน)
+            try {
+              const lastAnswer = await redis.get<string>(`last_answer:${userId}`)
+              if (lastAnswer && lastAnswer === finalReply) {
+                const [repeatCount] = await redis.pipeline()
+                  .incr(`repeat_count:${userId}`)
+                  .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                  .exec() as [number, number]
+                if (repeatCount === 1) {
+                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                  await fbSend(psid, reminder)
+                  await saveHistory(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: reminder }])
+                  log.info('fb.postback.duplicate_reminded', { userId })
+                } else {
+                  log.info('fb.postback.duplicate_suppressed', { userId, repeatCount })
+                }
+                return
+              }
+              await redis.set(`last_answer:${userId}`, finalReply, { ex: LAST_ANSWER_TTL })
+              await redis.del(`repeat_count:${userId}`)
+            } catch { /* Redis ล่ม — ส่งปกติ */ }
+
             await fbSendReply(psid, finalReply)
             await saveHistory(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
             log.info('fb.postback.replied', { userId, payload, latencyMs: Date.now() - startTime })
