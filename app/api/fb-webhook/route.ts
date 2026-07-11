@@ -87,7 +87,7 @@ async function fbSendProductCard(psid: string, reply: string, url: string) {
                 subtitle,
                 buttons: [
                   { type: 'web_url', url, title: 'ดูรายละเอียด/ราคา' },
-                  { type: 'postback', title: 'ติดต่อแอดมิน', payload: 'CONTACT_ADMIN' },
+                  { type: 'postback', title: 'สอบถามเพิ่มเติม', payload: 'CONTACT_ADMIN' },
                 ],
               }],
             },
