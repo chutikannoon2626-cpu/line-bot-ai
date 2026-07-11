@@ -503,6 +503,7 @@ NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
   </div>
   <div class="warn">(แก้บั๊กแล้ว) เดิม BUY_SUFFIX กับ CONTACT_SUFFIX เป็นข้อความคนละอันและคนละเงื่อนไขที่ไม่เกี่ยวกันเลย — ถ้าข้อความแรกของ session ดันมีราคาด้วยพอดี (เช่น "สวัสดีค่ะ มีรุ่น 11HW ไหมราคาเท่าไหร่") ทั้ง 2 เงื่อนไขจะเข้าพร้อมกัน ทำให้ต่อท้าย 2 บรรทัดซ้อนกัน (เบอร์เดียวกันขึ้น 2 รอบ) ตอนนี้รวมเป็นข้อความเดียว + <code>withSuffix()</code> ฟังก์ชันเดียว เลือกต่อแค่ครั้งเดียวเสมอ ไม่ซ้อนกันอีก</div>
   <div class="warn">Web ไม่มีแอดมิน real-time: ทุกกรณีที่ตอบไม่ได้ (rate limit / handoff / order intent / GEMINI_UNAVAILABLE / HANDOFF / NOT_FOUND) → FALLBACK_MSG เดียวกันหมด (มีเบอร์ติดต่อในตัว)</div>
+  <div class="warn">(แก้บั๊กแล้ว 2026-07-11) <code>lib/prompts.ts</code> guardrail "ถ้าลูกค้าถามคำถามเดิมซ้ำๆ หรือไม่สามารถหาคำตอบที่แตกต่างจากเดิมได้" เดิม hardcode ให้ Gemini ตอบ "กรุณารอแอดมินสักครู่นะคะ" ตรงๆ ไม่ผ่านตัวแปร <code>handoffMsg</code> เหมือนจุดอื่น ทำให้ Web Chat ก็โดนบอกว่า "รอแอดมิน" ทั้งที่ไม่มีแอดมิน real-time คอยตอบจริง (ไม่มี notifyAdmin สำหรับ Web Chat) ลูกค้ารอเก้อ — แก้เป็นใช้ <code>handoffMsg</code> แทน ตอนนี้ Web Chat จะได้ FALLBACK_MSG (มีเบอร์ติดต่อ) ส่วน LINE/Facebook ยังได้ "รอแอดมินติดต่อกลับนะคะ" เหมือนเดิมเพราะมีแอดมินจริงคอยตอบผ่าน notifyAdmin()</div>
 </div>
 
 <!-- ─── GEMINI FLOW ─── -->
