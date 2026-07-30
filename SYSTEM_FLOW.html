@@ -330,7 +330,7 @@
       <div class="step-content">
         <div class="step-title">Order Confirm (<code>ORDER_CONFIRM_RE</code>) — ไม่ผ่าน Gemini</div>
         <div class="step-desc">"สั่งเลย/อยากสั่ง/ต้องการซื้อ/จะซื้อ/สั่งได้ไหม/ซื้อยังไง/โอนเงิน/ชำระเงิน/จ่ายเงิน" →
-          <div class="indent"><span class="flow-no">นอกเวลาทำการ</span> (≥18 หรือ &lt;8): ans("ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการ...") → saveHistory → return ทุกครั้ง ไม่กันซ้ำ</div>
+          <div class="indent"><span class="flow-no">นอกเวลาทำการ</span> (≥18 หรือ &lt;8): ans("ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการในช่วงเวลา 08:00–17:00 น. นะคะ ลูกค้าสามารถพิมพ์ข้อความไว้โดยเจ้าหน้าที่จะรีบตอบกลับในวันทำการถัดไปนะคะ") → saveHistory → return ทุกครั้ง ไม่กันซ้ำ</div>
           <div class="indent"><span class="flow-yes">ในเวลาทำการ</span>: GET <code>order_confirm:{userId}</code> · ไม่มี → SET EX 1200 (20min) → ans("กรุณารอสักครู่นะคะ") → saveHistory → return<br>มีแล้ว (ยังไม่ครบ 20 นาที) → เงียบ ไม่ตอบซ้ำ → return</div>
         </div>
       </div>

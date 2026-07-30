@@ -34,7 +34,7 @@ const OFF_HOURS_NOTICE = 'ขณะนี้อยู่นอกเวลาท
 const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
 const ORDER_CONFIRM_RE = /สั่งเลย|อยากสั่ง|ต้องการซื้อ|จะซื้อ|สั่งได้ไหม|ซื้อยังไง|โอนเงิน|ชำระเงิน|จ่ายเงิน/u
 const ORDER_CONFIRM_WAIT_MSG = 'กรุณารอสักครู่นะคะ'
-const ORDER_CONFIRM_OFF_HOURS_MSG = 'ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการในช่วงเวลา 08:00–17:00 น. นะคะ'
+const ORDER_CONFIRM_OFF_HOURS_MSG = 'ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการในช่วงเวลา 08:00–17:00 น. นะคะ ลูกค้าสามารถพิมพ์ข้อความไว้โดยเจ้าหน้าที่จะรีบตอบกลับในวันทำการถัดไปนะคะ'
 
 function getHandoffMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
