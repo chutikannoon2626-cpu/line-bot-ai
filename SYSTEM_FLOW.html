@@ -117,7 +117,7 @@
   <span class="dot"></span>
   <div>
     <h1>น้องใจดี — Spender Club Bot</h1>
-    <div class="header-sub">System Flow Document · อ่านจากโค้ดจริง · Next.js 14 + Gemini 2.5 Flash · runtime: nodejs · maxDuration: 30</div>
+    <div class="header-sub">System Flow Document · อ่านจากโค้ดจริง · Next.js 14 + Gemini 2.5 Flash · runtime: nodejs · maxDuration: 60</div>
   </div>
 </div>
 
@@ -127,6 +127,7 @@
 <div class="section" id="channels">
   <h2>🏗 Channel Architecture</h2>
   <div class="tip">ทั้ง 3 ช่องทางใช้ <code>generateReply()</code> เดียวกัน — Gemini logic ร่วมกันทั้งหมด แตกต่างเฉพาะ transport layer และ state key namespace</div>
+  <div class="ok">(แก้ไข 2026-07-30) เดิมจับ timeout เรียก Gemini ด้วย <code>Promise.race()</code> ธรรมดา — เมื่อ timeout ชนะ การเรียก Gemini ที่ "แพ้" ไม่ได้ถูกยกเลิกจริง ยังทำงานต่อในเบื้องหลังเงียบๆ เสี่ยงกินเวลาจนกระทบ <code>maxDuration</code> ทำให้ function ถูกฆ่ากลางคันแบบไม่มี log เลย ตอนนี้เปลี่ยนเป็น <code>AbortController</code> — เมื่อ timeout จะสั่งยกเลิกการเชื่อมต่อ Gemini จริง (ผ่าน <code>abortSignal</code> ใน config) พร้อมเพิ่ม <code>maxDuration</code> จาก 30 เป็น 60 วินาทีเป็นตาข่ายนิรภัย และเพิ่ม log <code>webhook.message_received</code> ทันทีที่ข้อความเข้ามาก่อนประมวลผลใดๆ เพื่อดักปัญหา "บอทเงียบไม่ตอบเลย" ที่เคยเจอในทั้ง 3 ช่องทาง</div>
   <div class="card">
     <pre>
 ┌──────────────────────────────────────────────────────────────────────────┐

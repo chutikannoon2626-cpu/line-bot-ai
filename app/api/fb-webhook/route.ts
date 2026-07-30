@@ -11,7 +11,7 @@ import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 60
 
 const NOT_FOUND = '[NOT_FOUND]'
 const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
@@ -211,6 +211,7 @@ export async function POST(req: NextRequest) {
           // --- TEXT (ข้ามถ้าเป็น image+caption — IMAGE handler จัดการเอง) ---
           if (event.message?.text && !event.message.attachments?.some(a => a.type === 'image')) {
             const userMessage = event.message.text
+            log.info('webhook.message_received', { userId })
             logChat({ userId, channel: 'Facebook', role: 'user', message: userMessage, ts: Date.now() })
             const history = await getHistory(userId)
             const handoffMsg = getHandoffMessage()
@@ -409,15 +410,14 @@ export async function POST(req: NextRequest) {
 
 
             const faqText = await fetchFAQ()
-            const reply = await Promise.race([
-              generateReply(userMessage, faqText, history, handoffMsg, 'facebook'),
-              new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error('gemini_timeout')), 10000)
-              ),
-            ]).catch((err) => {
-              log.error('fb.gemini.failed', { err: (err as Error).message, userId })
-              return GEMINI_UNAVAILABLE
-            })
+            const geminiController = new AbortController()
+            const geminiTimeoutId = setTimeout(() => geminiController.abort(), 10000)
+            const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'facebook', geminiController.signal)
+              .catch((err) => {
+                log.error('fb.gemini.failed', { err: (err as Error).message, userId })
+                return GEMINI_UNAVAILABLE
+              })
+            clearTimeout(geminiTimeoutId)
 
             // Gemini ไม่ตอบทัน (timeout, 429, 503)
             if (reply === GEMINI_UNAVAILABLE) {
@@ -647,12 +647,11 @@ export async function POST(req: NextRequest) {
               }
             } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
 
-            const reply = await Promise.race([
-              generateReply(queryText, faqText, history, handoffMsg, 'facebook'),
-              new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error('gemini_timeout')), 7000)
-              ),
-            ]).catch(() => GEMINI_UNAVAILABLE)
+            const geminiController2 = new AbortController()
+            const geminiTimeoutId2 = setTimeout(() => geminiController2.abort(), 7000)
+            const reply = await generateReply(queryText, faqText, history, handoffMsg, 'facebook', geminiController2.signal)
+              .catch(() => GEMINI_UNAVAILABLE)
+            clearTimeout(geminiTimeoutId2)
 
             const finalReply = (reply === NOT_FOUND || reply === OUT_OF_DOMAIN || reply === GEMINI_UNAVAILABLE)
               ? UNAVAILABLE_MSG : reply

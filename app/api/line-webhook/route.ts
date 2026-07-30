@@ -42,7 +42,7 @@ function getHandoffMessage(): string {
 }
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 60
 
 const DEFAULT_REPLY =
   'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
         // --- TEXT ---
         if (msgType === 'text') {
           const userMessage = (event.message as { text: string }).text
+          log.info('webhook.message_received', { userId })
           logChat({ userId, channel: 'LINE', role: 'user', message: userMessage, ts: Date.now() })
           const history = await getHistory(userId)
           const handoffMsg = getHandoffMessage()
@@ -441,15 +442,14 @@ export async function POST(req: NextRequest) {
           }
 
           const faqText = await fetchFAQ()
-          const reply = await Promise.race([
-            generateReply(userMessage, faqText, history, handoffMsg, 'line'),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error('gemini_timeout')), 10000)
-            ),
-          ]).catch((err) => {
-            log.error('gemini.failed', { err: (err as Error).message })
-            return GEMINI_UNAVAILABLE
-          })
+          const geminiController = new AbortController()
+          const geminiTimeoutId = setTimeout(() => geminiController.abort(), 10000)
+          const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'line', geminiController.signal)
+            .catch((err) => {
+              log.error('gemini.failed', { err: (err as Error).message })
+              return GEMINI_UNAVAILABLE
+            })
+          clearTimeout(geminiTimeoutId)
 
           // Gemini ไม่ตอบทัน (timeout, 429, 503) — แจ้งลูกค้าให้ถามใหม่
           if (reply === GEMINI_UNAVAILABLE) {

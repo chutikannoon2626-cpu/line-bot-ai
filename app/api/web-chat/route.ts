@@ -8,7 +8,7 @@ import { isScheduledOff } from '@/lib/schedule'
 import { logChat } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 60
 
 const NOT_FOUND          = '[NOT_FOUND]'
 const OUT_OF_DOMAIN      = '[OUT_OF_DOMAIN]'
@@ -187,6 +187,7 @@ export async function POST(req: NextRequest) {
     }
 
     const history = await getHistory(sessionId)
+    log.info('webhook.message_received', { userId })
     logChat({ userId, channel: 'Web', role: 'user', message, ts: Date.now() })
     const faqText = await fetchFAQ()
 
@@ -244,10 +245,11 @@ export async function POST(req: NextRequest) {
 
 
     // Gemini
-    const reply = await Promise.race([
-      generateReply(message, faqText, history, FALLBACK_MSG, 'web'),
-      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
-    ]).catch(() => GEMINI_UNAVAILABLE)
+    const geminiController = new AbortController()
+    const geminiTimeoutId = setTimeout(() => geminiController.abort(), 10000)
+    const reply = await generateReply(message, faqText, history, FALLBACK_MSG, 'web', geminiController.signal)
+      .catch(() => GEMINI_UNAVAILABLE)
+    clearTimeout(geminiTimeoutId)
 
     if (reply === GEMINI_UNAVAILABLE) {
       return json({ reply: FALLBACK_MSG }, cors)

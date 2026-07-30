@@ -39,7 +39,8 @@ export async function generateReply(
   faqText: string,
   history: Turn[] = [],
   handoffMsg: string = '',
-  channel: 'line' | 'facebook' | 'web' = 'web'
+  channel: 'line' | 'facebook' | 'web' = 'web',
+  abortSignal?: AbortSignal
 ): Promise<string> {
   const startTime = Date.now()
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
@@ -71,6 +72,7 @@ export async function generateReply(
       temperature: 1.0,
       maxOutputTokens: 3072,
       thinkingConfig: { thinkingBudget: 1024 },
+      abortSignal,
     },
   })
 
@@ -122,6 +124,7 @@ export async function generateReply(
         temperature: 1.0,
         maxOutputTokens: 3072,
         thinkingConfig: { thinkingBudget: 1024 },
+        abortSignal,
       },
     })
 
