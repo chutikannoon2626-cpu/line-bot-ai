@@ -356,7 +356,7 @@
         <div class="step-desc">
           <span class="flow-no">GEMINI_UNAVAILABLE</span> → ans(UNAVAILABLE_MSG "ระบบนานกว่าปกติ...") → return<br>
           <span class="flow-warn">CANCEL_IMEI</span> → ans("ยกเลิกรายการแล้ว") + saveHistory([]) → return<br>
-          <span class="flow-warn">HANDOFF / HANDOFF:xxx</span> → SET routed+takeover + DEL notified → notifyAdmin(summary) → ans(handoffMsg) → return (รวมเคส <code>HANDOFF: ซ่อม/เคลม | ...</code> จาก repair_protocol ด้วย — ใช้ logic เดียวกัน แค่ summary ต่างกัน)<br>
+          <span class="flow-warn">HANDOFF / HANDOFF:xxx</span> → SET routed+takeover + DEL notified → notifyAdmin(summary) → ans(replyMsg) → return (รวมเคส <code>HANDOFF: ซ่อม/เคลม | ...</code> จาก repair_protocol ด้วย — ใช้ logic เดียวกัน แค่ summary ต่างกัน) — <code>replyMsg</code> ปกติ = handoffMsg ทั่วไป ยกเว้น <code>HANDOFF: ขอวิธีทำเอง | ...</code> (จาก self_repair_protocol, เฉพาะ LINE/Facebook, เพิ่ม 2026-07-31) ใช้ข้อความเฉพาะ "กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ" แทน<br>
           <span class="flow-no">[OUT_OF_DOMAIN]</span> → INCR <code>nonsense_count:{userId}</code> EX 600 · ≤1: ans(OUT_OF_DOMAIN_MSG) · ≥2: เงียบ → return<br>
           <span class="flow-no">[NOT_FOUND]</span> → ค้นชีต+เว็บไม่เจอจริง ตรวจ <code>shouldHandoffDeferred</code> ก่อนเสมอ:
           <div class="indent"><span class="flow-yes">มี deferred trigger</span> (ขายส่ง/ใบเสนอราคา/ตัวแทนจำหน่าย/เพิ่มกลุ่ม ฯลฯ): SET <code>pre_handoff:{userId}</code> EX 600 → ans("กรุณาแจ้งรายละเอียด...") → saveHistory → return (ข้าม retry 2 รอบ)</div>

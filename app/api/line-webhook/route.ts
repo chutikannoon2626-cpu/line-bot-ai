@@ -470,6 +470,10 @@ export async function POST(req: NextRequest) {
           // HANDOFF
           if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
             const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
+            // self_repair_protocol ส่ง "HANDOFF: ขอวิธีทำเอง | ..." มาเฉพาะกรณีถามวิธีทำเอง (ไม่ใช่แจ้งเครื่องเสีย)
+            const replyMsg = /^HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
+              ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
+              : handoffMsg
             try {
               await Promise.all([
                 redis.set(`routed:${userId}`, '1', { ex: 300 }),
@@ -480,8 +484,8 @@ export async function POST(req: NextRequest) {
             } catch (notifyErr) {
               log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
             }
-            await ans(txt(handoffMsg))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+            await ans(txt(replyMsg))
+            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
             log.info('handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
             return
           }
