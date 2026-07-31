@@ -128,6 +128,7 @@
   <h2>🏗 Channel Architecture</h2>
   <div class="tip">ทั้ง 3 ช่องทางใช้ <code>generateReply()</code> เดียวกัน — Gemini logic ร่วมกันทั้งหมด แตกต่างเฉพาะ transport layer และ state key namespace</div>
   <div class="ok">(แก้ไข 2026-07-30) เดิมจับ timeout เรียก Gemini ด้วย <code>Promise.race()</code> ธรรมดา — เมื่อ timeout ชนะ การเรียก Gemini ที่ "แพ้" ไม่ได้ถูกยกเลิกจริง ยังทำงานต่อในเบื้องหลังเงียบๆ เสี่ยงกินเวลาจนกระทบ <code>maxDuration</code> ทำให้ function ถูกฆ่ากลางคันแบบไม่มี log เลย ตอนนี้เปลี่ยนเป็น <code>AbortController</code> — เมื่อ timeout จะสั่งยกเลิกการเชื่อมต่อ Gemini จริง (ผ่าน <code>abortSignal</code> ใน config) พร้อมเพิ่ม <code>maxDuration</code> จาก 30 เป็น 60 วินาทีเป็นตาข่ายนิรภัย และเพิ่ม log <code>webhook.message_received</code> ทันทีที่ข้อความเข้ามาก่อนประมวลผลใดๆ เพื่อดักปัญหา "บอทเงียบไม่ตอบเลย" ที่เคยเจอในทั้ง 3 ช่องทาง</div>
+  <div class="ok">(แก้ไข 2026-07-31) พบเคสลูกค้าพิมพ์แค่ "ชื่อ + ตัวเลขในวงเล็บ" (เช่น "Nong Suea chang rescue (179557)") ไม่มีคำขอ/กริยาชัดเจน แต่ Gemini เดาเองว่าเป็นชื่อกลุ่ม+รหัสห้อง แล้วตอบยาวเรื่องเข้ากลุ่มสาธารณะทันที (ดึงจาก FAQ <code>spender-network-15</code>) — เพิ่ม guardrail ใหม่ใน <code>lib/prompts.ts</code> (<code>&lt;guardrails&gt;</code>) ห้ามเดาเจตนาแบบนี้อีก ถ้าไม่มีคำขอชัดเจนให้ถามกลับก่อนเสมอแทน ใช้ร่วมกันทุกช่องทาง</div>
   <div class="card">
     <pre>
 ┌──────────────────────────────────────────────────────────────────────────┐
