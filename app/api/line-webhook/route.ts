@@ -90,6 +90,22 @@ export async function POST(req: NextRequest) {
               logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })
         } catch (err) {
           log.warn('reply.send_failed', { userId, err: (err as Error).message })
+          // replyToken อาจหมดอายุ/ถูกใช้ไปแล้ว (พบจริงจาก log: 400 Bad Request) — fallback ไป
+          // pushMessage() ด้วย userId แทน ไม่ต้องพึ่ง replyToken เดิมที่มีปัญหา ลูกค้าจะยังได้รับคำตอบ
+          try {
+            await Promise.race([
+              lineClient.pushMessage({ to: userId, messages }),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('push_timeout')), 4000)
+              ),
+            ])
+            for (const m of messages)
+              if (m.type === 'text' && 'text' in m)
+                logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })
+            log.info('reply.fallback_push_sent', { userId })
+          } catch (pushErr) {
+            log.error('reply.fallback_push_failed', { userId, err: (pushErr as Error).message })
+          }
         }
       }
 

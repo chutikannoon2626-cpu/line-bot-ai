@@ -676,6 +676,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <div class="card">
       <div class="card-title"><span class="badge badge-green">LINE</span></div>
       <div class="const-row"><span class="const-name">safeReply / safePush timeout</span><span class="const-val">4s</span></div>
+      <div class="ok" style="margin:6px 0">(แก้ไข 2026-07-31) พบว่า <code>replyMessage()</code> ล้มเหลวด้วย "400 Bad Request" เป็นระยะ (replyToken หมดอายุ/ใช้ซ้ำ — พบบ่อยขึ้นในเคสรูปภาพที่ใช้เวลานาน) ทำให้ลูกค้าไม่ได้รับคำตอบเลยทั้งที่ Gemini ตอบสำเร็จ — <code>safeReply()</code> ตอนนี้ fallback ไป <code>pushMessage()</code> ด้วย userId อัตโนมัติเมื่อ replyMessage ล้มเหลว (log แยก <code>reply.fallback_push_sent</code>/<code>reply.fallback_push_failed</code>) เฉพาะ LINE เท่านั้น — Facebook ไม่มีปัญหานี้เพราะใช้ PSID ส่งตรงเสมอ ไม่มี replyToken</div>
       <div class="const-row"><span class="const-name">Gemini timeout (text)</span><span class="const-val">10s</span></div>
       <div class="const-row"><span class="const-name">Gemini timeout (image)</span><span class="const-val">15s</span></div>
       <div class="const-row"><span class="const-name">Rate limit</span><span class="const-val">5 / 10s</span></div>
