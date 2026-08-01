@@ -593,9 +593,19 @@ export async function POST(req: NextRequest) {
             await redis.del(`repeat_count:${userId}`)
           } catch { /* Redis ล่ม — ส่งปกติ */ }
 
-          await ans(txt(reply))
-          await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reply }])
-          log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: reply.length })
+          // กันบอทตอบข้อความเดิมซ้ำติดกัน (เช่น IMEI confirm ถามซ้ำเพราะลูกค้าตอบไม่ตรงเงื่อนไข,
+          // group-intent fallback ซ้ำ) — เทียบกับคำตอบ "รอบติดกันล่าสุด" เท่านั้น ถ้าตรงเป๊ะสลับเป็น
+          // ข้อความสั้นแทนไม่ให้ดูเหมือนบอทค้าง (2026-08-01)
+          let finalReply = reply
+          try {
+            const lastBotReply = await redis.get<string>(`last_bot_reply:${userId}`)
+            await redis.set(`last_bot_reply:${userId}`, reply, { ex: LAST_ANSWER_TTL })
+            if (lastBotReply && lastBotReply === reply) finalReply = 'รับทราบค่ะ 🙏'
+          } catch { /* Redis ล่ม — ส่งปกติ */ }
+
+          await ans(txt(finalReply))
+          await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
+          log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
           try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
         }
 
