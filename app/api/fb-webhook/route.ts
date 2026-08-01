@@ -45,6 +45,16 @@ function getHandoffMessage(): string {
     : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
 }
 
+// HANDOFF ที่เกี่ยวกับ IMEI (เพิ่ม/ลบ/ย้ายกลุ่ม Spendernetwork) — เฉพาะ Facebook ให้ชี้ทางไป LINE
+// แทน handoffMsg ทั่วไป เพราะงานดูแลระบบ Spendernetwork ทำผ่านทีมที่ดูแลทาง LINE เป็นหลัก (2026-07-31)
+function getImeiHandoffMessage(): string {
+  const thaiHour = (new Date().getUTCHours() + 7) % 24
+  const base = 'เกี่ยวกับการใช้งานระบบ Spendernetwork หรือเพิ่มกลุ่มสาธารณะ เพื่อให้ทีมซัพพอร์ตดูแลลูกค้าโดยตรง รบกวนลูกค้าแอดไลน์ @spenderclub'
+  return thaiHour >= 18 || thaiHour < 8
+    ? `ขณะนี้อยู่นอกเวลาทำการค่ะ 🙏 ${base} ในเวลาทำการ 08:00–17:00 น. ได้เลยค่ะ`
+    : `${base} ได้เลยค่ะ`
+}
+
 // ส่งข้อความ text ผ่าน Facebook Send API
 async function fbSend(psid: string, text: string) {
   await fetch(
@@ -456,8 +466,11 @@ export async function POST(req: NextRequest) {
             if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
               const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
               // self_repair_protocol ส่ง "HANDOFF: ขอวิธีทำเอง | ..." มาเฉพาะกรณีถามวิธีทำเอง (ไม่ใช่แจ้งเครื่องเสีย)
+              // imei_protocol ส่ง "...| IMEI: ... | ..." — เรื่อง Spendernetwork ให้ชี้ทางไป LINE แทนรอแอดมินทาง Facebook (2026-07-31)
               const replyMsg = /^HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
                 ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
+                : summary.includes('IMEI:')
+                ? getImeiHandoffMessage()
                 : handoffMsg
               try {
                 await Promise.all([
