@@ -236,6 +236,7 @@
       <div class="step-content">
         <div class="step-title">Log + Load State</div>
         <div class="step-desc"><code>logChat({userId, 'LINE', 'user', message})</code> (fire-and-forget) · <code>getHistory(userId)</code> · <code>getHandoffMessage()</code></div>
+        <div class="ok">(แก้ 2026-08-01, เฉพาะ LINE) ท่อนนอกเวลาทำการของ <code>getHandoffMessage()</code> เปลี่ยนข้อความจาก "ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ" เป็น "น้องใจดีรับทราบค่ะ และจะแจ้งแอดมินให้ติดต่อกลับในเวลาทำการนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ" — Facebook ไม่แตะ ยังใช้ข้อความเดิม</div>
       </div>
     </div>
     <div class="step">
