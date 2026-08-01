@@ -9,7 +9,7 @@ import { imageIntentCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
-import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
+import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 
 const NOT_FOUND = '[NOT_FOUND]'
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
           const ans = async (msgs: messagingApi.Message[]): Promise<void> => {
             if (greetFirst && !greetReplied) {
               const gm: messagingApi.Message[] = []
-              gm.push({ type: 'text', text: WELCOME_MSG })
+              gm.push({ type: 'text', text: getWelcomeMessage() })
               await safeReply(gm)
               greetReplied = true
               await safePush(msgs)
@@ -612,12 +612,12 @@ export async function POST(req: NextRequest) {
 
           if (savedToRedis) {
             if (greetFirst) {
-              await safeReply([{ type: 'text', text: WELCOME_MSG }])
+              await safeReply([{ type: 'text', text: getWelcomeMessage() }])
             }
             log.info('image.received_ack', { userId, imageId })
           } else {
             const fallbackMsgs: messagingApi.Message[] = []
-            if (greetFirst) fallbackMsgs.push({ type: 'text', text: WELCOME_MSG })
+            if (greetFirst) fallbackMsgs.push({ type: 'text', text: getWelcomeMessage() })
             fallbackMsgs.push(imageIntentCard() as messagingApi.Message)
             await safeReply(fallbackMsgs)
             log.info('image.intent_card_sent_fallback', { userId, imageId })

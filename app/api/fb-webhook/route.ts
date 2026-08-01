@@ -8,7 +8,7 @@ import { getHistory, saveHistory } from '@/lib/history'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
-import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
+import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
@@ -295,7 +295,7 @@ export async function POST(req: NextRequest) {
             if (holidayNotice) await fbSend(psid, holidayNotice)
 
             // Greeting — ทักทายครั้งแรก (24h)
-            if (greetFirst) await fbSend(psid, WELCOME_MSG)
+            if (greetFirst) await fbSend(psid, getWelcomeMessage())
 
             // Pre-handoff state
             let pendingTrigger: string | null = null
@@ -602,7 +602,7 @@ export async function POST(req: NextRequest) {
             const caption = event.message?.text
 
             if (holidayNotice) await fbSend(psid, holidayNotice)
-            if (greetFirst) await fbSend(psid, WELCOME_MSG)
+            if (greetFirst) await fbSend(psid, getWelcomeMessage())
 
             if (!imageUrl) {
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')

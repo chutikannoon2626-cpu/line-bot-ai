@@ -373,10 +373,11 @@
       <div class="step-content">
         <div class="step-title">Send Reply — ans()</div>
         <div class="step-desc">
-          <strong>greetFirst=true</strong>: safeReply([WELCOME_MSG]) → safePush([answer]) · ส่งแยก 2 ข้อความ<br>
+          <strong>greetFirst=true</strong>: safeReply([getWelcomeMessage()]) → safePush([answer]) · ส่งแยก 2 ข้อความ<br>
           <strong>greetFirst=false</strong>: safeReply([answer])<br>
           ต่อจากนั้น: SET <code>last_question:{userId}</code> EX 120s (เก็บ <code>userMessage</code> ไว้เทียบซ้ำรอบหน้า — ดูขั้น 9b1) + DEL repeat_count · saveHistory · log · zincrby <code>question_freq</code>
         </div>
+        <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 23) <code>WELCOME_MSG</code> เดิม (const คงที่) เปลี่ยนเป็นฟังก์ชัน <code>getWelcomeMessage()</code> ใน <code>lib/greeting.ts</code> — เช็คเวลาไทยเหมือน <code>getHandoffMessage()</code> ถ้าอยู่นอกเวลาทำการ (18:00–07:59 น.) จะแทรกท่อน "🙏 ขณะนี้อยู่นอกเวลาทำการ..." นำหน้าข้อความทักทายหลักในข้อความเดียวกัน (ไม่ใช่แยกส่งอีกข้อความแบบเรื่องที่ 21 ที่เอาออกไปแล้ว) เนื้อหาท่อนหลักก็ปรับใหม่ทั้งหมด เอาคำว่า "อยู่ระหว่างการทดสอบระบบ" ออก</div>
         <div class="ok">(เพิ่ม 2026-08-01) กันตอบข้อความเดิมซ้ำติดกัน — GET <code>last_bot_reply:{userId}</code> เทียบกับ <code>reply</code> ดิบจาก Gemini รอบนี้ (ก่อนแทรก greet/offHours) แล้ว SET ค่าใหม่ทับ EX 120s เสมอ · ถ้า<strong>ตรงกันเป๊ะกับรอบติดกันล่าสุด</strong> → สลับ <code>answer</code> เป็น <code>"รับทราบค่ะ 🙏"</code> แทนก่อนส่ง (แก้เคส IMEI confirm ถามซ้ำ / group-intent fallback ซ้ำ ดูเรื่องที่ 19 ใน INSTRUCTIONS.md) — เทียบแค่รอบเดียวติดกัน ไม่กระทบ path ที่มีกลไกกันซ้ำอยู่แล้ว (HANDOFF/NOT_FOUND/OUT_OF_DOMAIN)</div>
       </div>
     </div>
@@ -386,7 +387,7 @@
   <div class="card">
     <div class="flow-box">ลูกค้าส่งรูป → Promise.all([SET <code>img:{userId}</code> EX 300, SET <code>img_data:{userId}</code> EX 360])</div>
     <div class="flow-arrow">↓ ถ้า Redis สำเร็จ</div>
-    <div class="flow-box"><s>safeReply([greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</s> — เอาข้อความออกแล้ว (2026-08-01, เรื่องที่ 22) เหลือแค่ safeReply([WELCOME_MSG]) ถ้า greetFirst เท่านั้น ไม่งั้นไม่ส่งอะไรเลย</div>
+    <div class="flow-box"><s>safeReply([greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</s> — เอาข้อความออกแล้ว (2026-08-01, เรื่องที่ 22) เหลือแค่ safeReply([getWelcomeMessage()]) ถ้า greetFirst เท่านั้น ไม่งั้นไม่ส่งอะไรเลย</div>
     <div class="flow-arrow">↓ ถ้า Redis ล้มเหลว (fallback)</div>
     <div class="flow-box">safeReply([greet?, imageIntentCard()])</div>
     <div class="flow-arrow">↓ ลูกค้าพิมพ์ข้อความตามมา → จัดการใน step 5 ของ TEXT handler</div>
@@ -425,7 +426,8 @@
       <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch ข้อความตัวอักษรเท่านั้น — branch รูปภาพ (<code>attachments...type === 'image'</code>) ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('fb')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
     </div></div>
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
-    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(WELCOME_MSG)</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(getWelcomeMessage())</div>
+    <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 23) เหมือน LINE — <code>getWelcomeMessage()</code> ใหม่ ดูรายละเอียดที่หัวข้อ LINE ขั้น 12</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
     <div class="step"><div class="step-num">5b</div><div class="step-content"><div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div><div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → fbSend(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return · ไม่ handoff เลย</div></div></div>
     <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoffImmediate || isOwnerRequest ในเวลาทำการ</div><div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" · "ฟ้อง/ร้องเรียน/ไม่พอใจ" · หรือ "ขอเจ้าของ" เฉพาะเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย<br>already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
@@ -798,8 +800,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">greeting.ts</span></td>
-      <td>SET <code>greeted:{userId}</code> NX EX 86400 · non-null = ควรทักทาย · WELCOME_MSG = ข้อความต้อนรับ</td>
-      <td><code>shouldGreet()</code> <code>WELCOME_MSG</code></td>
+      <td>SET <code>greeted:{userId}</code> NX EX 86400 · non-null = ควรทักทาย · <code>getWelcomeMessage()</code> = ข้อความต้อนรับ (time-aware, เพิ่ม 2026-08-01)</td>
+      <td><code>shouldGreet()</code> <code>getWelcomeMessage()</code></td>
     </tr>
     <tr>
       <td><span class="file-badge">flex-cards.ts</span></td>
