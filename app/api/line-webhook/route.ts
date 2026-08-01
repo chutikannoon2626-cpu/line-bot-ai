@@ -8,6 +8,7 @@ import { redis } from '@/lib/redis'
 import { imageIntentCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
 import { isScheduledOff } from '@/lib/schedule'
+import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 
@@ -20,6 +21,7 @@ const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่�
 const RETRY_TTL = 600
 const PRE_HANDOFF_TTL = 600
 const OFF_HOURS_TTL = 23 * 3600
+const HOLIDAY_NOTIFIED_TTL = 23 * 3600
 const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
@@ -124,11 +126,25 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ข้าม */ }
         }
 
+        // ประกาศวันหยุด (ตั้งค่าได้ที่ /admin/holidays) — บอทยังตอบตามปกติ แค่แนบข้อความแจ้งไปด้วยครั้งแรกของวัน
+        let holidayNotice: string | null = null
+        try {
+          const notice = await getActiveHolidayNotice()
+          if (notice) {
+            const alreadyNotified = await redis.get(`holiday_notified:${userId}`)
+            if (!alreadyNotified) {
+              await redis.set(`holiday_notified:${userId}`, '1', { ex: HOLIDAY_NOTIFIED_TTL })
+              holidayNotice = notice
+            }
+          }
+        } catch { /* Redis ล่ม — ข้าม */ }
+
         const greetFirst = await shouldGreet(userId)
 
         const txt = (text: string): messagingApi.Message[] => {
           const msgs: messagingApi.Message[] = []
           if (offHoursNotice && !greetFirst) msgs.push({ type: 'text', text: offHoursNotice })
+          if (holidayNotice) msgs.push({ type: 'text', text: holidayNotice })
           msgs.push({ type: 'text', text })
           return msgs
         }

@@ -5,6 +5,7 @@ import { shouldHandoff } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
+import { getActiveHolidayNotice } from '@/lib/holidays'
 import { logChat } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
@@ -90,9 +91,25 @@ async function saveHistory(sid: string, history: History) {
   catch { /* Redis ล่ม */ }
 }
 
+// ประกาศวันหยุด (ตั้งค่าได้ที่ /admin/holidays) — บอทยังตอบตามปกติ แค่แนบข้อความแจ้งไปด้วยครั้งแรกของ session
+async function withHolidayNotice(sid: string, replyText: string): Promise<string> {
+  if (!replyText) return replyText
+  try {
+    const notice = await getActiveHolidayNotice()
+    if (!notice) return replyText
+    const alreadyNotified = await redis.get(`webchat:holiday_notified:${sid}`)
+    if (alreadyNotified) return replyText
+    await redis.set(`webchat:holiday_notified:${sid}`, '1', { ex: CONTACT_SHOWN_TTL })
+    return `${notice}\n\n${replyText}`
+  } catch {
+    return replyText // Redis ล่ม — ส่งข้อความปกติโดยไม่แนบ
+  }
+}
+
 // ต่อท้าย CONTACT_SUFFIX เฉพาะข้อความแรกที่บอทตอบใน session (เช็คผ่าน redis flag ต่อ sessionId)
 async function withContactSuffix(sid: string, replyText: string): Promise<string> {
   if (!replyText) return replyText
+  replyText = await withHolidayNotice(sid, replyText)
   try {
     const shown = await redis.get(`webchat:contact_shown:${sid}`)
     if (shown) return replyText
@@ -109,6 +126,7 @@ async function withContactSuffix(sid: string, replyText: string): Promise<string
 async function withSuffix(sid: string, replyText: string): Promise<string> {
   if (!replyText) return replyText
   if (replyText.includes('บาท')) {
+    replyText = await withHolidayNotice(sid, replyText)
     try { await redis.set(`webchat:contact_shown:${sid}`, '1', { ex: CONTACT_SHOWN_TTL }) } catch { /* Redis ล่ม */ }
     return replyText + CONTACT_SUFFIX
   }

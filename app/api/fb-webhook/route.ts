@@ -7,6 +7,7 @@ import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
+import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, WELCOME_MSG } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 
@@ -20,6 +21,7 @@ const DEFAULT_REPLY = 'ขออภัยค่ะ น้องใจดีไ�
 const PRE_HANDOFF_TTL = 600
 const RETRY_TTL = 600
 const OFF_HOURS_TTL = 23 * 3600
+const HOLIDAY_NOTIFIED_TTL = 23 * 3600
 const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
@@ -206,6 +208,19 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม */ }
           }
 
+          // ประกาศวันหยุด (ตั้งค่าได้ที่ /admin/holidays) — บอทยังตอบตามปกติ แค่แนบข้อความแจ้งไปด้วยครั้งแรกของวัน
+          let holidayNotice: string | null = null
+          try {
+            const notice = await getActiveHolidayNotice()
+            if (notice) {
+              const alreadyNotified = await redis.get(`holiday_notified:${userId}`)
+              if (!alreadyNotified) {
+                await redis.set(`holiday_notified:${userId}`, '1', { ex: HOLIDAY_NOTIFIED_TTL })
+                holidayNotice = notice
+              }
+            }
+          } catch { /* Redis ล่ม — ข้าม */ }
+
           const greetFirst = await shouldGreet(userId)
 
           // --- TEXT (ข้ามถ้าเป็น image+caption — IMAGE handler จัดการเอง) ---
@@ -249,6 +264,7 @@ export async function POST(req: NextRequest) {
 
               if (fbImgUrl) {
                 if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
+                if (holidayNotice) await fbSend(psid, holidayNotice)
                 try {
                   const imgRes = await fetch(fbImgUrl, { signal: AbortSignal.timeout(8000) })
                   const b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64')
@@ -271,6 +287,7 @@ export async function POST(req: NextRequest) {
 
             // Off-hours notice (ส่งก่อน reply)
             if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
+            if (holidayNotice) await fbSend(psid, holidayNotice)
 
             // Greeting — ทักทายครั้งแรก (24h)
             if (greetFirst) await fbSend(psid, WELCOME_MSG)
@@ -534,6 +551,7 @@ export async function POST(req: NextRequest) {
             const caption = event.message?.text
 
             if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
+            if (holidayNotice) await fbSend(psid, holidayNotice)
             if (greetFirst) await fbSend(psid, WELCOME_MSG)
 
             // 5.1: ตอบรับทันที
