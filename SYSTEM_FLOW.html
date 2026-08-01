@@ -250,6 +250,7 @@
       <div class="step-content">
         <div class="step-title">Schedule Check</div>
         <div class="step-desc"><code>isScheduledOff('line')</code> → ถ้า off = เงียบ (return โดยไม่ reply)</div>
+        <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch <code>msgType === 'text'</code> เท่านั้น — branch <code>msgType === 'image'</code> ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('line')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
       </div>
     </div>
     <div class="step">
@@ -418,7 +419,9 @@
   <h3 style="margin-top:14px">TEXT — ลำดับ step</h3>
   <div class="card">
     <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">logChat(user) + getHistory + Rate Limit</div><div class="step-desc">INCR <code>msg_rate:fb:{psid}</code> EX 10s (pipeline) · เกิน 5: ครั้งแรก reply ครั้งต่อไปเงียบ</div></div></div>
-    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('fb')</code> → เงียบ</div></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('fb')</code> → เงียบ</div>
+      <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch ข้อความตัวอักษรเท่านั้น — branch รูปภาพ (<code>attachments...type === 'image'</code>) ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('fb')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
+    </div></div>
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: fbSend(offHours?) → ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Off-Hours + Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">offHoursNotice=true → fbSend(OFF_HOURS_NOTICE) · holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(WELCOME_MSG)</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>

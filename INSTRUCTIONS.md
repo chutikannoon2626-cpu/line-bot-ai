@@ -460,6 +460,16 @@ gemini.reply (สำเร็จ) → reply.send_failed "400 - Bad Request" → 
 
 ---
 
+## เรื่องที่ 16 — Schedule Check ไม่ครอบคลุมรูปภาพ (LINE + Facebook)
+
+**ปัญหาที่เจอ:** ลูกค้าส่ง**รูปภาพ**เข้ามาช่วงเวลาที่ตั้ง "ปิดบอท" ไว้ (`/admin/schedule`) แต่บอทยังตอบทันที ทั้งที่ตั้งใจให้เงียบช่วงนั้น
+
+**สาเหตุ:** `isScheduledOff()` ถูกเรียกใช้แค่ใน branch ข้อความตัวอักษร (`msgType === 'text'` ของ LINE, `event.message?.text` ของ Facebook) เท่านั้น — branch จัดการรูปภาพ (`msgType === 'image'` ของ LINE ที่ [line-webhook.ts:603](app/api/line-webhook/route.ts#L603), `attachments...type === 'image'` ของ Facebook ที่ [fb-webhook.ts:548](app/api/fb-webhook/route.ts#L548)) ไม่เคยเช็คตารางเวลานี้เลยตั้งแต่แรก
+
+**วิธีแก้ (2026-07-31):** เพิ่ม `isScheduledOff('line')`/`isScheduledOff('fb')` ที่ต้น IMAGE branch ของทั้ง 2 ไฟล์ ก่อนทำอะไรอื่นเลย (ก่อนแม้แต่ off-hours/holiday notice หรือ greeting) — ถ้า off จะ return เงียบทันทีเหมือนกับ text flow ทุกประการ
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

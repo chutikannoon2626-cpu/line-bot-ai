@@ -546,6 +546,13 @@ export async function POST(req: NextRequest) {
 
           // --- IMAGE (รวมกรณีรูป + caption ในข้อความเดียว) ---
           if (event.message?.attachments?.some(a => a.type === 'image')) {
+            // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
+            // (เดิม branch นี้ลืมเช็ค ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้)
+            if (await isScheduledOff('fb')) {
+              log.info('fb.image.scheduled_off', { userId })
+              return
+            }
+
             const history = await getHistory(userId)
             const imageUrl = event.message?.attachments?.find(a => a.type === 'image')?.payload?.url
             const caption = event.message?.text

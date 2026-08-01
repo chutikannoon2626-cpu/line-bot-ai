@@ -601,6 +601,13 @@ export async function POST(req: NextRequest) {
 
         // --- IMAGE ---
         if (msgType === 'image') {
+          // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
+          // (เดิม branch นี้ลืมเช็ค ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้)
+          if (await isScheduledOff('line')) {
+            log.info('image.scheduled_off', { userId })
+            return
+          }
+
           const imageId = (event.message as { id: string }).id
           let savedToRedis = false
 
