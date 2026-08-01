@@ -20,15 +20,11 @@ const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
 const RETRY_TTL = 600
 const PRE_HANDOFF_TTL = 600
-const OFF_HOURS_TTL = 23 * 3600
 const HOLIDAY_NOTIFIED_TTL = 23 * 3600
 const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
 const MSG_RATE_LIMIT = 5
 const NONSENSE_TTL = 10 * 60
-
-const OFF_HOURS_NOTICE =
-  'ขณะนี้อยู่นอกเวลาทำการ แอดมินจะตอบกลับในเวลาทำการ 08:00–17:00 น. ค่ะ 🙏\nระหว่างนี้น้องใจดีช่วยดูแลก่อนนะคะ'
 
 // ลูกค้ายืนยันสั่งซื้อ (เช่น "สั่งเลยค่ะ" หลังบอทเสนอราคา) — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
 const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
@@ -112,19 +108,8 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        // --- SESSION GREETING — off-hours notice + ทักทายครั้งแรก (24h) ---
-        let offHoursNotice: string | null = null
+        // --- SESSION GREETING — ทักทายครั้งแรก (24h) ---
         const thaiHour = (new Date().getUTCHours() + 7) % 24
-
-        if (thaiHour >= 18 || thaiHour < 8) {
-          try {
-            const alreadyNotified = await redis.get(`off_hours:${userId}`)
-            if (!alreadyNotified) {
-              await redis.set(`off_hours:${userId}`, '1', { ex: OFF_HOURS_TTL })
-              offHoursNotice = OFF_HOURS_NOTICE
-            }
-          } catch { /* Redis ล่ม — ข้าม */ }
-        }
 
         // ประกาศวันหยุด (ตั้งค่าได้ที่ /admin/holidays) — บอทยังตอบตามปกติ แค่แนบข้อความแจ้งไปด้วยครั้งแรกของวัน
         let holidayNotice: string | null = null
@@ -143,7 +128,6 @@ export async function POST(req: NextRequest) {
 
         const txt = (text: string): messagingApi.Message[] => {
           const msgs: messagingApi.Message[] = []
-          if (offHoursNotice && !greetFirst) msgs.push({ type: 'text', text: offHoursNotice })
           if (holidayNotice) msgs.push({ type: 'text', text: holidayNotice })
           msgs.push({ type: 'text', text })
           return msgs
@@ -211,7 +195,6 @@ export async function POST(req: NextRequest) {
           const ans = async (msgs: messagingApi.Message[]): Promise<void> => {
             if (greetFirst && !greetReplied) {
               const gm: messagingApi.Message[] = []
-              if (offHoursNotice) gm.push({ type: 'text', text: offHoursNotice })
               gm.push({ type: 'text', text: WELCOME_MSG })
               await safeReply(gm)
               greetReplied = true
@@ -290,10 +273,7 @@ export async function POST(req: NextRequest) {
                 return
               }
 
-              await ans([
-                ...(offHoursNotice && !greetFirst ? [{ type: 'text' as const, text: offHoursNotice }] : []),
-                imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message,
-              ])
+              await ans([imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message])
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
               return
             }
@@ -632,14 +612,12 @@ export async function POST(req: NextRequest) {
 
           if (savedToRedis) {
             const ackMsgs: messagingApi.Message[] = []
-            if (offHoursNotice) ackMsgs.push({ type: 'text', text: offHoursNotice })
             if (greetFirst) ackMsgs.push({ type: 'text', text: WELCOME_MSG })
             ackMsgs.push({ type: 'text', text: 'ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷' })
             await safeReply(ackMsgs)
             log.info('image.received_ack', { userId, imageId })
           } else {
             const fallbackMsgs: messagingApi.Message[] = []
-            if (offHoursNotice) fallbackMsgs.push({ type: 'text', text: offHoursNotice })
             if (greetFirst) fallbackMsgs.push({ type: 'text', text: WELCOME_MSG })
             fallbackMsgs.push(imageIntentCard() as messagingApi.Message)
             await safeReply(fallbackMsgs)

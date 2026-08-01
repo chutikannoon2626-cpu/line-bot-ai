@@ -215,8 +215,8 @@
     <div class="step">
       <div class="step-num">B</div>
       <div class="step-content">
-        <div class="step-title">Off-Hours Check (ก่อน reply ทุกอัน)</div>
-        <div class="step-desc">Bangkok time ≥18:00 หรือ &lt;08:00 → GET <code>off_hours:{userId}</code> · ไม่มี = SET EX 23h + เก็บ <code>offHoursNotice</code> text ไว้ prepend ใน reply</div>
+        <div class="step-title">Off-Hours Check</div>
+        <div class="step-desc"><s>Bangkok time ≥18:00 หรือ &lt;08:00 → GET <code>off_hours:{userId}</code> · ไม่มี = SET EX 23h + เก็บ <code>offHoursNotice</code> text ไว้ prepend ใน reply</s> — <strong>เอาออกแล้ว (2026-08-01)</strong> บอทตอบตามปกติทุกเวลา ไม่มีข้อความแจ้งนอกเวลาทำการครั้งแรกของวันอีกต่อไป ดูเรื่องที่ 21 ใน INSTRUCTIONS.md</div>
         <div class="step-desc">(ใหม่ 2026-07-31) <code>getActiveHolidayNotice()</code> จาก <code>lib/holidays.ts</code> — ถ้าวันนี้อยู่ในช่วงวันหยุดที่ตั้งไว้ (<code>/admin/holidays</code>) และยังไม่เคยแจ้ง → GET <code>holiday_notified:{userId}</code> ไม่มี = SET EX 23h + เก็บ <code>holidayNotice</code> text ไว้ prepend ใน reply เช่นกัน (บอทไม่ได้ปิด ยังตอบปกติ)</div>
       </div>
     </div>
@@ -373,8 +373,8 @@
       <div class="step-content">
         <div class="step-title">Send Reply — ans()</div>
         <div class="step-desc">
-          <strong>greetFirst=true</strong>: safeReply([offHours?, WELCOME_MSG]) → safePush([answer]) · ส่งแยก 2 ข้อความ<br>
-          <strong>greetFirst=false</strong>: safeReply([offHours?, answer])<br>
+          <strong>greetFirst=true</strong>: safeReply([WELCOME_MSG]) → safePush([answer]) · ส่งแยก 2 ข้อความ<br>
+          <strong>greetFirst=false</strong>: safeReply([answer])<br>
           ต่อจากนั้น: SET <code>last_question:{userId}</code> EX 120s (เก็บ <code>userMessage</code> ไว้เทียบซ้ำรอบหน้า — ดูขั้น 9b1) + DEL repeat_count · saveHistory · log · zincrby <code>question_freq</code>
         </div>
         <div class="ok">(เพิ่ม 2026-08-01) กันตอบข้อความเดิมซ้ำติดกัน — GET <code>last_bot_reply:{userId}</code> เทียบกับ <code>reply</code> ดิบจาก Gemini รอบนี้ (ก่อนแทรก greet/offHours) แล้ว SET ค่าใหม่ทับ EX 120s เสมอ · ถ้า<strong>ตรงกันเป๊ะกับรอบติดกันล่าสุด</strong> → สลับ <code>answer</code> เป็น <code>"รับทราบค่ะ 🙏"</code> แทนก่อนส่ง (แก้เคส IMEI confirm ถามซ้ำ / group-intent fallback ซ้ำ ดูเรื่องที่ 19 ใน INSTRUCTIONS.md) — เทียบแค่รอบเดียวติดกัน ไม่กระทบ path ที่มีกลไกกันซ้ำอยู่แล้ว (HANDOFF/NOT_FOUND/OUT_OF_DOMAIN)</div>
@@ -386,9 +386,9 @@
   <div class="card">
     <div class="flow-box">ลูกค้าส่งรูป → Promise.all([SET <code>img:{userId}</code> EX 300, SET <code>img_data:{userId}</code> EX 360])</div>
     <div class="flow-arrow">↓ ถ้า Redis สำเร็จ</div>
-    <div class="flow-box">safeReply([offHours?, greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</div>
+    <div class="flow-box">safeReply([greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</div>
     <div class="flow-arrow">↓ ถ้า Redis ล้มเหลว (fallback)</div>
-    <div class="flow-box">safeReply([offHours?, greet?, imageIntentCard()])</div>
+    <div class="flow-box">safeReply([greet?, imageIntentCard()])</div>
     <div class="flow-arrow">↓ ลูกค้าพิมพ์ข้อความตามมา → จัดการใน step 5 ของ TEXT handler</div>
   </div>
 </div>
@@ -410,8 +410,8 @@
     <div class="step">
       <div class="step-num">B</div>
       <div class="step-content">
-        <div class="step-title">Off-Hours Check + Greeting Check</div>
-        <div class="step-desc">Bangkok ≥18/&lt;08 → GET <code>off_hours:fb:{psid}</code> · ไม่มี = SET EX 23h + <code>offHoursNotice=true</code>
+        <div class="step-title">Greeting Check</div>
+        <div class="step-desc"><s>Bangkok ≥18/&lt;08 → GET <code>off_hours:fb:{psid}</code> · ไม่มี = SET EX 23h + <code>offHoursNotice=true</code></s> — <strong>เอาออกแล้ว (2026-08-01)</strong> ไม่มีข้อความแจ้งนอกเวลาทำการครั้งแรกของวันอีกต่อไป ดูเรื่องที่ 21 ใน INSTRUCTIONS.md
           <br><code>shouldGreet('fb:{psid}')</code> → <code>greetFirst</code></div>
         <div class="step-desc">(ใหม่ 2026-07-31) <code>getActiveHolidayNotice()</code> — ถ้ามีวันหยุดที่ตั้งไว้ตรงวันนี้และยังไม่เคยแจ้ง → GET <code>holiday_notified:fb:{psid}</code> ไม่มี = SET EX 23h + <code>holidayNotice</code> text</div>
       </div>
@@ -424,8 +424,8 @@
     <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('fb')</code> → เงียบ</div>
       <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch ข้อความตัวอักษรเท่านั้น — branch รูปภาพ (<code>attachments...type === 'image'</code>) ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('fb')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
     </div></div>
-    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: fbSend(offHours?) → ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
-    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Off-Hours + Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">offHoursNotice=true → fbSend(OFF_HOURS_NOTICE) · holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(WELCOME_MSG)</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(WELCOME_MSG)</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
     <div class="step"><div class="step-num">5b</div><div class="step-content"><div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div><div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → fbSend(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return · ไม่ handoff เลย</div></div></div>
     <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoffImmediate || isOwnerRequest ในเวลาทำการ</div><div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" · "ฟ้อง/ร้องเรียน/ไม่พอใจ" · หรือ "ขอเจ้าของ" เฉพาะเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย<br>already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
@@ -445,7 +445,7 @@
 
   <h3 style="margin-top:14px">IMAGE — Flow</h3>
   <div class="card">
-    <div class="flow-box">offHours? + greet? ส่งก่อน → fbSend("ได้รับรูปแล้วค่ะ 📷") → ดาวน์โหลดรูปจาก Facebook URL (timeout 8s)</div>
+    <div class="flow-box">greet? ส่งก่อน → fbSend("ได้รับรูปแล้วค่ะ 📷") → ดาวน์โหลดรูปจาก Facebook URL (timeout 8s)</div>
     <div class="flow-arrow">↓ มี caption พร้อมรูป?</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>
@@ -622,7 +622,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
   <table>
     <tr><th>Key Pattern</th><th>Type</th><th>TTL</th><th>หน้าที่</th></tr>
     <tr><td><code>greeted:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">24h</span></td><td>ทักทายครั้งแรก (SET NX)</td></tr>
-    <tr><td><code>off_hours:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>แสดง off-hours notice แล้ววันนี้</td></tr>
+    <tr><td><code>off_hours:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td>—</td><td><s>แสดง off-hours notice แล้ววันนี้</s> — เลิกใช้แล้ว (2026-08-01, เรื่องที่ 21)</td></tr>
     <tr><td><code>holiday_notified:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>(ใหม่ 2026-07-31) แสดงประกาศวันหยุดแล้ววันนี้</td></tr>
     <tr><td><code>msg_rate:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit 5/10s</td></tr>
     <tr><td><code>img:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">300s</span></td><td>Image message ID สำหรับ "สอบถามสเปก"</td></tr>
@@ -643,7 +643,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
   <table>
     <tr><th>Key Pattern (actual)</th><th>Type</th><th>TTL</th><th>หน้าที่</th></tr>
     <tr><td><code>greeted:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">24h</span></td><td>ทักทายครั้งแรก FB</td></tr>
-    <tr><td><code>off_hours:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>Off-hours notice FB</td></tr>
+    <tr><td><code>off_hours:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td>—</td><td><s>Off-hours notice FB</s> — เลิกใช้แล้ว (2026-08-01, เรื่องที่ 21)</td></tr>
     <tr><td><code>holiday_notified:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>(ใหม่ 2026-07-31) ประกาศวันหยุด FB</td></tr>
     <tr><td><code>msg_rate:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit FB 5/10s</td></tr>
     <tr><td><code>fb_img_url:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>FB image URL รอ "สเปค/ฟังก์ชัน"</td></tr>

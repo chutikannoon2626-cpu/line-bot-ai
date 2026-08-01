@@ -20,7 +20,6 @@ const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่�
 const DEFAULT_REPLY = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
 const PRE_HANDOFF_TTL = 600
 const RETRY_TTL = 600
-const OFF_HOURS_TTL = 23 * 3600
 const HOLIDAY_NOTIFIED_TTL = 23 * 3600
 const LAST_ANSWER_TTL = 2 * 60
 const MSG_RATE_TTL = 10
@@ -29,8 +28,6 @@ const NONSENSE_TTL = 10 * 60
 const FB_IMG_TTL = 600             // 10 นาที
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nแอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
-
-const OFF_HOURS_NOTICE = 'ขณะนี้อยู่นอกเวลาทำการ โดยแอดมินจะตอบกลับในช่วงเวลาทำการ 08:00–17:00 น. ค่ะ🙏 ให้น้องใจดีช่วยดูแลนะคะ'
 
 // ลูกค้ายืนยันสั่งซื้อ (เช่น "สั่งเลยค่ะ" หลังบอทเสนอราคา) — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
 const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
@@ -215,19 +212,8 @@ export async function POST(req: NextRequest) {
         const startTime = Date.now()
 
         try {
-          // --- SESSION GREETING / OFF-HOURS NOTICE ---
-          let offHoursNotice = false
+          // --- SESSION GREETING ---
           const thaiHour = (new Date().getUTCHours() + 7) % 24
-
-          if (thaiHour >= 18 || thaiHour < 8) {
-            try {
-              const notified = await redis.get(`off_hours:${userId}`)
-              if (!notified) {
-                await redis.set(`off_hours:${userId}`, '1', { ex: OFF_HOURS_TTL })
-                offHoursNotice = true
-              }
-            } catch { /* Redis ล่ม */ }
-          }
 
           // ประกาศวันหยุด (ตั้งค่าได้ที่ /admin/holidays) — บอทยังตอบตามปกติ แค่แนบข้อความแจ้งไปด้วยครั้งแรกของวัน
           let holidayNotice: string | null = null
@@ -284,7 +270,6 @@ export async function POST(req: NextRequest) {
               } catch { /* Redis ล่ม */ }
 
               if (fbImgUrl) {
-                if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
                 if (holidayNotice) await fbSend(psid, holidayNotice)
                 try {
                   const imgRes = await fetch(fbImgUrl, { signal: AbortSignal.timeout(8000) })
@@ -306,8 +291,7 @@ export async function POST(req: NextRequest) {
               // ไม่มีรูปเก็บไว้ → ตกลงไป FAQ flow ปกติ
             }
 
-            // Off-hours notice (ส่งก่อน reply)
-            if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
+            // Holiday notice (ส่งก่อน reply)
             if (holidayNotice) await fbSend(psid, holidayNotice)
 
             // Greeting — ทักทายครั้งแรก (24h)
@@ -617,7 +601,6 @@ export async function POST(req: NextRequest) {
             const imageUrl = event.message?.attachments?.find(a => a.type === 'image')?.payload?.url
             const caption = event.message?.text
 
-            if (offHoursNotice) await fbSend(psid, OFF_HOURS_NOTICE)
             if (holidayNotice) await fbSend(psid, holidayNotice)
             if (greetFirst) await fbSend(psid, WELCOME_MSG)
 
