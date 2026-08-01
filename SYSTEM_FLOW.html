@@ -386,7 +386,7 @@
   <div class="card">
     <div class="flow-box">ลูกค้าส่งรูป → Promise.all([SET <code>img:{userId}</code> EX 300, SET <code>img_data:{userId}</code> EX 360])</div>
     <div class="flow-arrow">↓ ถ้า Redis สำเร็จ</div>
-    <div class="flow-box">safeReply([greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</div>
+    <div class="flow-box"><s>safeReply([greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</s> — เอาข้อความออกแล้ว (2026-08-01, เรื่องที่ 22) เหลือแค่ safeReply([WELCOME_MSG]) ถ้า greetFirst เท่านั้น ไม่งั้นไม่ส่งอะไรเลย</div>
     <div class="flow-arrow">↓ ถ้า Redis ล้มเหลว (fallback)</div>
     <div class="flow-box">safeReply([greet?, imageIntentCard()])</div>
     <div class="flow-arrow">↓ ลูกค้าพิมพ์ข้อความตามมา → จัดการใน step 5 ของ TEXT handler</div>
@@ -445,7 +445,7 @@
 
   <h3 style="margin-top:14px">IMAGE — Flow</h3>
   <div class="card">
-    <div class="flow-box">greet? ส่งก่อน → fbSend("ได้รับรูปแล้วค่ะ 📷") → ดาวน์โหลดรูปจาก Facebook URL (timeout 8s)</div>
+    <div class="flow-box">greet? ส่งก่อน → <s>fbSend("ได้รับรูปแล้วค่ะ 📷")</s> เอาออกแล้ว (2026-08-01, เรื่องที่ 22) → ดาวน์โหลดรูปจาก Facebook URL (timeout 8s)</div>
     <div class="flow-arrow">↓ มี caption พร้อมรูป?</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>

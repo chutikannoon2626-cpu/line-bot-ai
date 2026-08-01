@@ -611,10 +611,9 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม */ }
 
           if (savedToRedis) {
-            const ackMsgs: messagingApi.Message[] = []
-            if (greetFirst) ackMsgs.push({ type: 'text', text: WELCOME_MSG })
-            ackMsgs.push({ type: 'text', text: 'ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷' })
-            await safeReply(ackMsgs)
+            if (greetFirst) {
+              await safeReply([{ type: 'text', text: WELCOME_MSG }])
+            }
             log.info('image.received_ack', { userId, imageId })
           } else {
             const fallbackMsgs: messagingApi.Message[] = []

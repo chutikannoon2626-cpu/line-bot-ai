@@ -604,9 +604,6 @@ export async function POST(req: NextRequest) {
             if (holidayNotice) await fbSend(psid, holidayNotice)
             if (greetFirst) await fbSend(psid, WELCOME_MSG)
 
-            // 5.1: ตอบรับทันที
-            await fbSend(psid, 'ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷')
-
             if (!imageUrl) {
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               log.info('fb.image.no_url', { userId })
