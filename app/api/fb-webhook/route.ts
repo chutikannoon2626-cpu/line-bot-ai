@@ -45,14 +45,25 @@ function getHandoffMessage(): string {
     : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
 }
 
-// HANDOFF ที่เกี่ยวกับ IMEI (เพิ่ม/ลบ/ย้ายกลุ่ม Spendernetwork) — เฉพาะ Facebook ให้ชี้ทางไป LINE
-// แทน handoffMsg ทั่วไป เพราะงานดูแลระบบ Spendernetwork ทำผ่านทีมที่ดูแลทาง LINE เป็นหลัก (2026-07-31)
-function getImeiHandoffMessage(): string {
+// เรื่อง Spendernetwork (เข้า/ลบ/ย้ายกลุ่ม, ปัญหาการใช้งาน) — เฉพาะ Facebook ให้ชี้ทางไป LINE
+// แทน handoffMsg ทั่วไป เพราะงานดูแลระบบ Spendernetwork ทำผ่านทีมที่ดูแลทาง LINE เป็นหลัก
+// ใช้ข้อความเดียวกันทุกจุดที่เกี่ยวกับ Spendernetwork บน Facebook: HANDOFF ที่มี IMEI,
+// คำขอเข้า/ลบกลุ่มที่ตรวจจับได้ทันที (isSpendernetworkRequest), และ guardrail กำกวมใน lib/prompts.ts (2026-08-01)
+function getSpendernetworkRedirectMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
-  const base = 'เกี่ยวกับการใช้งานระบบ Spendernetwork หรือเพิ่มกลุ่มสาธารณะ เพื่อให้ทีมซัพพอร์ตดูแลลูกค้าโดยตรง รบกวนลูกค้าแอดไลน์ @spenderclub'
+  const base = 'เกี่ยวกับการเข้า/ลบกลุ่มสาธารณะ หรือการใช้งาน/ปัญหาระบบ Spendernetwork รบกวนลูกค้าแอดไลน์ @spenderclub ได้เลยนะคะ 😊 มีทีมซัพพอร์ตพร้อมดูแลลูกค้าโดยตรง ให้บริการตั้งแต่เวลา 08:00–17:00 น. ค่ะ'
   return thaiHour >= 18 || thaiHour < 8
-    ? `ขณะนี้อยู่นอกเวลาทำการค่ะ 🙏 ${base} ในเวลาทำการ 08:00–17:00 น. ได้เลยค่ะ`
-    : `${base} ได้เลยค่ะ`
+    ? `ขณะนี้อยู่นอกเวลาทำการค่ะ 🙏 ${base}`
+    : base
+}
+
+// ตรวจจับคำขอเรื่อง Spendernetwork แบบทันที (ก่อนค้น FAQ/เรียก Gemini) — เฉพาะ Facebook เท่านั้น
+// แยกจาก lib/handoff.ts โดยตั้งใจ เพราะ shouldHandoffDeferred/Immediate ใช้ร่วมกับ LINE ด้วย
+// ถ้าไปเพิ่มคำพวกนี้ในนั้นจะกระทบ LINE โดยไม่ตั้งใจ ทั้งที่ LINE มีทีมดูแลเรื่องนี้แยกอยู่แล้ว (2026-08-01)
+const SPENDERNETWORK_TRIGGERS = ['เข้ากลุ่ม', 'ลบกลุ่ม', 'เพิ่มกลุ่ม', 'กลุ่มสาธารณะ', 'กลุ่มปิด', 'spendernetwork']
+function isSpendernetworkRequest(message: string): boolean {
+  const lower = message.toLowerCase()
+  return SPENDERNETWORK_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
 }
 
 // ส่งข้อความ text ผ่าน Facebook Send API
@@ -371,6 +382,32 @@ export async function POST(req: NextRequest) {
               return
             }
 
+            // เรื่อง Spendernetwork (เข้า/ลบ/เพิ่มกลุ่มสาธารณะ ฯลฯ) — ชี้ทางไป LINE ทันที ข้ามค้น FAQ/Gemini
+            // ไปเลย เพราะเป็นเรื่องเฉพาะบัญชี/เฉพาะเครื่องที่ FAQ ตอบแทนไม่ได้อยู่ดี ไม่ใช่ handoff จริง
+            // (ไม่ set routed/takeover, ไม่ notifyAdminFacebook เพราะยังไม่มีข้อมูลอะไรให้แอดมินดำเนินการ)
+            // เฉพาะ Facebook เท่านั้น — ตรวจด้วย isSpendernetworkRequest() แยกจาก lib/handoff.ts
+            // ไม่กระทบ LINE เลย (2026-08-01)
+            if (isSpendernetworkRequest(userMessage)) {
+              try {
+                const [count] = await redis.pipeline()
+                  .incr(`spendernetwork_notified:${userId}`)
+                  .expire(`spendernetwork_notified:${userId}`, 10 * 60)
+                  .exec() as [number, number]
+                if (count === 1) {
+                  const redirectMsg = getSpendernetworkRedirectMessage()
+                  await fbSend(psid, redirectMsg)
+                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
+                  log.info('fb.spendernetwork.redirected', { userId })
+                } else {
+                  log.info('fb.spendernetwork.redirect_suppressed', { userId, count })
+                }
+              } catch {
+                const redirectMsg = getSpendernetworkRedirectMessage()
+                await fbSend(psid, redirectMsg)
+              }
+              return
+            }
+
             // ชั้น 1: กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" เช็คก่อน findExactMatch()
             // ด้วย (ไม่ใช่แค่ก่อน Gemini) เพราะ findExactMatch() เองก็ไม่มีระบบกันซ้ำเลย — คำถามที่ตรง
             // keyword ในชีต (เช่น "สอบถามเพิ่มเติม") จะตอบซ้ำเป๊ะไปเรื่อยๆ ไม่มีวันเงียบถ้าไม่กันตรงนี้ก่อน
@@ -470,7 +507,7 @@ export async function POST(req: NextRequest) {
               const replyMsg = /^HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
                 ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
                 : summary.includes('IMEI:')
-                ? getImeiHandoffMessage()
+                ? getSpendernetworkRedirectMessage()
                 : handoffMsg
               try {
                 await Promise.all([
