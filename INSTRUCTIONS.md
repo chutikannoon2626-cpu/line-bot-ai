@@ -618,6 +618,16 @@ gemini.reply (สำเร็จ) → reply.send_failed "400 - Bad Request" → 
 
 ---
 
+## เรื่องที่ 27 — เพิ่มเวลา Gemini timeout จาก 10s เป็น 20s (LINE + Facebook)
+
+**ปัญหาที่เจอ:** ลูกค้าถาม "ราคา TC4M ตอนนี้เท่าไรครับ" แล้วบอทตอบ fallback "ระบบกำลังประมวลผลนานกว่าปกติ" แทนราคาจริง — เช็คแล้วพบว่า Gemini timeout ที่ 10 วินาที ([line-webhook.ts](app/api/line-webhook/route.ts), [fb-webhook.ts](app/api/fb-webhook/route.ts)) น่าจะไม่พอ เพราะ system prompt ยาว/ซับซ้อนขึ้นเรื่อยๆ จากข้อยกเว้นที่เพิ่มสะสมมาตลอด (IMEI one-shot, "แนะนำ" context, repair_protocol 2 รอบ, FAQ-first จากรูปภาพ ฯลฯ) ทำให้ Gemini ใช้เวลา "คิด" นานขึ้น โดยเฉพาะคำถามที่กระตุ้นให้เรียก `search_spender_specs` (2 รอบการเรียก Gemini + ค้นเว็บคั่นกลาง) ยิ่งเสี่ยงเกิน 10 วินาทีง่ายขึ้น
+
+**วิธีแก้ (2026-08-01, ทั้ง LINE + Facebook):** เพิ่ม timeout ของการเรียก `generateReply()` หลัก (คำถามข้อความทั่วไป) จาก **10000ms เป็น 20000ms** ในทั้ง 2 ไฟล์ — ไม่แตะ prompt/logic ใดๆ เลย แค่ปรับตัวเลข timeout จุดเดียวต่อไฟล์
+
+**ทำไมปลอดภัย:** `maxDuration = 60` วินาทีต่อ request ยังเหลือ budget เพียงพอมาก (20s Gemini + ~4-5s ส่งข้อความตอบกลับ ยังห่างไกล 60s) · ไม่กระทบ timeout อื่นที่แยกกันอยู่แล้ว เช่น Facebook postback (7000ms), image analysis (15000-20000ms) ซึ่งเป็นคนละจุดคนละปัญหา
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

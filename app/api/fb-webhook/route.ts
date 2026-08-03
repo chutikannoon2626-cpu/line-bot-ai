@@ -459,7 +459,7 @@ export async function POST(req: NextRequest) {
 
             const faqText = await fetchFAQ()
             const geminiController = new AbortController()
-            const geminiTimeoutId = setTimeout(() => geminiController.abort(), 10000)
+            const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
             const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'facebook', geminiController.signal)
               .catch((err) => {
                 log.error('fb.gemini.failed', { err: (err as Error).message, userId })
