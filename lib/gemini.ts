@@ -253,3 +253,55 @@ export async function generateReplyWithImage(
   if (finishReason === 'MAX_TOKENS') return API_ERROR_REPLY
   return response.text?.trim() || API_ERROR_REPLY
 }
+
+export type ImageIntent =
+  | { kind: 'product'; product: string }
+  | { kind: 'other'; summary: string; confirmMessage: string }
+  | { kind: 'unclear' }
+
+// วิเคราะห์รูปที่ลูกค้าส่งมาแบบไม่มีข้อความ/caption ประกอบ (LINE/Facebook เท่านั้น) — เดิมเดา
+// แค่ยี่ห้อ/รุ่นสินค้าอย่างเดียว ทำให้รูปประเภทอื่น (จอ error, ฉลาก/หน้าจอ IMEI, สกรีนช็อตแอป/เว็บ,
+// เอกสารส่งซ่อม) ไม่ถูกจับเลย ตอนนี้ให้ Gemini จำแนกกว้างขึ้น: ถ้าเป็นรูปสินค้าชัดเจนยังคง
+// ส่งชื่อสินค้ากลับมาเหมือนเดิม (ใช้ imageIntentCard ต่อได้) ถ้าเป็นรูปอื่นที่พอเข้าใจเจตนาได้
+// ให้สรุปสั้นๆ + แต่งประโยคถามยืนยันกับลูกค้ากลับมาเลย (ไม่เดาคำตอบเอง แค่สรุปสิ่งที่เห็นแล้วถาม)
+// (2026-08-01)
+export async function analyzeImageIntent(base64Image: string): Promise<ImageIntent> {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
+  try {
+    const res = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{
+        role: 'user',
+        parts: [
+          {
+            text: `ดูรูปนี้แล้วตอบเป็น JSON เท่านั้น ไม่ต้องอธิบายเพิ่ม ห้ามแต่งข้อมูลที่ไม่เห็นในรูป ตามเงื่อนไขนี้:
+
+1) ถ้าเป็นรูปสินค้าวิทยุสื่อสาร SPENDER ที่ระบุยี่ห้อ/รุ่นได้ชัดเจน (ไม่มีข้อความ error/คำเตือน หรือหน้าจอ/ฉลากแสดง IMEI ปนอยู่):
+{"kind":"product","product":"Spender TC-4M"}
+
+2) ถ้าเป็นรูปอื่นที่พอเข้าใจได้ว่าลูกค้าน่าจะต้องการความช่วยเหลือเรื่องอะไร เช่น หน้าจอ/ข้อความ error หรือคำเตือนบนตัวเครื่อง, ฉลากหรือหน้าจอแสดงเลข IMEI, สกรีนช็อตแอปหรือเว็บไซต์ที่ดูเหมือนติดปัญหาการใช้งาน/ลงทะเบียน, เอกสารหรือใบเสร็จที่เกี่ยวกับการส่งซ่อม/เคลม — ให้สรุปสั้นๆ ว่าเห็นอะไร (ภาษาไทย) แล้วแต่งเป็นประโยคคำถามยืนยันกับลูกค้า โทนสุภาพเป็นมิตรแบบผู้หญิง ลงท้ายด้วย "ค่ะ"/"คะ" เสมอ ถามว่าต้องการให้ช่วยเรื่องนี้ใช่ไหม ห้ามตอบคำถามหรือแนะนำวิธีแก้ใดๆ เอง แค่สรุป+ถามยืนยันเท่านั้น เช่น:
+{"kind":"other","summary":"เครื่อง TC-5M ขึ้นข้อความ login timeout","confirmMessage":"เห็นว่าเครื่อง TC-5M ขึ้นข้อความ \\"login timeout\\" ใช่ไหมคะ ต้องการให้น้องใจดีช่วยดูเรื่องนี้ใช่ไหมคะ 😊"}
+
+3) ถ้ารูปไม่ชัดหรืออ่านอะไรไม่ออกเลย:
+{"kind":"unclear"}`,
+          },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+        ],
+      }],
+      config: { maxOutputTokens: 300, temperature: 0 },
+    })
+
+    const raw = res.text?.trim() ?? ''
+    const json = JSON.parse(raw.replace(/```json|```/g, '').trim())
+
+    if (json.kind === 'product' && typeof json.product === 'string' && json.product.trim()) {
+      return { kind: 'product', product: json.product.trim() }
+    }
+    if (json.kind === 'other' && typeof json.confirmMessage === 'string' && json.confirmMessage.trim()) {
+      return { kind: 'other', summary: String(json.summary ?? '').trim(), confirmMessage: json.confirmMessage.trim() }
+    }
+    return { kind: 'unclear' }
+  } catch {
+    return { kind: 'unclear' }
+  }
+}

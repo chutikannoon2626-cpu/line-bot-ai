@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateSignature, messagingApi } from '@line/bot-sdk'
 import { fetchFAQ, findExactMatch } from '@/lib/sheet'
-import { generateReply, generateReplyWithImage } from '@/lib/gemini'
+import { generateReply, generateReplyWithImage, analyzeImageIntent } from '@/lib/gemini'
 import { shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
@@ -239,10 +239,10 @@ export async function POST(req: NextRequest) {
               log.info('image_text_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
             } else {
-              // เกิน 5 นาที → OCR รูปก่อน บันทึก context → แสดง card หรือถามชื่อรุ่น
+              // เกิน 5 นาที → วิเคราะห์รูปก่อน บันทึก context → แสดง card / ถามยืนยัน / ถามชื่อรุ่น
               try { await redis.del(`img_data:${userId}`) } catch { /* */ }
 
-              let ocrProduct: string | null = null
+              let intent: Awaited<ReturnType<typeof analyzeImageIntent>> = { kind: 'unclear' }
 
               try {
                 const blobClient2 = new messagingApi.MessagingApiBlobClient({
@@ -252,28 +252,25 @@ export async function POST(req: NextRequest) {
                 const chunks2: Buffer[] = []
                 for await (const chunk of stream2) chunks2.push(Buffer.from(chunk))
                 const b64 = Buffer.concat(chunks2).toString('base64')
-                const { GoogleGenAI } = await import('@google/genai')
-                const ai2 = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
-                const ocrRes = await ai2.models.generateContent({
-                  model: 'gemini-2.5-flash',
-                  contents: [{ role: 'user', parts: [
-                    { text: 'ระบุยี่ห้อและรุ่นสินค้าในรูปนี้ ตอบสั้นๆ เช่น "Spender TC-4M" ถ้าไม่เจอตอบว่า "ไม่ระบุ"' },
-                    { inlineData: { mimeType: 'image/jpeg', data: b64 } },
-                  ]}],
-                  config: { maxOutputTokens: 50, temperature: 0 },
-                })
-                ocrProduct = ocrRes.text?.trim() || 'ไม่ระบุ'
-                await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
-                log.info('image.ocr_saved', { userId, product: ocrProduct })
-              } catch { /* OCR ล้มเหลว — ข้ามได้ */ }
+                intent = await analyzeImageIntent(b64)
+                log.info('image.intent_analyzed', { userId, kind: intent.kind })
+              } catch { /* วิเคราะห์ล้มเหลว — ข้ามได้ */ }
 
-              if (ocrProduct === 'ไม่ระบุ') {
+              if (intent.kind === 'unclear') {
                 await ans(txt('รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ'))
                 log.info('image.ocr_not_found', { userId, elapsedMs: elapsed })
                 return
               }
 
-              await ans([imageIntentCard(ocrProduct ?? undefined) as messagingApi.Message])
+              if (intent.kind === 'other') {
+                await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพ: ${intent.summary}]` }, { role: 'model', text: intent.confirmMessage }])
+                await ans(txt(intent.confirmMessage))
+                log.info('image.intent_confirm_sent', { userId, elapsedMs: elapsed })
+                return
+              }
+
+              await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${intent.product}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+              await ans([imageIntentCard(intent.product) as messagingApi.Message])
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
               return
             }

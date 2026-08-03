@@ -268,8 +268,9 @@
         <div class="step-desc">GET <code>{id, ts}</code> · Upstash คืนค่าเป็น object ที่ deserialize มาแล้วอัตโนมัติ — เช็ค <code>typeof raw === 'string'</code> ก่อนค่อย JSON.parse (ถ้าเป็น object อยู่แล้วใช้ตรงๆ) เพื่อกันบั๊ก parse ซ้อนที่ทำให้ <code>imgData</code> เป็น null เสมอ · elapsed &lt; 300000ms:
           <div class="indent">DEL key → ดึงรูป blob → generateReplyWithImage(b64, faq, userMessage) timeout 15s → ans → saveHistory → return</div>
           elapsed ≥ 300000ms:
-          <div class="indent">DEL key → OCR ยี่ห้อ/รุ่น (max 50 tokens) → ไม่เจอ: "รบกวนพิมพ์ชื่อรุ่น" / เจอ: imageIntentCard(product) → return</div>
+          <div class="indent">DEL key → ดึงรูป blob → <code>analyzeImageIntent(b64)</code> → <code>kind:'unclear'</code>: "รบกวนพิมพ์ชื่อรุ่น" / <code>kind:'product'</code>: saveHistory + imageIntentCard(product) / <code>kind:'other'</code>: saveHistory(confirmMessage เป็น model turn) + ans(confirmMessage) → return</div>
         </div>
+        <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 26) เดิม OCR ถามหาแค่ "ยี่ห้อ/รุ่นสินค้า" อย่างเดียว ไม่รองรับรูปประเภทอื่น (จอ error, ฉลาก/หน้าจอ IMEI, สกรีนช็อตแอป/เว็บ, เอกสารส่งซ่อม) — เปลี่ยนเป็น <code>analyzeImageIntent()</code> ที่จำแนกกว้างขึ้น เรียก Gemini รอบเดียวเหมือนเดิม (ไม่เพิ่มต้นทุน) กรณี <code>other</code> จะสรุปสิ่งที่เห็น+แต่งคำถามยืนยันกลับมาเลย บันทึกเข้า history ด้วย เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไปเดินเข้า <code>generateReply()</code> ปกติต่อยอด repair_protocol/imei_protocol/HANDOFF ที่มีอยู่แล้วได้เอง — เคส <code>product</code> พฤติกรรมเดิมทุกประการ ไม่กระทบ</div>
       </div>
     </div>
     <div class="step">
@@ -459,9 +460,10 @@
       </div>
       <div>
         <div class="badge badge-blue" style="margin-bottom:6px">ไม่มี caption</div>
-        <div class="flow-box" style="font-size:11px">OCR ยี่ห้อ/รุ่น (max 50 tokens)<br>ไม่เจอ → ถามชื่อรุ่น → return<br>เจอ → SET <code>fb_img_url:fb:{psid}</code> EX 600<br>→ fbSendQuickReplies 3 ปุ่ม:<br>  [ราคา {model}] [สเปค/ฟังก์ชัน] [วิธีสั่งซื้อ]</div>
+        <div class="flow-box" style="font-size:11px"><code>analyzeImageIntent(b64)</code><br>unclear → ถามชื่อรุ่น → return<br>other → saveHistory(confirmMessage) + fbSend(confirmMessage) → return<br>product → saveHistory + SET <code>fb_img_url:fb:{psid}</code> EX 600<br>→ fbSendQuickReplies 3 ปุ่ม:<br>  [ราคา {model}] [สเปค/ฟังก์ชัน] [วิธีสั่งซื้อ]</div>
       </div>
     </div>
+    <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 26) เหมือน LINE — ดูรายละเอียดที่หัวข้อ LINE ขั้น 5</div>
   </div>
 
   <h3 style="margin-top:14px">POSTBACK — Flow</h3>
@@ -576,6 +578,17 @@ query = userQuestion || imageQuery → searchSpenderSites(query)
 systemInstruction = systemPrompt + webContext + ocrContext
 content = [{role:'user', parts:[{text:question}, {inlineData:base64}]}]
 → return response.text.trim()</div>
+  </div>
+  <div class="tip">ใช้เฉพาะตอนมี caption/ข้อความประกอบรูปอยู่แล้วเท่านั้น (LINE: ข้อความตามมาภายใน 5 นาที · Facebook: มี caption หรือปุ่ม "สอบถามสเปก") — ไม่ถูกแตะโดยเรื่องที่ 26 เลย</div>
+
+  <h3 style="margin-top:16px"><code>analyzeImageIntent()</code> — ใหม่ 2026-08-01, เรื่องที่ 26</h3>
+  <div class="card">
+    <div class="flow-box">ใช้เฉพาะตอน<strong>ไม่มี</strong> caption/ข้อความประกอบรูป (LINE: เกิน 5 นาทีไม่มีข้อความตาม · Facebook: ไม่มี caption) · เรียก Gemini รอบเดียว maxTokens=300 temp=0
+JSON 3 แบบ:
+<code>{"kind":"product","product":"Spender TC-4M"}</code> — รูปสินค้าชัดเจน ไม่มี error/IMEI ปน
+<code>{"kind":"other","summary":"...","confirmMessage":"เห็นว่า...ใช่ไหมคะ ต้องการให้น้องใจดีช่วยเรื่องนี้ใช่ไหมคะ 😊"}</code> — error/คำเตือนบนเครื่อง, ฉลาก/หน้าจอ IMEI, สกรีนช็อตแอป/เว็บ, เอกสารส่งซ่อม ฯลฯ (ห้าม Gemini ตอบคำถามหรือแนะนำวิธีแก้เอง แค่สรุป+ถามยืนยัน)
+<code>{"kind":"unclear"}</code> — อ่านอะไรไม่ออกเลย</div>
+    <div class="ok">กรณี <code>other</code>: บันทึก <code>confirmMessage</code> เข้า <code>saveHistory()</code> เป็น model turn ด้วย (พร้อม <code>summary</code> เป็น user turn placeholder) เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไป (พิมพ์ปกติ) เดินเข้า <code>generateReply()</code> flow ข้อความปกติพร้อม context ครบ ต่อยอด repair_protocol/imei_protocol/FAQ/HANDOFF ที่มีอยู่แล้วได้เองโดยไม่ต้องเขียน logic ใหม่ซ้ำ · กรณี <code>product</code>/<code>unclear</code> พฤติกรรมเดิมทุกประการ (imageIntentCard / ถามชื่อรุ่น) · ไม่แตะ <code>generateReply()</code>/<code>generateReplyWithImage()</code> เลย</div>
   </div>
 </div>
 
@@ -763,8 +776,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><th>ไฟล์</th><th>หน้าที่</th><th>Export หลัก</th></tr>
     <tr>
       <td><span class="file-badge">gemini.ts</span></td>
-      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage) · <code>generateReply()</code> ทั้ง 2 calls: maxOutputTokens 1024→3072 + thinkingBudget 1024 กัน thinking กิน token จนตอบไม่ทัน (MAX_TOKENS)</td>
-      <td><code>generateReply()</code> <code>generateReplyWithImage()</code></td>
+      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage) · <code>generateReply()</code> ทั้ง 2 calls: maxOutputTokens 1024→3072 + thinkingBudget 1024 กัน thinking กิน token จนตอบไม่ทัน (MAX_TOKENS) · (ใหม่ 2026-08-01) <code>analyzeImageIntent()</code> จำแนกรูปที่ไม่มีข้อความประกอบเป็น product/other/unclear แทน OCR แบบเดิมที่หาแค่สินค้า</td>
+      <td><code>generateReply()</code> <code>generateReplyWithImage()</code> <code>analyzeImageIntent()</code></td>
     </tr>
     <tr>
       <td><span class="file-badge">prompts.ts</span></td>

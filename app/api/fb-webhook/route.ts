@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { fetchFAQ, findExactMatch } from '@/lib/sheet'
-import { generateReply, generateReplyWithImage } from '@/lib/gemini'
+import { generateReply, generateReplyWithImage, analyzeImageIntent } from '@/lib/gemini'
 import { shouldHandoff, shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
@@ -634,37 +634,36 @@ export async function POST(req: NextRequest) {
               return
             }
 
-            // OCR — ระบุยี่ห้อ/รุ่น
-            let ocrProduct: string | null = null
+            // วิเคราะห์รูป — ระบุยี่ห้อ/รุ่น หรือจำแนกเจตนาอื่น (2026-08-01)
+            let intent: Awaited<ReturnType<typeof analyzeImageIntent>> = { kind: 'unclear' }
             try {
-              const { GoogleGenAI } = await import('@google/genai')
-              const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
-              const ocrRes = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: [{ role: 'user', parts: [
-                  { text: 'ระบุยี่ห้อและรุ่นสินค้าในรูปนี้ ตอบสั้นๆ เช่น "Spender TC-4M" ถ้าไม่เจอตอบว่า "ไม่ระบุ"' },
-                  { inlineData: { mimeType: 'image/jpeg', data: b64 } },
-                ]}],
-                config: { maxOutputTokens: 50, temperature: 0 },
-              })
-              ocrProduct = ocrRes.text?.trim() || 'ไม่ระบุ'
-              await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
-              log.info('fb.image.ocr_saved', { userId, product: ocrProduct })
-            } catch { /* OCR ล้มเหลว */ }
+              intent = await analyzeImageIntent(b64)
+              log.info('fb.image.intent_analyzed', { userId, kind: intent.kind })
+            } catch { /* วิเคราะห์ล้มเหลว */ }
 
-            // 5.2: ไม่เจอรุ่น → ถามชื่อรุ่น
-            if (ocrProduct === 'ไม่ระบุ') {
+            // 5.2: อ่านไม่ออก → ถามชื่อรุ่น (พฤติกรรมเดิม)
+            if (intent.kind === 'unclear') {
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               log.info('fb.image.ocr_not_found', { userId })
               return
             }
 
-            // 5.3: เจอรุ่น → บันทึก URL + quick reply ผูก model
+            // 5.2b: รูปประเภทอื่น (error/IMEI/สกรีนช็อต/เอกสาร) → สรุป+ถามยืนยัน แล้วรอข้อความตอบกลับ
+            if (intent.kind === 'other') {
+              await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพ: ${intent.summary}]` }, { role: 'model', text: intent.confirmMessage }])
+              await fbSend(psid, intent.confirmMessage)
+              log.info('fb.image.intent_confirm_sent', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+
+            // 5.3: เจอรุ่นสินค้า → บันทึก URL + quick reply ผูก model (พฤติกรรมเดิม)
+            const ocrProduct = intent.product
+            await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
             try {
               await redis.set(`fb_img_url:${userId}`, imageUrl, { ex: FB_IMG_TTL })
             } catch { /* Redis ล่ม */ }
 
-            const priceBtn = (`ราคา ${ocrProduct ?? ''}`).slice(0, 20)
+            const priceBtn = (`ราคา ${ocrProduct}`).slice(0, 20)
             await fbSendQuickReplies(
               psid,
               'ต้องการให้น้องใจดีช่วยเรื่องอะไรคะ',
@@ -674,7 +673,7 @@ export async function POST(req: NextRequest) {
                 { title: 'วิธีสั่งซื้อ', payload: 'QUERY_ORDER' },
               ]
             )
-            log.info('fb.image.intent_sent', { userId, product: ocrProduct ?? 'unknown', latencyMs: Date.now() - startTime })
+            log.info('fb.image.intent_sent', { userId, product: ocrProduct, latencyMs: Date.now() - startTime })
           }
 
           // --- POSTBACK (quick reply tapped) ---
