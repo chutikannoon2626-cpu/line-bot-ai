@@ -589,6 +589,7 @@ JSON 3 แบบ:
 <code>{"kind":"other","summary":"...","confirmMessage":"เห็นว่า...ใช่ไหมคะ ต้องการให้น้องใจดีช่วยเรื่องนี้ใช่ไหมคะ 😊"}</code> — error/คำเตือนบนเครื่อง, ฉลาก/หน้าจอ IMEI, สกรีนช็อตแอป/เว็บ, เอกสารส่งซ่อม ฯลฯ (ห้าม Gemini ตอบคำถามหรือแนะนำวิธีแก้เอง แค่สรุป+ถามยืนยัน)
 <code>{"kind":"unclear"}</code> — อ่านอะไรไม่ออกเลย</div>
     <div class="ok">กรณี <code>other</code>: บันทึก <code>confirmMessage</code> เข้า <code>saveHistory()</code> เป็น model turn ด้วย (พร้อม <code>summary</code> เป็น user turn placeholder) เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไป (พิมพ์ปกติ) เดินเข้า <code>generateReply()</code> flow ข้อความปกติพร้อม context ครบ ต่อยอด repair_protocol/imei_protocol/FAQ/HANDOFF ที่มีอยู่แล้วได้เองโดยไม่ต้องเขียน logic ใหม่ซ้ำ · กรณี <code>product</code>/<code>unclear</code> พฤติกรรมเดิมทุกประการ (imageIntentCard / ถามชื่อรุ่น) · ไม่แตะ <code>generateReply()</code>/<code>generateReplyWithImage()</code> เลย</div>
+    <div class="ok">(ปรับ 2026-08-01 รอบ 2) เงื่อนไข <code>product</code> เดิมเขียนแคบว่า "รูปสินค้าวิทยุสื่อสาร SPENDER" ทำให้รูปอุปกรณ์เสริม/แท่นชาร์จ SPENDER ที่ทดสอบจริงได้ <code>unclear</code> ทั้งที่ควรเป็น product — ปรับเป็น "รูปสินค้าแบรนด์ SPENDER ทุกประเภท (วิทยุ, อุปกรณ์เสริม, อะไหล่, แท่นชาร์จ ฯลฯ)" แทน ช่วยเคสสินค้าเดี่ยวๆ ที่ไม่ใช่วิทยุได้ แต่ภาพซับซ้อน (แท่นชาร์จมีวิทยุเสียบหลายเครื่อง) ยังเป็น <code>unclear</code> อยู่ (ยอมรับเป็น edge case)</div>
   </div>
 </div>
 
