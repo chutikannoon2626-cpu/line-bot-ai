@@ -287,7 +287,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Out of domain
-    if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
+    if (reply.includes(OUT_OF_DOMAIN)) {
       let count = 0
       try {
         const [c] = await redis.pipeline()

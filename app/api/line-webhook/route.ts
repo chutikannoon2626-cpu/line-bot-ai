@@ -500,7 +500,7 @@ export async function POST(req: NextRequest) {
           }
 
           // ชั้น 3: out-of-domain/nonsense — pipeline กัน TTL หาย
-          if (reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)) {
+          if (reply.includes(OUT_OF_DOMAIN)) {
             let nonsenseCount = 0
             try {
               const [count] = await redis.pipeline()

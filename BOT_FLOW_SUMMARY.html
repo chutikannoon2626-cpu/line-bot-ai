@@ -469,6 +469,16 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <p>เจอเคสจริง: ลูกค้าถาม "ราคา TC4M ตอนนี้เท่าไรครับ" แล้วบอทตอบ fallback "ระบบกำลังประมวลผลนานกว่าปกติ" แทนราคาจริง — system prompt ยาว/ซับซ้อนขึ้นเรื่อยๆ จากข้อยกเว้นที่สะสมมาตลอด (IMEI one-shot, บริบทคำว่า "แนะนำ", repair_protocol 2 รอบ, FAQ-first จากรูปภาพ ฯลฯ) ทำให้ Gemini ใช้เวลา "คิด" นานขึ้น โดยเฉพาะคำถามที่ต้องเรียก <code>search_spender_specs</code> (2 รอบ Gemini + ค้นเว็บคั่นกลาง) ยิ่งเสี่ยงเกิน timeout เดิม (10 วิ) ง่ายขึ้น</p>
 <div class="ok">ขยับ timeout เป็น 20 วินาที ทั้ง LINE และ Facebook — แก้แค่ตัวเลขจุดเดียวต่อไฟล์ ไม่แตะ prompt/logic เลย ยังเหลือ budget เพียงพอจาก <code>maxDuration=60s</code> (20s Gemini + ~4-5s ส่งข้อความตอบกลับ ยังห่างไกล 60s) · ไม่กระทบ timeout อื่นที่แยกกันอยู่แล้ว (Facebook postback 7s, image analysis 15-20s)</div>
 
+<!-- ===== 9.10 Reasoning Leak ===== -->
+<h2>9.10 Gemini พ่น reasoning ดิบออกมาเป็นคำตอบลูกค้า หลุด sentinel filter (แก้แล้ว 2026-08-01 — LINE + Facebook + Web Chat)</h2>
+<p>ลูกค้าพิมพ์ "1." (ไม่มีความหมาย) บนเว็บแชท บอทกลับส่งข้อความยาวๆ ตรงๆ ให้เห็น:</p>
+<div class="box">คิดอย่างละเอียด:
+1. ประเมินความเกี่ยวข้อง: คำว่า "1." เป็นอักขระเดี่ยวและไม่เกี่ยวข้องกับ "วิทยุสื่อสาร"...
+2. ดำเนินการตามกฎ: กฎระบุว่า "ถ้าไม่เกี่ยวเลย...→ ตอบว่า [OUT_OF_DOMAIN] เท่านั้น..."
+3. สร้างคำตอบ: ดังนั้น คำตอบที่ถูกต้องคือ "[OUT_OF_DOMAIN]""[OUT_OF_DOMAIN]"</div>
+<p>สาเหตุ: <code>&lt;reasoning_protocol&gt;</code> สั่งไว้ว่า "คิดเป็นขั้นนี้ (ไม่ต้องเขียนออก)" แต่ Gemini รอบนี้ไม่ทำตาม เขียนขั้นตอนการคิดทั้งหมดออกมาเป็นคำตอบจริง จบด้วย sentinel ที่พังซ้ำกัน — โค้ดเช็คเดิม (<code>reply === OUT_OF_DOMAIN || reply.startsWith(OUT_OF_DOMAIN)</code>) เช็คแค่ว่าคำตอบ<strong>ขึ้นต้น</strong>ด้วย sentinel เท่านั้น พอ sentinel ไปโผล่ท้ายข้อความยาวๆ แทน เช็คเลยไม่ผ่าน ข้อความ reasoning ดิบทั้งหมดหลุดออกไปแสดงให้ลูกค้าเห็นตรงๆ</p>
+<div class="ok">แก้เป็น <code>reply.includes(OUT_OF_DOMAIN)</code> (เช็คว่ามี sentinel อยู่ที่ไหนในคำตอบก็ได้) ทำเหมือนกันทั้ง 3 ไฟล์ (LINE/Facebook/Web Chat) — แก้แค่การเช็ค string ไม่แตะ prompt/AI behavior เลย ตั้งใจไม่แก้ระดับ prompt เพราะเสี่ยงเพิ่มความยาว prompt ซ้ำปัญหา timeout ที่เพิ่งแก้ไปในหัวข้อ 9.9 · sentinel ตัวอื่น (NOT_FOUND, GEMINI_UNAVAILABLE, HANDOFF) ยังใช้ <code>startsWith</code> เหมือนเดิม อาจมีความเสี่ยงแบบเดียวกันในทางทฤษฎีแต่ยังไม่เจอเคสจริง จึงยังไม่แก้ตามขอบเขตที่ตกลงไว้</div>
+
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
 
