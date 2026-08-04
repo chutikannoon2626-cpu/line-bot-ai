@@ -87,8 +87,11 @@ export async function POST(req: NextRequest) {
         channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
       })
 
-      // pushMessage 1 ครั้ง — ถ้าเจอ 429 (rate limit ชั่วคราวจาก LINE) รอสั้นๆ แล้วลองใหม่อีก 1 ครั้ง
-      // เท่านั้น (ไม่ retry ซ้ำเรื่อยๆ กันลูป) — error อื่นที่ไม่ใช่ 429 โยนออกทันทีไม่ retry (2026-08-04)
+      // pushMessage — ถ้าเจอ 429 (rate limit ชั่วคราวจาก LINE) รอแล้วลองใหม่ สูงสุด 2 ครั้งเพิ่ม
+      // (backoff เพิ่มขึ้นเรื่อยๆ 800ms → 1500ms) รวมสูงสุด 3 ครั้ง — error อื่นที่ไม่ใช่ 429
+      // โยนออกทันทีไม่ retry เพราะรอแล้วก็ไม่ช่วย (2026-08-04, ปรับจาก retry ครั้งเดียวเป็นหลายครั้ง
+      // เพราะพบเคสจริงที่ 429 ยังไม่หายหลัง retry แค่ 1 ครั้ง)
+      const PUSH_RETRY_DELAYS_MS = [800, 1500]
       const pushWithRetry = async (messages: messagingApi.Message[]): Promise<void> => {
         const attempt = () =>
           Promise.race([
@@ -99,10 +102,19 @@ export async function POST(req: NextRequest) {
           ])
         try {
           await attempt()
+          return
         } catch (err) {
           if (!(err as Error).message?.includes('429')) throw err
-          await new Promise((r) => setTimeout(r, 800))
-          await attempt()
+          for (const delay of PUSH_RETRY_DELAYS_MS) {
+            await new Promise((r) => setTimeout(r, delay))
+            try {
+              await attempt()
+              return
+            } catch (retryErr) {
+              if (!(retryErr as Error).message?.includes('429')) throw retryErr
+            }
+          }
+          throw new Error('429 - Too Many Requests (retry exhausted)')
         }
       }
 
@@ -230,6 +242,18 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // ส่งผ่าน push ตรงๆ เท่านั้น ข้าม replyMessage() ไปเลย — ใช้เฉพาะ branch ที่ประมวลผล
+          // ช้า (วิเคราะห์รูปภาพ 7-15 วิ) เพราะ replyToken มีโอกาสหมดอายุสูงมากกว่าจะถึงจุดส่ง
+          // (พบจริง: เคส 21:04 ใช้เวลา 14.5 วิ replyToken หมดอายุ 400 ก่อน push จะเริ่มด้วยซ้ำ)
+          // เสียเวลาลอง reply ที่รู้อยู่แล้วว่าจะพังไปเปล่าๆ (2026-08-04)
+          const pushOnly = async (text: string): Promise<void> => {
+            const msgs: messagingApi.Message[] = []
+            if (holidayNotice) msgs.push({ type: 'text', text: holidayNotice })
+            if (greetFirst) msgs.push({ type: 'text', text: getWelcomeMessage() })
+            msgs.push({ type: 'text', text })
+            await safePush(msgs)
+          }
+
           // ตรวจ pending image — ลูกค้าส่งรูปแล้วพิมพ์ข้อความตามมา
           let imgData: { id: string; ts: number } | null = null
           try {
@@ -262,12 +286,12 @@ export async function POST(req: NextRequest) {
               })
 
               if (withTextResult.kind === 'unclear') {
-                await ans(txt(UNAVAILABLE_MSG))
+                await pushOnly(UNAVAILABLE_MSG)
                 log.info('image_text.unclear', { userId, latencyMs: Date.now() - startTime })
                 return
               }
 
-              await ans(txt(withTextResult.confirmMessage))
+              await pushOnly(withTextResult.confirmMessage)
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
               log.info('image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime })
               return

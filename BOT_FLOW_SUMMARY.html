@@ -508,6 +508,16 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="warn">เฉพาะ <code>fbSend()</code> (ข้อความ text ปกติ) เท่านั้น — <code>fbSendProductCard()</code>/<code>fbSendQuickReplies()</code> ยังไม่ได้ใส่ retry เดียวกัน ทิ้งไว้พิจารณาเพิ่มทีหลังถ้าเจอปัญหาจริง · ไม่แตะ Web Chat เหมือนรอบแรก</div>
 <div class="ok">ปลอดภัย: retry สูงสุด 1 ครั้งต่อการส่ง 1 ครั้งเท่านั้น ไม่มีทาง loop ไม่รู้จบ · delay 800ms รวมกับ timeout เดิมยังห่างไกล maxDuration=60s มาก</div>
 
+<h3>รอบ 3 (วันเดียวกัน) — retry 1 ครั้งยังไม่พอ + ข้าม replyMessage() สำหรับ branch ที่ช้า</h3>
+<p>เจอเคสจริง (21:04) ที่ <code>analyzeImageWithText()</code> ใช้เวลา <strong>14.5 วินาที</strong> (ใกล้ timeout 15 วิเต็มที่) พอจะ <code>replyMessage()</code> replyToken ผ่านมา ~13 วิแล้ว หมดอายุ (400) แล้ว fallback push <strong>ยัง 429 ซ้ำแม้ retry ไปแล้ว 1 ครั้งตามรอบ 2</strong> — พิสูจน์ว่า retry แค่ 1 ครั้งไม่พอสำหรับ branch ที่ประมวลผลช้าขนาดนี้</p>
+<div class="ok">แก้ 2 อย่าง:</div>
+<ul>
+  <li><strong>เพิ่มจำนวน retry จาก 1 เป็น 2 ครั้ง</strong> พร้อม backoff เพิ่มขึ้นเรื่อยๆ (800ms → 1500ms, รวมสูงสุด 3 ครั้งต่อการส่ง 1 ครั้ง) — ทั้ง <code>pushWithRetry()</code> (LINE) และ <code>fbSend()</code> (Facebook)</li>
+  <li><strong>ข้าม replyMessage() ไปเลยสำหรับ branch ที่ช้า</strong> — เพิ่ม <code>pushOnly()</code> ใช้แทน <code>ans()</code> เฉพาะใน branch <code>analyzeImageWithText()</code> (LINE เท่านั้น เพราะ Facebook ไม่มี replyToken ใช้ push-equivalent เสมออยู่แล้ว) — ประมวลผลนาน 7-15 วิ replyToken เสี่ยงหมดอายุสูงมาก ลอง reply ก่อนเสียเวลาเปล่าๆ</li>
+</ul>
+<div class="warn">ไม่การันตี 100%: ถ้า rate limit นานกว่า retry รวมกัน (800+1500=2300ms) ก็ยังพลาดได้อยู่ดี แต่ลดโอกาสได้มากกว่ารอบ 2 มาก และยังมี notifyAdmin()/notifyAdminFacebook() เป็นตาข่ายรองรับสุดท้ายเสมอ</div>
+<div class="ok">ไม่แตะ: <code>analyzeImageIntent()</code> (รูปเดี่ยวไม่มีข้อความ) ยังใช้ ans() เดิม ไม่มีหลักฐานว่าช้าเท่ากัน · ไม่แตะ Web Chat เหมือน 2 รอบก่อน</div>
+
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
 

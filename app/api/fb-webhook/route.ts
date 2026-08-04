@@ -65,7 +65,11 @@ function isSpendernetworkRequest(message: string): boolean {
 
 // ส่งข้อความ text ผ่าน Facebook Send API — เช็ค response.ok จริง (เดิม fetch() ไม่ throw ตอนเจอ
 // HTTP error status เช่น 429 ทำให้โค้ดคิดว่าส่งสำเร็จทั้งที่จริงไม่ถึงลูกค้าเลย) ถ้าเจอ 429 (rate limit
-// ชั่วคราว) รอสั้นๆ แล้วลองใหม่อีก 1 ครั้งเท่านั้น เหมือนฝั่ง LINE (2026-08-04)
+// ชั่วคราว) รอแล้วลองใหม่ สูงสุด 2 ครั้งเพิ่ม (backoff เพิ่มขึ้นเรื่อยๆ 800ms → 1500ms) รวมสูงสุด
+// 3 ครั้ง — ปรับจาก retry ครั้งเดียวเป็นหลายครั้งเพราะพบเคสจริงที่ 429 ยังไม่หายหลัง retry แค่ 1
+// ครั้ง (2026-08-04)
+const FB_SEND_RETRY_DELAYS_MS = [800, 1500]
+
 async function fbSendRequest(psid: string, text: string): Promise<Response> {
   return fetch(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
@@ -81,8 +85,9 @@ async function fbSendRequest(psid: string, text: string): Promise<Response> {
 async function fbSend(psid: string, text: string) {
   try {
     let res = await fbSendRequest(psid, text)
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 800))
+    for (const delay of FB_SEND_RETRY_DELAYS_MS) {
+      if (res.status !== 429) break
+      await new Promise((r) => setTimeout(r, delay))
       res = await fbSendRequest(psid, text)
     }
     if (!res.ok) throw new Error(`${res.status} - ${res.statusText}`)
