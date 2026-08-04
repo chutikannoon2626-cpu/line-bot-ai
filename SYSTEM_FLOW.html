@@ -213,6 +213,14 @@
       </div>
     </div>
     <div class="step">
+      <div class="step-num">A2</div>
+      <div class="step-content">
+        <div class="step-title">Dedupe by Message ID</div>
+        <div class="step-desc"><code>event.message.id</code> → <code>redis.set('msgid:{id}', '1', {ex:120, nx:true})</code> · ไม่ใช่ค่าใหม่ (เคยเห็นแล้ว) → log <code>webhook.duplicate_event_skipped</code> → return ทันที · Redis ล่ม → fail-open ประมวลผลต่อตามปกติ</div>
+        <div class="ok">(เพิ่ม 2026-08-04, เรื่องที่ 30) กัน LINE ส่ง webhook event ซ้ำตอนเซิร์ฟเวอร์ตอบช้า (retry) ทำให้ประมวลผล 2 รอบพร้อมกันแย่ง replyToken/push กันเองจนส่งข้อความหาลูกค้าไม่สำเร็จเลยทั้ง 2 ทาง — ดูรายละเอียดที่ INSTRUCTIONS.md</div>
+      </div>
+    </div>
+    <div class="step">
       <div class="step-num">B</div>
       <div class="step-content">
         <div class="step-title">Off-Hours Check</div>
@@ -387,6 +395,7 @@
         </div>
         <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 23) <code>WELCOME_MSG</code> เดิม (const คงที่) เปลี่ยนเป็นฟังก์ชัน <code>getWelcomeMessage()</code> ใน <code>lib/greeting.ts</code> — เช็คเวลาไทยเหมือน <code>getHandoffMessage()</code> ถ้าอยู่นอกเวลาทำการ (18:00–07:59 น.) จะแทรกท่อน "🙏 ขณะนี้อยู่นอกเวลาทำการ..." นำหน้าข้อความทักทายหลักในข้อความเดียวกัน (ไม่ใช่แยกส่งอีกข้อความแบบเรื่องที่ 21 ที่เอาออกไปแล้ว) เนื้อหาท่อนหลักก็ปรับใหม่ทั้งหมด เอาคำว่า "อยู่ระหว่างการทดสอบระบบ" ออก</div>
         <div class="ok">(เพิ่ม 2026-08-01) กันตอบข้อความเดิมซ้ำติดกัน — GET <code>last_bot_reply:{userId}</code> เทียบกับ <code>reply</code> ดิบจาก Gemini รอบนี้ (ก่อนแทรก greet/offHours) แล้ว SET ค่าใหม่ทับ EX 120s เสมอ · ถ้า<strong>ตรงกันเป๊ะกับรอบติดกันล่าสุด</strong> → สลับ <code>answer</code> เป็น <code>"รับทราบค่ะ 🙏"</code> แทนก่อนส่ง (แก้เคส IMEI confirm ถามซ้ำ / group-intent fallback ซ้ำ ดูเรื่องที่ 19 ใน INSTRUCTIONS.md) — เทียบแค่รอบเดียวติดกัน ไม่กระทบ path ที่มีกลไกกันซ้ำอยู่แล้ว (HANDOFF/NOT_FOUND/OUT_OF_DOMAIN)</div>
+        <div class="ok">(เพิ่ม 2026-08-04, เรื่องที่ 30) <code>safeReply()</code>/<code>safePush()</code> — ถ้า reply + fallback push ล้มเหลวครบทุกทาง (เช่น replyToken 400 + push 429) จะเรียก <code>notifyAdmin(userId, ...)</code> แจ้งกลุ่มแอดมินว่าส่งข้อความหาลูกค้าคนนี้ไม่สำเร็จ ให้ติดต่อเอง — fire-and-forget ไม่กระทบความเร็ว response · เดิมแค่ log.error เงียบๆ ไม่มีใครรู้เลยว่าลูกค้าไม่ได้รับคำตอบ</div>
       </div>
     </div>
   </div>
@@ -414,6 +423,14 @@
       <div class="step-content">
         <div class="step-title">Verify FB Signature (X-Hub-Signature-256)</div>
         <div class="step-desc">HMAC-SHA256 · <code>crypto.timingSafeEqual()</code> · ล้มเหลว → 401</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">A2</div>
+      <div class="step-content">
+        <div class="step-title">Dedupe by Message ID</div>
+        <div class="step-desc"><code>event.message.mid</code> → <code>redis.set('msgid:{mid}', '1', {ex:120, nx:true})</code> · ไม่ใช่ค่าใหม่ → log <code>webhook.duplicate_event_skipped</code> → return ทันที · Redis ล่ม → fail-open ประมวลผลต่อตามปกติ</div>
+        <div class="ok">(เพิ่ม 2026-08-04, เรื่องที่ 30) เหมือน LINE ขั้น A2 — กัน Facebook ส่ง webhook event ซ้ำตอนเซิร์ฟเวอร์ตอบช้าจนตอบลูกค้าซ้ำ 2 รอบ ดูรายละเอียดที่ INSTRUCTIONS.md</div>
       </div>
     </div>
     <div class="step">
@@ -451,7 +468,8 @@
     <div class="ok">(แก้บั๊กแล้ว 2026-08-01, เรื่องที่ 28) OUT_OF_DOMAIN เช็คเปลี่ยนจาก <code>startsWith</code> เป็น <code>reply.includes(OUT_OF_DOMAIN)</code> กัน Gemini reasoning ดิบหลุด (ดูรายละเอียดที่หัวข้อ LINE ขั้น 11)</div></div></div>
     <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">fbSendReply(psid, reply)</div><div class="step-desc">ตรวจ URL <code>spenderclub.com</code> ใน reply → มี: Generic Template Card (title+subtitle+2 ปุ่ม: "ดูรายละเอียด/ราคา" web_url + "สอบถามเพิ่มเติม" postback payload <code>CONTACT_ADMIN</code>) · ไม่มี: plain text<br>saveHistory · log · zincrby question_freq</div>
     <div class="ok">(เพิ่ม 2026-08-01) ก่อนส่ง — GET <code>last_bot_reply:{userId}</code> เทียบกับ <code>reply</code> ดิบจาก Gemini รอบนี้ แล้ว SET ทับ EX 120s เสมอ · ตรงกันเป๊ะกับรอบติดกันล่าสุด → สลับเป็น <code>"รับทราบค่ะ 🙏"</code> ก่อนส่ง (เฉพาะ TEXT flow หลัก ไม่รวม postback/quick-reply) — ดูเรื่องที่ 19 ใน INSTRUCTIONS.md</div>
-    <div class="warn">(แก้บั๊กแล้ว 2026-07-11) ปุ่มที่ 2 เดิมชื่อ "ติดต่อแอดมิน" กดแล้วเข้า <code>shouldHandoff()</code> ตอบ handoffMsg ทันที <strong>โดยไม่เคยเรียก <code>notifyAdminFacebook()</code></strong> ลูกค้าคิดว่ามีคนได้รับแจ้งแต่จริงๆ ไม่มีใครรู้เรื่องเลย — เปลี่ยนป้ายเป็น "สอบถามเพิ่มเติม" แทน (payload เดิม <code>CONTACT_ADMIN</code> ไม่ตรงกับ 5 payload ที่รู้จักอยู่แล้ว จึงไม่ชน <code>shouldHandoff()</code> ไหลไปเรียก Gemini จริงแทน)</div></div></div>
+    <div class="warn">(แก้บั๊กแล้ว 2026-07-11) ปุ่มที่ 2 เดิมชื่อ "ติดต่อแอดมิน" กดแล้วเข้า <code>shouldHandoff()</code> ตอบ handoffMsg ทันที <strong>โดยไม่เคยเรียก <code>notifyAdminFacebook()</code></strong> ลูกค้าคิดว่ามีคนได้รับแจ้งแต่จริงๆ ไม่มีใครรู้เรื่องเลย — เปลี่ยนป้ายเป็น "สอบถามเพิ่มเติม" แทน (payload เดิม <code>CONTACT_ADMIN</code> ไม่ตรงกับ 5 payload ที่รู้จักอยู่แล้ว จึงไม่ชน <code>shouldHandoff()</code> ไหลไปเรียก Gemini จริงแทน)</div>
+    <div class="ok">(เพิ่ม 2026-08-04, เรื่องที่ 30) <code>fbSend()</code> — ถ้า Graph API ส่งข้อความล้มเหลว (fetch error/timeout) จะเรียก <code>notifyAdminFacebook(psid, ...)</code> แจ้งกลุ่มแอดมินให้ติดต่อลูกค้าเอง แทนที่จะแค่ log.error เงียบๆ เหมือนเดิม — fire-and-forget ไม่กระทบความเร็ว response</div></div></div>
   </div>
 
   <h3 style="margin-top:14px">IMAGE — Flow</h3>
@@ -745,6 +763,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
       <div class="const-row"><span class="const-name">Greeted TTL</span><span class="const-val">24h</span></div>
       <div class="const-row"><span class="const-name">NONSENSE_TTL</span><span class="const-val">10m</span></div>
       <div class="const-row"><span class="const-name">LAST_ANSWER_TTL</span><span class="const-val">120s</span></div>
+      <div class="const-row"><span class="const-name">msgid dedupe TTL</span><span class="const-val">120s</span></div>
+      <div class="ok" style="margin:6px 0">(เพิ่ม 2026-08-04, เรื่องที่ 30) กัน LINE ส่ง webhook event ซ้ำตอนตอบช้า — ดูขั้น A2</div>
     </div>
     <div class="card">
       <div class="card-title"><span class="badge badge-blue">Facebook</span></div>
@@ -760,6 +780,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
       <div class="const-row"><span class="const-name">RETRY_TTL</span><span class="const-val">600s</span></div>
       <div class="const-row"><span class="const-name">NONSENSE_TTL</span><span class="const-val">10m</span></div>
       <div class="const-row"><span class="const-name">LAST_ANSWER_TTL</span><span class="const-val">120s</span></div>
+      <div class="const-row"><span class="const-name">msgid dedupe TTL</span><span class="const-val">120s</span></div>
+      <div class="ok" style="margin:6px 0">(เพิ่ม 2026-08-04, เรื่องที่ 30) กัน Facebook ส่ง webhook event ซ้ำตอนตอบช้า — ดูขั้น A2</div>
     </div>
     <div class="card">
       <div class="card-title"><span class="badge badge-yellow">Web Chat</span></div>

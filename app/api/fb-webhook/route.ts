@@ -73,7 +73,10 @@ async function fbSend(psid: string, text: string) {
       body: JSON.stringify({ recipient: { id: psid }, message: { text } }),
       signal: AbortSignal.timeout(5000),
     }
-  ).catch(err => log.error('fb.send_failed', { psid, err: (err as Error).message }))
+  ).catch(err => {
+    log.error('fb.send_failed', { psid, err: (err as Error).message })
+    notifyAdminFacebook(psid, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+  })
   logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
 }
 
@@ -182,6 +185,7 @@ export async function GET(req: NextRequest) {
 type FbEvent = {
   sender: { id: string }
   message?: {
+    mid?: string
     text?: string
     attachments?: Array<{ type: string; payload: { url?: string } }>
   }
@@ -210,6 +214,19 @@ export async function POST(req: NextRequest) {
         const psid = event.sender.id
         const userId = `fb:${psid}` // prefix แยก namespace จาก LINE
         const startTime = Date.now()
+
+        // กัน Facebook ส่ง event ซ้ำ (retry ตอนเซิร์ฟเวอร์ตอบช้า) — ถ้าเคยประมวลผล message ID นี้แล้ว
+        // ข้ามทันที กันตอบลูกค้าซ้ำ 2 รอบ (2026-08-04)
+        const messageId = event.message?.mid
+        if (messageId) {
+          try {
+            const isNew = await redis.set(`msgid:${messageId}`, '1', { ex: 120, nx: true })
+            if (!isNew) {
+              log.info('webhook.duplicate_event_skipped', { messageId })
+              return
+            }
+          } catch { /* Redis ล่ม — ประมวลผลต่อตามปกติ */ }
+        }
 
         try {
           // --- SESSION GREETING ---

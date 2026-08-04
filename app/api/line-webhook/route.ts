@@ -64,6 +64,19 @@ export async function POST(req: NextRequest) {
     body.events.map(async (event) => {
       if (event.type !== 'message' || !event.message) return
 
+      // กัน LINE ส่ง event ซ้ำ (retry ตอนเซิร์ฟเวอร์ตอบช้า) — ถ้าเคยประมวลผล message ID นี้แล้ว
+      // ข้ามทันที กันแย่ง replyToken/push กันเองจนลูกค้าไม่ได้รับข้อความเลย (2026-08-04)
+      const messageId = (event.message as { id?: string }).id
+      if (messageId) {
+        try {
+          const isNew = await redis.set(`msgid:${messageId}`, '1', { ex: 120, nx: true })
+          if (!isNew) {
+            log.info('webhook.duplicate_event_skipped', { messageId })
+            return
+          }
+        } catch { /* Redis ล่ม — ประมวลผลต่อตามปกติ */ }
+      }
+
       const msgType = (event.message as { type: string }).type
       const replyToken = event.replyToken as string
       const source = event.source as { type: string; userId?: string }
@@ -103,6 +116,7 @@ export async function POST(req: NextRequest) {
             log.info('reply.fallback_push_sent', { userId })
           } catch (pushErr) {
             log.error('reply.fallback_push_failed', { userId, err: (pushErr as Error).message })
+            notifyAdmin(userId, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ (reply+push ล้มเหลวทั้งคู่) กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
           }
         }
       }
@@ -189,6 +203,7 @@ export async function POST(req: NextRequest) {
                   logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })
             } catch (err) {
               log.warn('push.send_failed', { userId, err: (err as Error).message })
+              notifyAdmin(userId, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ (push ล้มเหลว) กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
             }
           }
           let greetReplied = false
