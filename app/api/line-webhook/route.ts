@@ -87,6 +87,25 @@ export async function POST(req: NextRequest) {
         channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
       })
 
+      // pushMessage 1 ครั้ง — ถ้าเจอ 429 (rate limit ชั่วคราวจาก LINE) รอสั้นๆ แล้วลองใหม่อีก 1 ครั้ง
+      // เท่านั้น (ไม่ retry ซ้ำเรื่อยๆ กันลูป) — error อื่นที่ไม่ใช่ 429 โยนออกทันทีไม่ retry (2026-08-04)
+      const pushWithRetry = async (messages: messagingApi.Message[]): Promise<void> => {
+        const attempt = () =>
+          Promise.race([
+            lineClient.pushMessage({ to: userId, messages }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('push_timeout')), 4000)
+            ),
+          ])
+        try {
+          await attempt()
+        } catch (err) {
+          if (!(err as Error).message?.includes('429')) throw err
+          await new Promise((r) => setTimeout(r, 800))
+          await attempt()
+        }
+      }
+
       // safeReply: ป้องกัน lineClient.replyMessage hang → function ไม่ complete → Vercel 504
       const safeReply = async (messages: messagingApi.Message[]): Promise<void> => {
         try {
@@ -104,12 +123,7 @@ export async function POST(req: NextRequest) {
           // replyToken อาจหมดอายุ/ถูกใช้ไปแล้ว (พบจริงจาก log: 400 Bad Request) — fallback ไป
           // pushMessage() ด้วย userId แทน ไม่ต้องพึ่ง replyToken เดิมที่มีปัญหา ลูกค้าจะยังได้รับคำตอบ
           try {
-            await Promise.race([
-              lineClient.pushMessage({ to: userId, messages }),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('push_timeout')), 4000)
-              ),
-            ])
+            await pushWithRetry(messages)
             for (const m of messages)
               if (m.type === 'text' && 'text' in m)
                 logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })
@@ -192,12 +206,7 @@ export async function POST(req: NextRequest) {
           // ── ans: ส่ง greeting แยกก่อน (replyToken) แล้ว push คำตอบทีหลัง ──
           const safePush = async (messages: messagingApi.Message[]): Promise<void> => {
             try {
-              await Promise.race([
-                lineClient.pushMessage({ to: userId, messages }),
-                new Promise<never>((_, reject) =>
-                  setTimeout(() => reject(new Error('push_timeout')), 4000)
-                ),
-              ])
+              await pushWithRetry(messages)
               for (const m of messages)
                 if (m.type === 'text' && 'text' in m)
                   logChat({ userId, channel: 'LINE', role: 'bot', message: (m as { text: string }).text, ts: Date.now() })

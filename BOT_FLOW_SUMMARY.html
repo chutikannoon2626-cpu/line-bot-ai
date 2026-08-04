@@ -498,6 +498,16 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 </ol>
 <div class="ok">ไม่กระทบอย่างอื่น: ข้อ 1 เป็น guard ใหม่ ทำงานเฉพาะตอนเจอ message ID ซ้ำเป๊ะ (fail-open ถ้า Redis ล่ม) ข้อความปกติไม่ซ้ำไม่ได้รับผลอะไร · ข้อ 2 แค่เพิ่ม action ต่อท้าย catch block เดิมที่มีแค่ log ไม่เปลี่ยน flow ที่ลูกค้าเห็นเลย</div>
 
+<h3>รอบ 2 (วันเดียวกัน) — เจอสาเหตุเพิ่มเติม: ยิง API พร้อมกันหลายคำขอ ไม่ใช่แค่ event ซ้ำ</h3>
+<p>เจอเคสใหม่ที่ยัง 400+429 อยู่ แต่ตรวจ Vercel Request Log แล้วพบว่า <strong>มี POST /api/line-webhook แค่ครั้งเดียว ไม่มี event ซ้ำเลย</strong> (บาง latency แค่ 3.4 วิ ผ่าน Exact Match ที่ไม่เรียก Gemini ด้วยซ้ำ) — พิสูจน์ว่า "LINE ส่ง event ซ้ำ" ไม่ใช่สาเหตุเดียว มีอีกกลไกคือ<strong>ยิงเรียก API พร้อมกันหลายคำขอในจังหวะเดียว</strong> (เช่น ลูกค้าพิมพ์ 2 ข้อความติดกันเร็วๆ) ชน rate limit ระยะสั้นของ LINE/Facebook ได้แม้คนละข้อความ/คนละลูกค้าเลยก็ตาม เพราะ quota ผูกกับ channel access token เดียวของร้าน ใช้ร่วมกันทุกคน</p>
+<div class="ok">เพิ่ม <strong>retry-with-backoff เมื่อเจอ 429 เท่านั้น</strong>:</div>
+<ul>
+  <li><strong>LINE</strong> — เพิ่ม <code>pushWithRetry()</code> ใช้ร่วมกันใน fallback push ของ <code>safeReply()</code> และ <code>safePush()</code> — เจอ error มีคำว่า "429" → รอ 800ms → ลอง push ใหม่อีก 1 ครั้งเท่านั้น (ไม่ retry ซ้ำเรื่อยๆ, error อื่นไม่ retry)</li>
+  <li><strong>Facebook</strong> — พบช่องโหว่เพิ่ม: <code>fbSend()</code> เดิมใช้ <code>fetch().catch(...)</code> ตรงๆ แต่ <code>fetch()</code> ไม่ throw ตอนเจอ HTTP status ผิดพลาด (throw เฉพาะ network ล่มจริง) ทำให้ตอน Facebook ตอบ 429 กลับมา โค้ดคิดว่าส่งสำเร็จ ไม่มีการ log/แจ้งเตือนเลย — แก้โดยเช็ค <code>res.status</code>/<code>res.ok</code> เอง เจอ 429 รอ 800ms ลองใหม่อีก 1 ครั้ง ยังไม่สำเร็จถึง log error + แจ้งแอดมิน + ไม่ log ว่าส่งสำเร็จอีกต่อไป</li>
+</ul>
+<div class="warn">เฉพาะ <code>fbSend()</code> (ข้อความ text ปกติ) เท่านั้น — <code>fbSendProductCard()</code>/<code>fbSendQuickReplies()</code> ยังไม่ได้ใส่ retry เดียวกัน ทิ้งไว้พิจารณาเพิ่มทีหลังถ้าเจอปัญหาจริง · ไม่แตะ Web Chat เหมือนรอบแรก</div>
+<div class="ok">ปลอดภัย: retry สูงสุด 1 ครั้งต่อการส่ง 1 ครั้งเท่านั้น ไม่มีทาง loop ไม่รู้จบ · delay 800ms รวมกับ timeout เดิมยังห่างไกล maxDuration=60s มาก</div>
+
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
 

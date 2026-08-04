@@ -63,9 +63,11 @@ function isSpendernetworkRequest(message: string): boolean {
   return SPENDERNETWORK_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
 }
 
-// ส่งข้อความ text ผ่าน Facebook Send API
-async function fbSend(psid: string, text: string) {
-  await fetch(
+// ส่งข้อความ text ผ่าน Facebook Send API — เช็ค response.ok จริง (เดิม fetch() ไม่ throw ตอนเจอ
+// HTTP error status เช่น 429 ทำให้โค้ดคิดว่าส่งสำเร็จทั้งที่จริงไม่ถึงลูกค้าเลย) ถ้าเจอ 429 (rate limit
+// ชั่วคราว) รอสั้นๆ แล้วลองใหม่อีก 1 ครั้งเท่านั้น เหมือนฝั่ง LINE (2026-08-04)
+async function fbSendRequest(psid: string, text: string): Promise<Response> {
+  return fetch(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
     {
       method: 'POST',
@@ -73,11 +75,22 @@ async function fbSend(psid: string, text: string) {
       body: JSON.stringify({ recipient: { id: psid }, message: { text } }),
       signal: AbortSignal.timeout(5000),
     }
-  ).catch(err => {
+  )
+}
+
+async function fbSend(psid: string, text: string) {
+  try {
+    let res = await fbSendRequest(psid, text)
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 800))
+      res = await fbSendRequest(psid, text)
+    }
+    if (!res.ok) throw new Error(`${res.status} - ${res.statusText}`)
+    logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
+  } catch (err) {
     log.error('fb.send_failed', { psid, err: (err as Error).message })
     notifyAdminFacebook(psid, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
-  })
-  logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
+  }
 }
 
 // ดึง URL สินค้า spenderclub.com จากข้อความ Gemini
