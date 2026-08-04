@@ -266,11 +266,12 @@
       <div class="step-content">
         <div class="step-title">Pending Image Check (<code>img_data:{userId}</code>)</div>
         <div class="step-desc">GET <code>{id, ts}</code> · Upstash คืนค่าเป็น object ที่ deserialize มาแล้วอัตโนมัติ — เช็ค <code>typeof raw === 'string'</code> ก่อนค่อย JSON.parse (ถ้าเป็น object อยู่แล้วใช้ตรงๆ) เพื่อกันบั๊ก parse ซ้อนที่ทำให้ <code>imgData</code> เป็น null เสมอ · elapsed &lt; 300000ms:
-          <div class="indent">DEL key → ดึงรูป blob → generateReplyWithImage(b64, faq, userMessage) timeout 15s → ans → saveHistory → return</div>
+          <div class="indent">DEL key → ดึงรูป blob → <code>analyzeImageWithText(b64, userMessage)</code> timeout 15s → <code>kind:'unclear'</code>: ans(UNAVAILABLE_MSG) / มี confirmMessage: saveHistory(summary เป็น user turn, confirmMessage เป็น model turn) + ans(confirmMessage) → return</div>
           elapsed ≥ 300000ms:
           <div class="indent">DEL key → ดึงรูป blob → <code>analyzeImageIntent(b64)</code> → <code>kind:'unclear'</code>: "รบกวนพิมพ์ชื่อรุ่น" / <code>kind:'product'</code>: saveHistory + imageIntentCard(product) / <code>kind:'other'</code>: saveHistory(confirmMessage เป็น model turn) + ans(confirmMessage) → return</div>
         </div>
         <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 26) เดิม OCR ถามหาแค่ "ยี่ห้อ/รุ่นสินค้า" อย่างเดียว ไม่รองรับรูปประเภทอื่น (จอ error, ฉลาก/หน้าจอ IMEI, สกรีนช็อตแอป/เว็บ, เอกสารส่งซ่อม) — เปลี่ยนเป็น <code>analyzeImageIntent()</code> ที่จำแนกกว้างขึ้น เรียก Gemini รอบเดียวเหมือนเดิม (ไม่เพิ่มต้นทุน) กรณี <code>other</code> จะสรุปสิ่งที่เห็น+แต่งคำถามยืนยันกลับมาเลย บันทึกเข้า history ด้วย เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไปเดินเข้า <code>generateReply()</code> ปกติต่อยอด repair_protocol/imei_protocol/HANDOFF ที่มีอยู่แล้วได้เอง — เคส <code>product</code> พฤติกรรมเดิมทุกประการ ไม่กระทบ</div>
+        <div class="warn">(เปลี่ยนแล้ว 2026-08-01, เรื่องที่ 29) branch <code>elapsed &lt; 300000ms</code> (รูป+ข้อความมาพร้อมกัน) เดิมเรียก <code>generateReplyWithImage()</code> ตอบทันที ซึ่งค้นเว็บอัตโนมัติทุกครั้งก่อนเสมอแม้คำถามไม่เกี่ยวกับสเปกสินค้าเลย (เช่น "ขอเข้าห้อง DOPA BBT") เสียเวลาเปล่า — เปลี่ยนเป็น <code>analyzeImageWithText()</code> อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ (ไม่เดาคำตอบ) พอลูกค้ายืนยันแล้วค่อยเดินเข้า <code>generateReply()</code> ปกติ (ค้นชีตก่อน) — trade-off: เคสถามราคาชัดเจนที่เคยตอบรอบเดียวจะช้าลง 1 รอบเสมอ (ยอมรับแล้ว เพื่อความเรียบง่าย/แน่นอน) · ปุ่ม "สอบถามสเปก" ยังเรียก <code>generateReplyWithImage()</code> ตรงๆ เหมือนเดิม ไม่ถูกแตะ</div>
       </div>
     </div>
     <div class="step">
@@ -460,7 +461,8 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>
         <div class="badge badge-green" style="margin-bottom:6px">มี caption</div>
-        <div class="flow-box" style="font-size:11px">generateReplyWithImage(b64, faq, caption)<br>timeout 10s → fbSend(reply) → saveHistory → return</div>
+        <div class="flow-box" style="font-size:11px"><code>analyzeImageWithText(b64, caption)</code> timeout 10s<br>unclear → fbSend(UNAVAILABLE_MSG)<br>มี confirmMessage → saveHistory + fbSend(confirmMessage) → return</div>
+        <div class="ok" style="font-size:11px;margin-top:4px">(เปลี่ยนแล้ว 2026-08-01, เรื่องที่ 29) เดิม generateReplyWithImage() ตอบทันที ค้นเว็บอัตโนมัติเสมอ — เปลี่ยนเป็นสรุป+ถามยืนยันก่อน พอลูกค้ายืนยันแล้วเดินเข้า generateReply() ปกติ (ค้นชีตก่อน)</div>
       </div>
       <div>
         <div class="badge badge-blue" style="margin-bottom:6px">ไม่มี caption</div>
@@ -584,7 +586,7 @@ systemInstruction = systemPrompt + webContext + ocrContext
 content = [{role:'user', parts:[{text:question}, {inlineData:base64}]}]
 → return response.text.trim()</div>
   </div>
-  <div class="tip">ใช้เฉพาะตอนมี caption/ข้อความประกอบรูปอยู่แล้วเท่านั้น (LINE: ข้อความตามมาภายใน 5 นาที · Facebook: มี caption หรือปุ่ม "สอบถามสเปก") — ไม่ถูกแตะโดยเรื่องที่ 26 เลย</div>
+  <div class="tip">(อัปเดต 2026-08-01, เรื่องที่ 29) เดิมใช้ทั้งตอน LINE ข้อความตามมาภายใน 5 นาที และ Facebook มี caption — ตอนนี้ใช้เฉพาะปุ่ม "สอบถามสเปก" (LINE) / "สเปค/ฟังก์ชัน" (Facebook) เท่านั้น เพราะ 2 branch แรกเปลี่ยนไปใช้ <code>analyzeImageWithText()</code> (สรุป+ถามยืนยันก่อน) แทนแล้ว — ไม่ถูกแตะโดยเรื่องที่ 26</div>
 
   <h3 style="margin-top:16px"><code>analyzeImageIntent()</code> — ใหม่ 2026-08-01, เรื่องที่ 26</h3>
   <div class="card">
@@ -598,6 +600,17 @@ JSON 3 แบบ:
     <div class="ok">(ปรับ 2026-08-01 รอบ 3) เงื่อนไข <code>other</code> เดิมยังแคบไป (จำกัดแค่ error/IMEI/สกรีนช็อต/เอกสาร) ไม่ตรงกับที่ตกลงไว้ว่าต้องการให้อ่าน+สรุป+ถามยืนยันกับ<strong>รูปภาพทั้งหมด</strong>ไม่จำกัดแบรนด์ — ปรับเป็น catch-all ครอบคลุมทุกอย่างที่พอมองออก (รวมสินค้าแบรนด์อื่นที่ไม่ใช่ SPENDER เช่น T.C.COM, kaiwa) สงวน <code>unclear</code> ไว้เฉพาะรูปที่อ่าน/มองไม่ออกจริงๆ เท่านั้น</div>
     <div class="tip">ระหว่างทดสอบพบว่า <code>GEMINI_API_KEY</code> ใน <code>.env.local</code> ของเครื่อง dev เป็นค่า placeholder ไม่เคยตั้งจริง ทำให้ผลทดสอบ local หลายรอบเป็น <code>unclear</code> ปลอมจาก error ที่ถูก catch ไว้ ไม่ใช่ผลตัดสินใจของ AI จริง — ไม่กระทบ production (Vercel มี env vars แยกคนละชุด)</div>
     <div class="tip">(ปรับ 2026-08-01 รอบ 4) ตัวอย่าง confirmMessage ที่ระบุชื่อสินค้า/อุปกรณ์ได้ชัดเจน เปลี่ยนคำขึ้นต้นจาก "เห็นว่า..." เป็น <strong>"สินค้าเป็น..."</strong> ให้ฟังธรรมชาติกว่า (เช่น "สินค้าเป็นอะแดปเตอร์ชาร์จไฟ SPENDER รุ่น E2452 ใช่ไหมคะ...") ส่วนตัวอย่างเรื่อง error ยังใช้ "เห็นว่า..." เหมือนเดิม</div>
+  </div>
+
+  <h3 style="margin-top:16px"><code>analyzeImageWithText()</code> — ใหม่ 2026-08-01, เรื่องที่ 29</h3>
+  <div class="card">
+    <div class="flow-box">ใช้เฉพาะตอน<strong>มี</strong> caption/ข้อความประกอบรูป (LINE: ข้อความตามมาภายใน 5 นาที · Facebook: มี caption) · เรียก Gemini รอบเดียว maxTokens=300 temp=0 — รับทั้ง base64Image และ userText
+JSON 2 แบบ:
+<code>{"kind":"confirm","summary":"...","confirmMessage":"สินค้าเป็น/เห็น...ใช่ไหมคะ ต้องการ...ใช่ไหมคะ 😊"}</code> — พอเข้าใจได้ว่ารูป+ข้อความเกี่ยวกับอะไร (ราคา/สเปก/แจ้งปัญหา/ขอเข้ากลุ่ม ฯลฯ) ไม่จำกัดประเภท (ห้าม Gemini ตอบคำถามหรือแนะนำวิธีแก้เอง แค่สรุป+ถามยืนยัน)
+<code>{"kind":"unclear"}</code> — ทั้งรูปและข้อความไม่ให้ข้อมูลอะไรเลยจริงๆ</div>
+    <div class="ok">แทนที่การเรียก <code>generateReplyWithImage()</code> ตอบทันที (เดิมค้นเว็บ Serper แบบไม่มีเงื่อนไขทุกครั้งก่อนเสมอ แม้คำถามไม่เกี่ยวกับสเปกสินค้าเลย เช่น "ขอเข้าห้อง DOPA BBT" เสียเวลาเปล่า) — บันทึก <code>confirmMessage</code> เข้า <code>saveHistory()</code> เป็น model turn (พร้อม <code>summary</code> เป็น user turn placeholder) เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไปเดินเข้า <code>generateReply()</code> flow ข้อความปกติ (ค้นชีตก่อน ไม่เจอค่อยค้นเว็บ) ต่อยอด repair_protocol/imei_protocol/FAQ/HANDOFF ได้เอง</div>
+    <div class="warn">Trade-off ที่ยอมรับแล้ว: ทุกเคสรูป+ข้อความ (รวมเคสถามราคาชัดเจนที่เคยตอบรอบเดียว) จะมีขั้นถามยืนยันเพิ่ม 1 รอบเสมอ ไม่มีการจำแนก "ชัดเจนพอข้ามยืนยันได้ไหม" — เลือกความเรียบง่าย/แน่นอนของระบบ แลกกับความเร็วในเคสที่พบบ่อยที่สุด (ขั้นยืนยันยังช่วยกันบอทตอบผิดจากอ่านรูปพลาดด้วย)</div>
+    <div class="tip">ไม่แตะ: ปุ่ม "สอบถามสเปก"/"สเปค/ฟังก์ชัน" ยังเรียก <code>generateReplyWithImage()</code> ตรงๆ เหมือนเดิม (เจตนาชัดเจนจากปุ่มแล้ว) · รูปเดี่ยวๆ ไม่มีข้อความ (<code>analyzeImageIntent()</code>) · <code>generateReply()</code>/<code>generateReplyWithImage()</code> ตัวฟังก์ชันเอง — ไม่ถูกแก้ไขเลยแม้แต่บรรทัดเดียว</div>
   </div>
 </div>
 
@@ -785,8 +798,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><th>ไฟล์</th><th>หน้าที่</th><th>Export หลัก</th></tr>
     <tr>
       <td><span class="file-badge">gemini.ts</span></td>
-      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage) · <code>generateReply()</code> ทั้ง 2 calls: maxOutputTokens 1024→3072 + thinkingBudget 1024 กัน thinking กิน token จนตอบไม่ทัน (MAX_TOKENS) · (ใหม่ 2026-08-01) <code>analyzeImageIntent()</code> จำแนกรูปที่ไม่มีข้อความประกอบเป็น product/other/unclear แทน OCR แบบเดิมที่หาแค่สินค้า</td>
-      <td><code>generateReply()</code> <code>generateReplyWithImage()</code> <code>analyzeImageIntent()</code></td>
+      <td>Gemini API 2-call flow · recommend routing (isRecommendQuestion) · OCR extract · image reply 3-step · <code>generateReply()</code> ทุก MAX_TOKENS/empty-text path คืน <code>DEFAULT_REPLY</code> (<code>[NOT_FOUND]</code>) แล้ว ไม่ใช้ <code>API_ERROR_REPLY</code> literal string อีกต่อไป (ยังใช้เฉพาะใน generateReplyWithImage) · <code>generateReply()</code> ทั้ง 2 calls: maxOutputTokens 1024→3072 + thinkingBudget 1024 กัน thinking กิน token จนตอบไม่ทัน (MAX_TOKENS) · (ใหม่ 2026-08-01) <code>analyzeImageIntent()</code> จำแนกรูปที่ไม่มีข้อความประกอบเป็น product/other/unclear แทน OCR แบบเดิมที่หาแค่สินค้า · (ใหม่ 2026-08-01, เรื่องที่ 29) <code>analyzeImageWithText()</code> จำแนกรูป+ข้อความที่มาพร้อมกัน สรุป+ถามยืนยันก่อนเสมอแทนตอบทันที</td>
+      <td><code>generateReply()</code> <code>generateReplyWithImage()</code> <code>analyzeImageIntent()</code> <code>analyzeImageWithText()</code></td>
     </tr>
     <tr>
       <td><span class="file-badge">prompts.ts</span></td>

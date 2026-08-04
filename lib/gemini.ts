@@ -308,3 +308,51 @@ export async function analyzeImageIntent(base64Image: string): Promise<ImageInte
     return { kind: 'unclear' }
   }
 }
+
+export type ImageWithTextResult =
+  | { kind: 'confirm'; summary: string; confirmMessage: string }
+  | { kind: 'unclear' }
+
+// วิเคราะห์รูป+ข้อความที่ลูกค้าส่งมาพร้อมกัน (LINE: พิมพ์ตามภายใน 5 นาที / Facebook: มี caption)
+// เดิมส่งเข้า generateReplyWithImage() ตอบทันที ซึ่งค้นเว็บอัตโนมัติทุกครั้งก่อนแม้คำถามจะไม่เกี่ยวกับ
+// สเปกสินค้าเลย (เช่น ขอเข้ากลุ่ม) เสียเวลาโดยเปล่าประโยชน์ — เปลี่ยนเป็นอ่านรูป+ข้อความพร้อมกันแล้ว
+// สรุป+ถามยืนยันกลับไปก่อนเสมอ (ไม่เดาคำตอบ) เมื่อลูกค้ายืนยันแล้วค่อยส่งเข้า flow ข้อความปกติ
+// (ค้นชีตก่อน ไม่เจอค่อยค้นเว็บ) — ใช้ pattern เดียวกับ analyzeImageIntent() แต่รวมข้อความลูกค้า
+// เข้าไปในการวิเคราะห์ด้วย ไม่แยก product/other เพราะสรุป+ถามยืนยันเสมอทุกกรณีที่พอเข้าใจได้
+// เฉพาะ LINE/Facebook เท่านั้น ไม่แตะ generateReplyWithImage()/analyzeImageIntent() เดิมเลย (2026-08-01)
+export async function analyzeImageWithText(base64Image: string, userText: string): Promise<ImageWithTextResult> {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
+  try {
+    const res = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{
+        role: 'user',
+        parts: [
+          {
+            text: `ดูรูปนี้พร้อมข้อความที่ลูกค้าพิมพ์มาด้วย: "${userText}"
+ตอบเป็น JSON เท่านั้น ไม่ต้องอธิบายเพิ่ม ห้ามแต่งข้อมูลที่ไม่เห็นในรูปหรือไม่มีในข้อความ ห้ามตอบคำถามหรือแนะนำวิธีแก้ใดๆ เอง แค่สรุปสิ่งที่เห็น+ข้อความ แล้วถามยืนยันเท่านั้น:
+
+1) ถ้าพอเข้าใจได้ว่ารูป+ข้อความนี้เกี่ยวกับอะไร (ไม่ว่าจะเป็นถามราคา/สเปกสินค้า, แจ้งปัญหา, ขอเข้า/ลบกลุ่ม, หรือเรื่องอื่นใดก็ตาม) — ให้สรุปสั้นๆ ว่าเห็นอะไรในรูปและลูกค้าต้องการอะไรจากข้อความ (ภาษาไทย) แล้วแต่งเป็นประโยคคำถามยืนยันกับลูกค้า โทนสุภาพเป็นมิตรแบบผู้หญิง ลงท้ายด้วย "ค่ะ"/"คะ" เสมอ เช่น:
+{"kind":"confirm","summary":"สินค้า TC-11HW ลูกค้าถามราคา","confirmMessage":"สินค้าเป็น SPENDER TC-11HW ใช่ไหมคะ ต้องการทราบราคาใช่ไหมคะ 😊"}
+{"kind":"confirm","summary":"IMEI 868078078912323 ลูกค้าขอเข้ากลุ่ม DOPA BBT","confirmMessage":"เห็น IMEI: 868078078912323 ใช่ไหมคะ ต้องการเพิ่มเข้ากลุ่ม DOPA BBT ใช่ไหมคะ 😊"}
+
+2) ใช้ "unclear" เฉพาะกรณีที่ทั้งรูปและข้อความไม่ให้ข้อมูลอะไรเลยจริงๆ (รูปไม่ชัด/มืด/เบลอ และข้อความก็ไม่มีความหมาย):
+{"kind":"unclear"}`,
+          },
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+        ],
+      }],
+      config: { maxOutputTokens: 300, temperature: 0 },
+    })
+
+    const raw = res.text?.trim() ?? ''
+    const json = JSON.parse(raw.replace(/```json|```/g, '').trim())
+
+    if (json.kind === 'confirm' && typeof json.confirmMessage === 'string' && json.confirmMessage.trim()) {
+      return { kind: 'confirm', summary: String(json.summary ?? '').trim(), confirmMessage: json.confirmMessage.trim() }
+    }
+    return { kind: 'unclear' }
+  } catch {
+    return { kind: 'unclear' }
+  }
+}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { fetchFAQ, findExactMatch } from '@/lib/sheet'
-import { generateReply, generateReplyWithImage, analyzeImageIntent } from '@/lib/gemini'
+import { generateReply, generateReplyWithImage, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
 import { shouldHandoff, shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistory } from '@/lib/history'
@@ -621,16 +621,25 @@ export async function POST(req: NextRequest) {
               return
             }
 
-            // กรณีส่งรูป + caption พร้อมกัน → process ทันที ไม่ต้องรอ
+            // กรณีส่งรูป + caption พร้อมกัน → อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ
+            // แทนตอบทันที (เดิมค้นเว็บอัตโนมัติทุกครั้งผ่าน generateReplyWithImage() แม้คำถามไม่
+            // เกี่ยวกับสเปกสินค้าเลยก็ตาม) เมื่อลูกค้ายืนยันแล้วข้อความตอบกลับจะเดินเข้า flow ข้อความ
+            // ปกติเอง (ค้นชีตก่อน) (2026-08-01)
             if (caption) {
-              const faqText = await fetchFAQ()
-              const reply = await Promise.race([
-                generateReplyWithImage(b64, faqText, caption, 'facebook'),
-                new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
-              ]).catch(() => UNAVAILABLE_MSG)
-              await fbSend(psid, reply)
-              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ] ${caption}` }, { role: 'model', text: reply }])
-              log.info('fb.image_caption.sent', { userId, latencyMs: Date.now() - startTime })
+              const withTextResult = await Promise.race([
+                analyzeImageWithText(b64, caption),
+                new Promise<{ kind: 'unclear' }>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+              ]).catch(() => ({ kind: 'unclear' as const }))
+
+              if (withTextResult.kind === 'unclear') {
+                await fbSend(psid, UNAVAILABLE_MSG)
+                log.info('fb.image_text.unclear', { userId, latencyMs: Date.now() - startTime })
+                return
+              }
+
+              await fbSend(psid, withTextResult.confirmMessage)
+              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
+              log.info('fb.image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime })
               return
             }
 

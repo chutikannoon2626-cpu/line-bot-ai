@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateSignature, messagingApi } from '@line/bot-sdk'
 import { fetchFAQ, findExactMatch } from '@/lib/sheet'
-import { generateReply, generateReplyWithImage, analyzeImageIntent } from '@/lib/gemini'
+import { generateReply, generateReplyWithImage, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
 import { shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
@@ -224,19 +224,28 @@ export async function POST(req: NextRequest) {
               const chunks: Buffer[] = []
               for await (const chunk of stream) chunks.push(Buffer.from(chunk))
               const base64Image = Buffer.concat(chunks).toString('base64')
-              const faqText = await fetchFAQ()
-              const reply = await Promise.race([
-                generateReplyWithImage(base64Image, faqText, userMessage, 'line'),
-                new Promise<string>((_, reject) =>
+              // อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ แทนตอบทันที (เดิมค้นเว็บอัตโนมัติ
+              // ทุกครั้งผ่าน generateReplyWithImage() แม้คำถามไม่เกี่ยวกับสเปกสินค้าเลยก็ตาม)
+              // เมื่อลูกค้ายืนยันแล้วข้อความตอบกลับจะเดินเข้า flow ข้อความปกติเอง (ค้นชีตก่อน) (2026-08-01)
+              const withTextResult = await Promise.race([
+                analyzeImageWithText(base64Image, userMessage),
+                new Promise<{ kind: 'unclear' }>((_, reject) =>
                   setTimeout(() => reject(new Error('gemini_timeout')), 15000)
                 ),
               ]).catch((err) => {
                 log.error('gemini.image_text_failed', { err: (err as Error).message, userId })
-                return UNAVAILABLE_MSG
+                return { kind: 'unclear' as const }
               })
-              await ans(txt(reply))
-              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ] ${userMessage}` }, { role: 'model', text: reply }])
-              log.info('image_text_reply.sent', { userId, latencyMs: Date.now() - startTime })
+
+              if (withTextResult.kind === 'unclear') {
+                await ans(txt(UNAVAILABLE_MSG))
+                log.info('image_text.unclear', { userId, latencyMs: Date.now() - startTime })
+                return
+              }
+
+              await ans(txt(withTextResult.confirmMessage))
+              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
+              log.info('image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime })
               return
             } else {
               // เกิน 5 นาที → วิเคราะห์รูปก่อน บันทึก context → แสดง card / ถามยืนยัน / ถามชื่อรุ่น
