@@ -518,6 +518,18 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="warn">ไม่การันตี 100%: ถ้า rate limit นานกว่า retry รวมกัน (800+1500=2300ms) ก็ยังพลาดได้อยู่ดี แต่ลดโอกาสได้มากกว่ารอบ 2 มาก และยังมี notifyAdmin()/notifyAdminFacebook() เป็นตาข่ายรองรับสุดท้ายเสมอ</div>
 <div class="ok">ไม่แตะ: <code>analyzeImageIntent()</code> (รูปเดี่ยวไม่มีข้อความ) ยังใช้ ans() เดิม ไม่มีหลักฐานว่าช้าเท่ากัน · ไม่แตะ Web Chat เหมือน 2 รอบก่อน</div>
 
+<h3>รอบ 4 (2026-08-05) — พบต้นตอจริง: ข้อความ 2 อันจากลูกค้าคนเดียวกัน "ชนกันเอง"</h3>
+<p>เจอเคสที่หักล้างทฤษฎี "ประมวลผลช้า": ข้อความที่ 2 ("ขอเอกสารคู่มือ...") Gemini ตอบเร็วมาก (1.27 วิ) แต่ก็ยัง 400+429(retry exhausted) เหมือนข้อความแรกที่ช้า (13.5 วิ) — เช็คเวลาแล้วพบว่า<strong>ทั้ง 2 ข้อความ (ลูกค้าคนเดียวกัน ห่างกันแค่ 7 วิ) ประมวลผลซ้อนทับเวลากันเกือบทั้งหมด</strong> ผ่าน <code>Promise.all</code> ยิง Send API ชนโควตาเดียวกันแม้แต่ตอน retry ก็ยัง retry พร้อมกันจึงชนซ้ำได้อีก — อธิบายได้ว่าทำไม retry 3 ครั้ง (รอบ 3) ยังไม่พอ เพราะสู้กับ "อีกข้อความที่ยิงชนกันตลอดเวลา" ไม่ใช่แค่ rate limit ทั่วไป</p>
+<div class="ok">แก้ด้วยไฟล์ใหม่ <code>lib/sendLock.ts</code> — <code>withUserSendLock(userId, fn)</code>: Redis distributed lock (<code>SET key NX PX 15000</code>, key = <code>lock:send:{userId}</code>) บังคับข้อความจากลูกค้าคนเดียวกันส่งเรียงลำดับทีละข้อความเท่านั้น:</div>
+<ul>
+  <li>lock ถูกถืออยู่ → poll ทุก 300ms รอสูงสุด 12 วิ</li>
+  <li>เกิน 12 วิยังไม่ว่าง → bypass ไปทำงานเลย กัน deadlock ค้างตลอดไป</li>
+  <li>ทำงานเสร็จ → ปล่อย lock ทันที (ไม่รอ TTL) · Redis ล่ม → bypass ทันที (fail-open)</li>
+</ul>
+<p><strong>จุดที่ห่อ:</strong> LINE — <code>safeReply()</code>, <code>safePush()</code> (ครอบคลุมทุกจุดที่เรียก replyMessage/pushMessage รวม retry ข้างในด้วย ไม่ห่อซ้ำกันเองเพราะจะ deadlock ตัวเอง) · Facebook — <code>fbSend()</code>, <code>fbSendProductCard()</code>, <code>fbSendQuickReplies()</code> ใช้ key แยก <code>fb:{psid}</code> กันชนกับ LINE</p>
+<div class="ok">ทดสอบก่อน deploy (local, mock Redis เพราะ .env.local ไม่มี UPSTASH credentials จริง): เทสต์ serialize ปกติ (ข้อความ 2 รอจริง ~2.1 วิ) ✅ และเทสต์ bypass กัน deadlock (bypass ที่ ~12 วิพอดี ไม่ค้างตลอดไป) ✅ — ยังไม่ commit+push รอยืนยันก่อน</div>
+<div class="ok">ไม่กระทบอย่างอื่น: lock ครอบคลุมแค่ช่วงส่งข้อความเท่านั้น ไม่ครอบ Gemini/Serper/ค้นชีต (ยังคู่ขนานได้ปกติ) · คนละลูกค้าไม่มีทางชน lock กัน (key แยกตาม userId) · ไม่แตะ Web Chat</div>
+
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
 

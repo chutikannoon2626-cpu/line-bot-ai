@@ -703,6 +703,27 @@ Gemini ตอบคำถามได้ถูกต้องเสมอ ปั
 
 **ขอบเขตที่ตั้งใจไว้ (ไม่แตะ):** `pushOnly()` ใช้เฉพาะ branch `analyzeImageWithText()` เท่านั้น — branch `analyzeImageIntent()` (รูปเดี่ยวไม่มีข้อความ) ยังใช้ `ans()` เดิม (ไม่มีหลักฐานว่าช้าเท่ากัน ยังไม่ปรับ รอพิจารณาถ้าเจอปัญหาจริง) · ไม่แตะ Web Chat เหมือน 2 รอบก่อน
 
+**รอบ 4 (2026-08-05) — พบต้นตอที่แท้จริง: ข้อความ 2 อันจากลูกค้าคนเดียวกัน "ชนกันเอง"**
+เจอเคสที่หักล้างทฤษฎี "ประมวลผลช้า" ทั้งหมด — ข้อความที่ 2 ("ขอเอกสารคู่มือ...") Gemini ตอบเร็วมาก (1.27 วิ ไม่ค้นเว็บ) แต่ก็ยัง 400+429(retry exhausted) เหมือนข้อความแรก ("มีที่ชาร์จ...") ที่ช้า (13.5 วิ) — เช็คเวลาแล้วพบว่า **ทั้ง 2 ข้อความ (ลูกค้าคนเดียวกัน ห่างกันแค่ 7 วิ) ประมวลผล "ซ้อนทับเวลากัน" เกือบทั้งหมด** เพราะ LINE ส่งเป็น event แยกกันแต่โค้ดประมวลผลพร้อมกันด้วย `Promise.all` — ทั้งคู่พยายามยิง LINE Send API ในช่วงเวลาเดียวกัน ชนโควตาเดียวกัน (channel access token เดียวของร้าน) แม้แต่ตอน retry ก็ยัง retry พร้อมกันจึงชนซ้ำได้อีกในทุกรอบ — อธิบายได้ว่าทำไม retry 3 ครั้ง (รอบ 3) ยังไม่พอ เพราะสู้กับ "อีกข้อความที่ยิงชนกันตลอดเวลา" ไม่ใช่แค่ rate limit ทั่วไป
+
+**วิธีแก้ (ไฟล์ใหม่ [lib/sendLock.ts](lib/sendLock.ts)):** เพิ่ม `withUserSendLock(userId, fn)` — distributed lock ผ่าน Redis (`SET key NX PX`, key = `lock:send:{userId}`, TTL 15 วิ) บังคับให้ข้อความจากลูกค้าคนเดียวกันส่งเรียงลำดับทีละข้อความเท่านั้น (ไม่พร้อมกัน):
+- ถ้า lock ถูกถืออยู่ → poll ทุก 300ms รอสูงสุด 12 วิ
+- เกิน 12 วิยัง lock ไม่ว่าง → **bypass ไปทำงานเลย** กัน deadlock ค้างตลอดไป (log `sendlock.bypassed`)
+- ทำงานเสร็จ → ปล่อย lock ทันที (ไม่รอ TTL หมดเอง) log `sendlock.released`
+- Redis ล่ม → bypass ทันที (fail-open เหมือน guard อื่นในระบบ)
+
+**จุดที่ห่อ lock:** ห่อทั้งฟังก์ชันส่งระดับบนสุด (ไม่ใช่ raw API call แยกจุด กัน lock ถูกปล่อย-จับใหม่ระหว่าง reply กับ fallback push ของข้อความเดียวกัน):
+- LINE ([line-webhook.ts](app/api/line-webhook/route.ts)): `safeReply()`, `safePush()` — ครอบคลุมทุกจุดที่เรียก `replyMessage()`/`pushMessage()` (รวม `pushWithRetry()`/`pushOnly()` เพราะเรียกผ่าน 2 ฟังก์ชันนี้อยู่แล้ว ไม่ห่อซ้ำกันเองเพราะจะ deadlock ตัวเอง — Redis SET NX ไม่ reentrant)
+- Facebook ([fb-webhook.ts](app/api/fb-webhook/route.ts)): `fbSend()`, `fbSendProductCard()`, `fbSendQuickReplies()` — lock key ใช้ `fb:{psid}` แยก namespace จาก LINE (`userId` ตรงๆ) กันชนกันโดยบังเอิญ
+
+**ทดสอบก่อน deploy (local, ไม่แตะ production):** เขียนสคริปต์เดี่ยวจำลอง 2 ข้อความจาก userId เดียวกันห่างกัน 3 วิ (mock Redis เพราะ `.env.local` ไม่มี UPSTASH credentials จริงให้ทดสอบ — logic การ acquire/poll/bypass/release เหมือน `lib/sendLock.ts` เป๊ะ):
+- เทสต์ 1 (serialize ปกติ): ข้อความ 1 ถือ lock 5 วิ → ข้อความ 2 รอจริง (waited ~2.1 วิ) ก่อนเริ่มทำงาน ✅
+- เทสต์ 2 (bypass กัน deadlock): ข้อความ 1 ถือ lock นาน 13 วิ (เกิน MAX_WAIT_MS) → ข้อความ 2 bypass ที่ ~12 วิพอดี ไม่ค้างรอตลอดไป ✅
+
+**ทำไมไม่กระทบอย่างอื่น:** lock ครอบคลุมแค่ "ช่วงพยายามส่งข้อความ" เท่านั้น ไม่ครอบ Gemini/Serper/ค้นชีต (ยังทำงานคู่ขนานได้ปกติ ไม่ช้าลง) · ถ้าเป็นลูกค้าคนละคน ไม่มีทางชน lock กันเลย (key แยกตาม userId) · Redis ล่ม fail-open ไม่เสี่ยงบอทเงียบเพิ่มจากตัว lock เอง · ไม่แตะ Web Chat
+
+**ยังไม่ commit+push** ตามที่สั่งไว้ — รอทดสอบ/ยืนยันผลก่อน
+
 ---
 
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท

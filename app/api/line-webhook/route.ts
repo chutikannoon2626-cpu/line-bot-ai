@@ -11,6 +11,7 @@ import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
+import { withUserSendLock } from '@/lib/sendLock'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
@@ -119,7 +120,9 @@ export async function POST(req: NextRequest) {
       }
 
       // safeReply: ป้องกัน lineClient.replyMessage hang → function ไม่ complete → Vercel 504
-      const safeReply = async (messages: messagingApi.Message[]): Promise<void> => {
+      // ห่อทั้งฟังก์ชันด้วย withUserSendLock — กันข้อความอื่นจากลูกค้าคนเดียวกันยิง API
+      // แทรกกลางระหว่าง reply+fallback push ของข้อความนี้ (2026-08-05)
+      const safeReply = async (messages: messagingApi.Message[]): Promise<void> => withUserSendLock(userId, async () => {
         try {
           await Promise.race([
             lineClient.replyMessage({ replyToken, messages }),
@@ -145,7 +148,7 @@ export async function POST(req: NextRequest) {
             notifyAdmin(userId, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ (reply+push ล้มเหลวทั้งคู่) กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
           }
         }
-      }
+      })
 
       try {
         // --- SESSION GREETING — ทักทายครั้งแรก (24h) ---
@@ -216,7 +219,8 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ข้าม */ }
 
           // ── ans: ส่ง greeting แยกก่อน (replyToken) แล้ว push คำตอบทีหลัง ──
-          const safePush = async (messages: messagingApi.Message[]): Promise<void> => {
+          // ห่อด้วย withUserSendLock เหมือน safeReply (2026-08-05)
+          const safePush = async (messages: messagingApi.Message[]): Promise<void> => withUserSendLock(userId, async () => {
             try {
               await pushWithRetry(messages)
               for (const m of messages)
@@ -226,7 +230,7 @@ export async function POST(req: NextRequest) {
               log.warn('push.send_failed', { userId, err: (err as Error).message })
               notifyAdmin(userId, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ (push ล้มเหลว) กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
             }
-          }
+          })
           let greetReplied = false
           const ans = async (msgs: messagingApi.Message[]): Promise<void> => {
             if (greetFirst && !greetReplied) {

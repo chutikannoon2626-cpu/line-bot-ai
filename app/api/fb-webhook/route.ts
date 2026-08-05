@@ -10,6 +10,7 @@ import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
+import { withUserSendLock } from '@/lib/sendLock'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -82,20 +83,24 @@ async function fbSendRequest(psid: string, text: string): Promise<Response> {
   )
 }
 
+// ห่อด้วย withUserSendLock (namespace แยกจาก LINE ด้วย prefix "fb:") กันข้อความอื่นจาก
+// ลูกค้าคนเดียวกันยิง Send API แทรกกลางระหว่าง retry ของข้อความนี้ (2026-08-05)
 async function fbSend(psid: string, text: string) {
-  try {
-    let res = await fbSendRequest(psid, text)
-    for (const delay of FB_SEND_RETRY_DELAYS_MS) {
-      if (res.status !== 429) break
-      await new Promise((r) => setTimeout(r, delay))
-      res = await fbSendRequest(psid, text)
+  await withUserSendLock(`fb:${psid}`, async () => {
+    try {
+      let res = await fbSendRequest(psid, text)
+      for (const delay of FB_SEND_RETRY_DELAYS_MS) {
+        if (res.status !== 429) break
+        await new Promise((r) => setTimeout(r, delay))
+        res = await fbSendRequest(psid, text)
+      }
+      if (!res.ok) throw new Error(`${res.status} - ${res.statusText}`)
+      logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
+    } catch (err) {
+      log.error('fb.send_failed', { psid, err: (err as Error).message })
+      notifyAdminFacebook(psid, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
     }
-    if (!res.ok) throw new Error(`${res.status} - ${res.statusText}`)
-    logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
-  } catch (err) {
-    log.error('fb.send_failed', { psid, err: (err as Error).message })
-    notifyAdminFacebook(psid, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
-  }
+  })
 }
 
 // ดึง URL สินค้า spenderclub.com จากข้อความ Gemini
@@ -104,41 +109,43 @@ function extractProductUrl(text: string): string | null {
   return m ? m[0].replace(/[).,'"]+$/, '') : null
 }
 
-// ส่ง Generic Template card (มี URL สินค้า)
+// ส่ง Generic Template card (มี URL สินค้า) — ห่อด้วย withUserSendLock เหมือน fbSend (2026-08-05)
 async function fbSendProductCard(psid: string, reply: string, url: string) {
-  const clean = reply.replace(url, '').replace(/\n{2,}/g, '\n').trim()
-  const lines = clean.split('\n').map((l: string) => l.trim()).filter(Boolean)
-  const title = (lines[0] ?? 'Spender Club').slice(0, 80)
-  const subtitle = lines.slice(1).join(' ').slice(0, 200) || title
+  await withUserSendLock(`fb:${psid}`, async () => {
+    const clean = reply.replace(url, '').replace(/\n{2,}/g, '\n').trim()
+    const lines = clean.split('\n').map((l: string) => l.trim()).filter(Boolean)
+    const title = (lines[0] ?? 'Spender Club').slice(0, 80)
+    const subtitle = lines.slice(1).join(' ').slice(0, 200) || title
 
-  await fetch(
-    `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipient: { id: psid },
-        message: {
-          attachment: {
-            type: 'template',
-            payload: {
-              template_type: 'generic',
-              elements: [{
-                title,
-                subtitle,
-                buttons: [
-                  { type: 'web_url', url, title: 'ดูรายละเอียด/ราคา' },
-                  { type: 'postback', title: 'สอบถามเพิ่มเติม', payload: 'CONTACT_ADMIN' },
-                ],
-              }],
+    await fetch(
+      `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: { id: psid },
+          message: {
+            attachment: {
+              type: 'template',
+              payload: {
+                template_type: 'generic',
+                elements: [{
+                  title,
+                  subtitle,
+                  buttons: [
+                    { type: 'web_url', url, title: 'ดูรายละเอียด/ราคา' },
+                    { type: 'postback', title: 'สอบถามเพิ่มเติม', payload: 'CONTACT_ADMIN' },
+                  ],
+                }],
+              },
             },
           },
-        },
-      }),
-      signal: AbortSignal.timeout(5000),
-    }
-  ).catch(err => log.error('fb.card_failed', { psid, err: (err as Error).message }))
-  logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: reply, ts: Date.now() })
+        }),
+        signal: AbortSignal.timeout(5000),
+      }
+    ).catch(err => log.error('fb.card_failed', { psid, err: (err as Error).message }))
+    logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: reply, ts: Date.now() })
+  })
 }
 
 // ส่ง reply อัตโนมัติ — ถ้ามี URL สินค้า → Generic Template card, ไม่มี → plain text
@@ -148,31 +155,33 @@ async function fbSendReply(psid: string, reply: string) {
   else await fbSend(psid, reply)
 }
 
-// ส่ง Quick Replies
+// ส่ง Quick Replies — ห่อด้วย withUserSendLock เหมือน fbSend (2026-08-05)
 async function fbSendQuickReplies(
   psid: string,
   text: string,
   buttons: { title: string; payload: string }[]
 ) {
-  await fetch(
-    `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipient: { id: psid },
-        message: {
-          text,
-          quick_replies: buttons.map(b => ({
-            content_type: 'text',
-            title: b.title,
-            payload: b.payload,
-          })),
-        },
-      }),
-      signal: AbortSignal.timeout(5000),
-    }
-  ).catch(err => log.error('fb.quickreply_failed', { psid, err: (err as Error).message }))
+  await withUserSendLock(`fb:${psid}`, async () => {
+    await fetch(
+      `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: { id: psid },
+          message: {
+            text,
+            quick_replies: buttons.map(b => ({
+              content_type: 'text',
+              title: b.title,
+              payload: b.payload,
+            })),
+          },
+        }),
+        signal: AbortSignal.timeout(5000),
+      }
+    ).catch(err => log.error('fb.quickreply_failed', { psid, err: (err as Error).message }))
+  })
 }
 
 // ตรวจ Facebook signature
