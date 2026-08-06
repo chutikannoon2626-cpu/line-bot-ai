@@ -289,8 +289,9 @@ export async function POST(req: NextRequest) {
               // เมื่อลูกค้ายืนยันแล้วข้อความตอบกลับจะเดินเข้า flow ข้อความปกติเอง (ค้นชีตก่อน) (2026-08-01)
               // timeout dynamic ตามจำนวนรูป: รูปแรก 15s + รูปที่เพิ่มมาอีกรูปละ 8s (2026-08-05)
               const dynamicTimeout = 15000 + 8000 * (base64Images.length - 1)
+              const faqTextForImage = await fetchFAQ()
               const withTextResult = await Promise.race([
-                analyzeImageWithText(base64Images, userMessage),
+                analyzeImageWithText(base64Images, userMessage, faqTextForImage),
                 new Promise<{ kind: 'unclear' }>((_, reject) =>
                   setTimeout(() => reject(new Error('gemini_timeout')), dynamicTimeout)
                 ),
@@ -311,6 +312,16 @@ export async function POST(req: NextRequest) {
                 await pushOnly(IMAGE_HANDOFF_MSG)
                 notifyAdmin(userId, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
                 log.info('image_text.handoff', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
+                return
+              }
+
+              // ประเภท G (ใบเสร็จ/สลิปขนส่ง/หลักฐานโอนเงิน) หรือ F+ถามสต็อก — รับทราบ/ตอบทันที
+              // แล้ว handoff เลย ไม่ผ่านขั้นยืนยัน ไม่บันทึก history เป็น pending-confirm
+              // เพราะไม่ไหลเข้า protocol ไหนต่อ (2026-08-06, เรื่องที่ 34)
+              if (withTextResult.kind === 'ackHandoff') {
+                await pushOnly(withTextResult.message)
+                notifyAdmin(userId, `⚠️ ลูกค้าส่งรูปภาพ/ข้อความที่ต้องรอแอดมินยืนยัน: ${withTextResult.message}`).catch(() => {})
+                log.info('image_text.ack_handoff', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
                 return
               }
 
@@ -350,6 +361,14 @@ export async function POST(req: NextRequest) {
                 await ans(txt(IMAGE_HANDOFF_MSG))
                 notifyAdmin(userId, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
                 log.info('image.intent_handoff', { userId, elapsedMs: elapsed })
+                return
+              }
+
+              // ประเภท G (ใบเสร็จ/สลิปขนส่ง/หลักฐานโอนเงิน) — รับทราบทันที+handoff ไม่ผ่านขั้นยืนยัน (2026-08-06, เรื่องที่ 34)
+              if (intent.kind === 'ackHandoff') {
+                await ans(txt(intent.message))
+                notifyAdmin(userId, `⚠️ ลูกค้าส่งรูปภาพที่ต้องรอแอดมินยืนยัน: ${intent.message}`).catch(() => {})
+                log.info('image.intent_ack_handoff', { userId, elapsedMs: elapsed })
                 return
               }
 

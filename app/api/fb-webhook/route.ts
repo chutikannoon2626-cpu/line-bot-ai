@@ -683,8 +683,9 @@ export async function POST(req: NextRequest) {
             // ปกติเอง (ค้นชีตก่อน) (2026-08-01) — timeout dynamic ตามจำนวนรูป (2026-08-05)
             if (caption) {
               const dynamicTimeout = 10000 + 8000 * (base64Images.length - 1)
+              const faqTextForImage = await fetchFAQ()
               const withTextResult = await Promise.race([
-                analyzeImageWithText(base64Images, caption),
+                analyzeImageWithText(base64Images, caption, faqTextForImage),
                 new Promise<{ kind: 'unclear' }>((_, reject) => setTimeout(() => reject(new Error('timeout')), dynamicTimeout)),
               ]).catch(() => ({ kind: 'unclear' as const }))
 
@@ -700,6 +701,15 @@ export async function POST(req: NextRequest) {
                 await fbSend(psid, IMAGE_HANDOFF_MSG)
                 notifyAdminFacebook(psid, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
                 log.info('fb.image_text.handoff', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
+                return
+              }
+
+              // ประเภท G (ใบเสร็จ/สลิปขนส่ง/หลักฐานโอนเงิน) หรือ F+ถามสต็อก — รับทราบ/ตอบทันที
+              // แล้ว handoff เลย ไม่ผ่านขั้นยืนยัน ไม่บันทึก pending-confirm history (2026-08-06, เรื่องที่ 34)
+              if (withTextResult.kind === 'ackHandoff') {
+                await fbSend(psid, withTextResult.message)
+                notifyAdminFacebook(psid, `⚠️ ลูกค้าส่งรูปภาพ/ข้อความที่ต้องรอแอดมินยืนยัน: ${withTextResult.message}`).catch(() => {})
+                log.info('fb.image_text.ack_handoff', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
                 return
               }
 
@@ -728,6 +738,14 @@ export async function POST(req: NextRequest) {
               await fbSend(psid, IMAGE_HANDOFF_MSG)
               notifyAdminFacebook(psid, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
               log.info('fb.image.intent_handoff', { userId })
+              return
+            }
+
+            // ประเภท G (ใบเสร็จ/สลิปขนส่ง/หลักฐานโอนเงิน) — รับทราบทันที+handoff ไม่ผ่านขั้นยืนยัน (2026-08-06, เรื่องที่ 34)
+            if (intent.kind === 'ackHandoff') {
+              await fbSend(psid, intent.message)
+              notifyAdminFacebook(psid, `⚠️ ลูกค้าส่งรูปภาพที่ต้องรอแอดมินยืนยัน: ${intent.message}`).catch(() => {})
+              log.info('fb.image.intent_ack_handoff', { userId })
               return
             }
 
