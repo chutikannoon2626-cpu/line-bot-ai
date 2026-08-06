@@ -435,6 +435,13 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit ด้วย Gemini API จริง: Type D ขยาย 5/5, Type G 5/5, Type F+สต็อก 5/5 ผ่านหมด · Type F+ราคาอย่างเดียว (regression) 4/5 confirm รอบแรก ตรวจสอบเพิ่มด้วย diagnostic logging พบ <code>finishReason: STOP</code> ทุกครั้ง token usage ต่ำกว่างบมาก (~241/800) ไม่ใช่ปัญหา MAX_TOKENS สรุปเป็นความแปรปรวนปกติของโมเดล (รวม 12/13 ≈ 92%) ไม่ใช่ regression — ลบ diagnostic logging ออกก่อน commit แล้ว</div>
 <div class="tip">ไม่แตะ <code>imei_protocol</code>/<code>repair_protocol</code> internal logic, Web Chat, spam guard, scheduler, admin panel, Google Sheet schema — Type D ยังไหลเข้า repair_protocol ปกติ ไม่มี search/handoff logic ใหม่ซ้ำ</div>
 
+<h3>Default Fallback — Type D เป็น catch-all แทน unclear (เพิ่ม 2026-08-06 — เรื่องที่ 35, LINE + Facebook, ปรับ prompt เท่านั้น ไม่มี kind ใหม่ ไม่แตะ webhook)</h3>
+<p>เคสที่ไม่เข้าเงื่อนไข Type A/B/C/F/G ชัดเจน (เช่น รูปแอปมือถือที่ไม่คุ้นเคย/ไม่แน่ใจว่าเกี่ยวกับ SPENDER หรือไม่ พร้อมคำถามเฉพาะทาง) เดิมมีความเสี่ยงตกไป <code>unclear</code> ("รบกวนพิมพ์ชื่อรุ่น") ซึ่งผิดบริบทกับคำถามที่ไม่เกี่ยวกับสินค้าเลย</p>
+<div class="ok"><strong>Type D ขยายเป็น default fallback</strong> — ครอบคลุมทุกกรณีที่ไม่เข้า A/B/C/F/G ชัดเจน ยังไหลเข้า flow เดิมทุกประการ (confirm→history→ลูกค้ายืนยัน→<code>generateReply()</code> ค้นชีต→เว็บ→handoff ซึ่งมีอยู่แล้ว ไม่ใช่ logic ใหม่) · เพิ่มกฎห้ามเดาคำตอบเทคนิคที่ไม่มีข้อมูลจริงรองรับ (Account/รหัสผ่านเริ่มต้น/ขั้นตอนเฉพาะทาง) · Type E ยัง priority สูงสุดเสมอแม้เนื้อหาดูเหมือนคำถามทั่วไป (กันพรางคำถาม) · <code>unclear</code> สงวนไว้เฉพาะรูปที่อ่านไม่ออกจริงๆ · ลำดับความสำคัญอัปเดต: <code>E &gt; G &gt; A/C &gt; D (รวม fallback) &gt; B/F</code></div>
+<div class="tip">ปรึกษาผู้ใช้เรื่อง proactive <code>notifyAdmin()</code> เมื่อ fallback ค้นไม่เจอทั้ง FAQ/เว็บ — พบว่ากลไก <code>&lt;search_tool&gt;</code> เดิมไม่เคย proactive push แจ้งแอดมินสำหรับคำถามข้อความทั่วไปทุกแบบอยู่แล้ว (ไม่ใช่เฉพาะรูปภาพ) ผู้ใช้เลือก<strong>ไม่เพิ่ม</strong> เพื่อคงพฤติกรรมเดิมเป๊ะๆ ไม่ต้องแตะ <code>lib/prompts.ts</code>/webhook หลัก</div>
+<div class="tip">ทดสอบก่อน commit ด้วย Gemini API จริง: รูปแอปไม่คุ้นเคย+ถามรหัสผ่านเริ่มต้น 4/5 confirm รอบแรก (ไม่เดารหัสผ่านเลยสักครั้ง) ตรวจเพิ่มด้วย diagnostic logging ได้ 8/8 confirm token usage ต่ำกว่างบมาก ไม่ใช่ MAX_TOKENS (รวม 12/13 ≈ 92% ความแปรปรวนปกติ) · รูปสถานการณ์แปลก (เสาอากาศ) ไม่เข้า A-G เลย 5/5 <code>other</code> ถูกต้อง · regression รูปว่างเปล่าจริงๆ 3/3 ยัง <code>unclear</code> ถูกต้อง</div>
+<div class="box">ตัวอย่างข้อความจริง: เห็นหน้าจอ login ของแอป NetLink Pro ใช่ไหมคะ ต้องการทราบรหัสผ่านเริ่มต้นใช่ไหมคะ 😊 (ไม่มีการเดารหัสผ่านใดๆ)</div>
+
 <h3>กระบวนการ [สเปค/ฟังก์ชัน] (3 ขั้น)</h3>
 <div class="flow-box">
   <p><strong>ขั้น 1 — อ่านรูปด้วย AI</strong></p>
