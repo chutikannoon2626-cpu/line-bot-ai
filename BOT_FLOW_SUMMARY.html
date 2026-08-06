@@ -408,6 +408,23 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="ok"><code>analyzeImageIntent()</code> ใช้ <code>kind:"product"</code> ได้เฉพาะทุกรูปเป็นสินค้าเดียวกันชัดเจนเท่านั้น คนละสินค้ากันตกไป <code>kind:"other"</code> แทน กันเมนู 3 ปุ่มจับคู่ผิดกับรูปที่ไม่ตรงกัน</div>
 <div class="tip">ไม่แตะ <code>imei_protocol</code>/<code>repair_protocol</code>/<code>generateReply()</code>/<code>generateReplyWithImage()</code>/Web Chat เลย — เป็นการแก้ชั้น storage/prompt ล้วนๆ · เรื่องจำแนกรูปละเอียดขึ้น (6 ประเภท) และลำดับค้นหาคำตอบ ยกไปเป็นงานแยกต่างหาก ไม่ทำในรอบนี้ (ใช้ imei_protocol/repair_protocol เดิมที่มีอยู่แล้วต่อ ไม่สร้าง logic ซ้ำ)</div>
 
+<h3>จำแนกรูปภาพ 6 ประเภท + handoff ทันทีสำหรับรูปที่มีข้อมูลบุคคลที่สาม (เพิ่ม 2026-08-06 — เรื่องที่ 33, LINE + Facebook)</h3>
+<p>ขั้น "สรุป+ถามยืนยัน" เดิม (เรื่องที่ 32) ไม่แยกแยะความเสี่ยงของรูปที่ลูกค้าส่งมาเลย — เพิ่มการจำแนกภายใน 6 ประเภทก่อนตอบเสมอ (ใช้พิจารณาภายในเท่านั้น ไม่โผล่ในคำตอบลูกค้า):</p>
+<table>
+<tr><th>ประเภท</th><th>ลักษณะ</th><th>การตอบ</th></tr>
+<tr><td>A</td><td>ป้าย/สติกเกอร์ S/N หรือ IMEI บนตัวเครื่อง</td><td>อ่านครบทุกหลัก ไม่มั่นใจให้บอก+ขอยืนยัน/ถ่ายใหม่</td></tr>
+<tr><td>B</td><td>หน้าจอเมนู/ตั้งค่าทั่วไป</td><td>ตอบตรงไปตรงมา ความเสี่ยงต่ำ</td></tr>
+<tr><td>C</td><td>หน้าจอแสดง ICCID/IMEI ผ่านซอฟต์แวร์</td><td>จับคู่ label กับค่าให้ตรง ห้ามเดา/สลับ</td></tr>
+<tr><td>D</td><td>ภาพ error/ปัญหาการใช้งาน</td><td>สรุปอาการแม่นๆ ไหลเข้า repair_protocol ปกติ</td></tr>
+<tr><td>E</td><td>ข้อความ/แบบฟอร์ม/บทสนทนาบุคคลที่สาม</td><td><strong>handoff ทันที ไม่ผ่านขั้นยืนยัน ไม่ไหลเข้า protocol ไหนเลย</strong></td></tr>
+<tr><td>F</td><td>รูปสินค้าทั่วไป</td><td>ระบุรุ่น เสนอตัวเลือกถามต่อเหมือนเดิม</td></tr>
+</table>
+<p>ลำดับความสำคัญเมื่อมีหลายรูปคนละประเภทปนกันในชุดเดียวกัน: <code>E &gt; A/C &gt; D &gt; B/F</code> — มี E ปนแม้แต่รูปเดียว ตอบ handoff ทันที ไม่พิจารณารูปอื่นเลย</p>
+<div class="ok">สัญญาณที่ใช้ตัดสิน Type E (มีข้อใดข้อหนึ่งก็นับแล้ว): กรอบข้อความ/ฟองแชท/avatar/timestamp แบบแอปแชท (LINE/Messenger/SMS) · ลิงก์ URL แบบย่อหรือ redirect (bit.ly ฯลฯ) · ข้อความขอข้อมูลส่วนตัว (ที่อยู่/เลขบัตรประชาชน/รหัสผ่าน-OTP/เลขบัญชี) · เอกสาร/ฟอร์มที่มีข้อมูลส่วนตัวของบุคคลอื่นปน</div>
+<div class="box">ข้อความที่ลูกค้าเห็นเมื่อเจอ Type E: รบกวนรอแอดมินตรวจสอบและติดต่อกลับนะคะ 🙏</div>
+<div class="tip">ทดสอบด้วย Gemini API จริงพบว่า Type E รอบแรกแม่นยำแค่ ~50-60% (สัญญาณที่ปลอดภัย: พลาดแล้วตกไป <code>unclear</code> เท่านั้น ไม่เคยหลุดไปเปิดเผยเนื้อหาบุคคลที่สาม) — ปรับปรุง 2 จุด: (1) สร้างรูปทดสอบสมจริงขึ้น (มีกรอบแชท/avatar/timestamp) (2) เพิ่มสัญญาณจำแนกที่ชัดเจนขึ้นในprompt (4 ข้อด้านบน) → ทดสอบซ้ำ 10 รอบได้ 10/10 = 100%</div>
+<div class="tip">ไม่แตะ <code>imei_protocol</code>/<code>repair_protocol</code> internal logic เลย (Type D ยังไหลเข้า repair_protocol ปกติ ไม่มี search/handoff logic ใหม่ซ้ำ) · ไม่แตะ Web Chat, spam guard, scheduler, admin panel, Google Sheet schema · output ยังเป็น text สรุปเดิมทุกกรณี ยกเว้น Type E ที่ตัดจบด้วยข้อความ handoff คงที่</div>
+
 <h3>กระบวนการ [สเปค/ฟังก์ชัน] (3 ขั้น)</h3>
 <div class="flow-box">
   <p><strong>ขั้น 1 — อ่านรูปด้วย AI</strong></p>

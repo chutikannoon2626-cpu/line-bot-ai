@@ -16,6 +16,9 @@ import { withUserSendLock } from '@/lib/sendLock'
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nแอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
+// รูปภาพประเภท E (มีข้อความ/แบบฟอร์ม/บทสนทนาของบุคคลที่สาม) — handoff ทันทีไม่ผ่านขั้นยืนยัน
+// ไม่ไหลเข้า protocol ไหนเลย (2026-08-06, ส่วนที่ 2 ของงานจำแนกรูปภาพ)
+const IMAGE_HANDOFF_MSG = 'รบกวนรอแอดมินตรวจสอบและติดต่อกลับนะคะ 🙏'
 const TAKEOVER_TTL = 2 * 3600
 const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
@@ -302,6 +305,15 @@ export async function POST(req: NextRequest) {
                 return
               }
 
+              // ประเภท E (ข้อความ/แบบฟอร์ม/บทสนทนาบุคคลที่สาม) — handoff ทันที ไม่ผ่านขั้นยืนยัน
+              // ไม่บันทึก history เป็น pending-confirm เพราะไม่ไหลเข้า protocol ไหนต่อ (2026-08-06)
+              if (withTextResult.kind === 'handoff') {
+                await pushOnly(IMAGE_HANDOFF_MSG)
+                notifyAdmin(userId, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+                log.info('image_text.handoff', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
+                return
+              }
+
               await pushOnly(withTextResult.confirmMessage)
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
               log.info('image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
@@ -330,6 +342,14 @@ export async function POST(req: NextRequest) {
               if (intent.kind === 'unclear') {
                 await ans(txt('รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ'))
                 log.info('image.ocr_not_found', { userId, elapsedMs: elapsed })
+                return
+              }
+
+              // ประเภท E (ข้อความ/แบบฟอร์ม/บทสนทนาบุคคลที่สาม) — handoff ทันที ไม่ผ่านขั้นยืนยัน (2026-08-06)
+              if (intent.kind === 'handoff') {
+                await ans(txt(IMAGE_HANDOFF_MSG))
+                notifyAdmin(userId, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+                log.info('image.intent_handoff', { userId, elapsedMs: elapsed })
                 return
               }
 

@@ -29,6 +29,9 @@ const NONSENSE_TTL = 10 * 60
 const FB_IMG_TTL = 600             // 10 นาที
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลังประมวลผลนานกว่าปกติ 🙏\nแอดมินจะรีบตอบกลับในเวลาทำการ 08:00–17:00 น. นะคะ'
+// รูปภาพประเภท E (มีข้อความ/แบบฟอร์ม/บทสนทนาของบุคคลที่สาม) — handoff ทันทีไม่ผ่านขั้นยืนยัน
+// ไม่ไหลเข้า protocol ไหนเลย (2026-08-06, ส่วนที่ 2 ของงานจำแนกรูปภาพ)
+const IMAGE_HANDOFF_MSG = 'รบกวนรอแอดมินตรวจสอบและติดต่อกลับนะคะ 🙏'
 
 // ลูกค้ายืนยันสั่งซื้อ (เช่น "สั่งเลยค่ะ" หลังบอทเสนอราคา) — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
 const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
@@ -691,6 +694,15 @@ export async function POST(req: NextRequest) {
                 return
               }
 
+              // ประเภท E (ข้อความ/แบบฟอร์ม/บทสนทนาบุคคลที่สาม) — handoff ทันที ไม่ผ่านขั้นยืนยัน
+              // ไม่บันทึก history เป็น pending-confirm เพราะไม่ไหลเข้า protocol ไหนต่อ (2026-08-06)
+              if (withTextResult.kind === 'handoff') {
+                await fbSend(psid, IMAGE_HANDOFF_MSG)
+                notifyAdminFacebook(psid, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+                log.info('fb.image_text.handoff', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
+                return
+              }
+
               await fbSend(psid, withTextResult.confirmMessage)
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
               log.info('fb.image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
@@ -708,6 +720,14 @@ export async function POST(req: NextRequest) {
             if (intent.kind === 'unclear') {
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               log.info('fb.image.ocr_not_found', { userId })
+              return
+            }
+
+            // ประเภท E (ข้อความ/แบบฟอร์ม/บทสนทนาบุคคลที่สาม) — handoff ทันที ไม่ผ่านขั้นยืนยัน (2026-08-06)
+            if (intent.kind === 'handoff') {
+              await fbSend(psid, IMAGE_HANDOFF_MSG)
+              notifyAdminFacebook(psid, '⚠️ ลูกค้าส่งรูปภาพที่มีข้อมูลบุคคลที่สาม (แบบฟอร์ม/บทสนทนา) รบกวนตรวจสอบและติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+              log.info('fb.image.intent_handoff', { userId })
               return
             }
 
