@@ -272,21 +272,23 @@
     <div class="step">
       <div class="step-num">5</div>
       <div class="step-content">
-        <div class="step-title">Pending Image Check (<code>img_data:{userId}</code>)</div>
-        <div class="step-desc">GET <code>{id, ts}</code> · Upstash คืนค่าเป็น object ที่ deserialize มาแล้วอัตโนมัติ — เช็ค <code>typeof raw === 'string'</code> ก่อนค่อย JSON.parse (ถ้าเป็น object อยู่แล้วใช้ตรงๆ) เพื่อกันบั๊ก parse ซ้อนที่ทำให้ <code>imgData</code> เป็น null เสมอ · elapsed &lt; 300000ms:
-          <div class="indent">DEL key → ดึงรูป blob → <code>analyzeImageWithText(b64, userMessage)</code> timeout 15s → <code>kind:'unclear'</code>: ans(UNAVAILABLE_MSG) / มี confirmMessage: saveHistory(summary เป็น user turn, confirmMessage เป็น model turn) + ans(confirmMessage) → return</div>
+        <div class="step-title">Pending Image Check (<code>img_list:{userId}</code>)</div>
+        <div class="step-desc">LRANGE ทั้ง list · elapsed คำนวณจาก <code>imgList[0].ts</code> (รูปแรกในชุด) &lt; 300000ms:
+          <div class="indent">DEL key → ดึงรูป blob ทุกรูปใน list → <code>analyzeImageWithText(base64Images[], userMessage)</code> timeout dynamic <code>15000 + 8000*(n-1)</code>ms → <code>kind:'unclear'</code>: pushOnly(UNAVAILABLE_MSG) / มี confirmMessage: saveHistory(summary เป็น user turn, confirmMessage เป็น model turn) + pushOnly(confirmMessage) → return</div>
           elapsed ≥ 300000ms:
-          <div class="indent">DEL key → ดึงรูป blob → <code>analyzeImageIntent(b64)</code> → <code>kind:'unclear'</code>: "รบกวนพิมพ์ชื่อรุ่น" / <code>kind:'product'</code>: saveHistory + imageIntentCard(product) / <code>kind:'other'</code>: saveHistory(confirmMessage เป็น model turn) + ans(confirmMessage) → return</div>
+          <div class="indent">DEL key → ดึงรูป blob ทุกรูปใน list → <code>analyzeImageIntent(base64Images[])</code> → <code>kind:'unclear'</code>: "รบกวนพิมพ์ชื่อรุ่น" / <code>kind:'product'</code>: saveHistory + imageIntentCard(product) / <code>kind:'other'</code>: saveHistory(confirmMessage เป็น model turn) + ans(confirmMessage) → return</div>
         </div>
         <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 26) เดิม OCR ถามหาแค่ "ยี่ห้อ/รุ่นสินค้า" อย่างเดียว ไม่รองรับรูปประเภทอื่น (จอ error, ฉลาก/หน้าจอ IMEI, สกรีนช็อตแอป/เว็บ, เอกสารส่งซ่อม) — เปลี่ยนเป็น <code>analyzeImageIntent()</code> ที่จำแนกกว้างขึ้น เรียก Gemini รอบเดียวเหมือนเดิม (ไม่เพิ่มต้นทุน) กรณี <code>other</code> จะสรุปสิ่งที่เห็น+แต่งคำถามยืนยันกลับมาเลย บันทึกเข้า history ด้วย เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไปเดินเข้า <code>generateReply()</code> ปกติต่อยอด repair_protocol/imei_protocol/HANDOFF ที่มีอยู่แล้วได้เอง — เคส <code>product</code> พฤติกรรมเดิมทุกประการ ไม่กระทบ</div>
         <div class="warn">(เปลี่ยนแล้ว 2026-08-01, เรื่องที่ 29) branch <code>elapsed &lt; 300000ms</code> (รูป+ข้อความมาพร้อมกัน) เดิมเรียก <code>generateReplyWithImage()</code> ตอบทันที ซึ่งค้นเว็บอัตโนมัติทุกครั้งก่อนเสมอแม้คำถามไม่เกี่ยวกับสเปกสินค้าเลย (เช่น "ขอเข้าห้อง DOPA BBT") เสียเวลาเปล่า — เปลี่ยนเป็น <code>analyzeImageWithText()</code> อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ (ไม่เดาคำตอบ) พอลูกค้ายืนยันแล้วค่อยเดินเข้า <code>generateReply()</code> ปกติ (ค้นชีตก่อน) — trade-off: เคสถามราคาชัดเจนที่เคยตอบรอบเดียวจะช้าลง 1 รอบเสมอ (ยอมรับแล้ว เพื่อความเรียบง่าย/แน่นอน) · ปุ่ม "สอบถามสเปก" ยังเรียก <code>generateReplyWithImage()</code> ตรงๆ เหมือนเดิม ไม่ถูกแตะ</div>
+        <div class="warn">(แก้บั๊กแล้ว 2026-08-05, เรื่องที่ 32) เดิม <code>img:</code>/<code>img_data:</code> เป็น key เดี่ยว (<code>redis.set</code>) ทับกันทุกครั้งที่มีรูปใหม่ — ส่ง 2 รูปติดกันภายใน 5 นาที รูปแรกหายไปจากการวิเคราะห์เงียบๆ เหลือแค่รูปล่าสุด แก้เป็น <code>img_list:{userId}</code> (Redis list: <code>rpush</code>+<code>ltrim</code> เก็บ 5 รายการล่าสุด+<code>expire</code> reset TTL 300s ทุกครั้ง) ทั้ง 2 branch ดึงทั้ง list มาวิเคราะห์พร้อมกัน — <code>analyzeImageIntent()</code> ใช้ <code>kind:"product"</code> ได้เฉพาะทุกรูปเป็นสินค้าเดียวกันชัดเจนเท่านั้น ถ้าคนละสินค้าตกไป <code>kind:"other"</code> แทน กันเมนู 3 ปุ่มจับคู่ผิดกับรูปที่ไม่ตรงกัน</div>
+        <div class="ok">(เจอระหว่างทดสอบจริงก่อน commit) <code>maxOutputTokens: 400</code> เดิมไม่พอสำหรับหลายรูป — Gemini "คิด" (thinking token) มากถึง 600-670 โดยไม่มี cap เพราะ 2 ฟังก์ชันนี้ไม่เคยตั้ง <code>thinkingConfig</code> มาก่อน ทำให้ตอบ JSON ไม่จบ (<code>finishReason: MAX_TOKENS</code>) — แก้เพิ่ม <code>thinkingConfig: {'{'}thinkingBudget: 300{'}'}</code> + ขยับเป็น <code>maxOutputTokens: 800</code> ทดสอบซ้ำแล้วผ่านทุกเคส (<code>finishReason: STOP</code>)</div>
       </div>
     </div>
     <div class="step">
       <div class="step-num">6</div>
       <div class="step-content">
         <div class="step-title">Special Command: <code>สอบถามสเปก</code></div>
-        <div class="step-desc">GET+DEL <code>img:{userId}</code> · ถ้ามี imageId: ดึงรูป → generateReplyWithImage(b64, faq, 'สอบถามสเปกและฟังก์ชันการใช้งาน') timeout 15s → return</div>
+        <div class="step-desc">LRANGE <code>img_list:{userId}</code> เอารายการสุดท้าย (รูปล่าสุด)+DEL ทั้ง list · ถ้ามี imageId: ดึงรูป → generateReplyWithImage(b64, faq, 'สอบถามสเปกและฟังก์ชันการใช้งาน') timeout 15s → return <span class="warn" style="display:inline">(เปลี่ยนจาก key เดี่ยว <code>img:</code> เป็น list เรื่องที่ 32 — ฟังก์ชันนี้ยังรูปเดียวเดิม ไม่แตะ)</span></div>
       </div>
     </div>
     <div class="step">
@@ -406,7 +408,7 @@
 
   <h3 style="margin-top:16px">IMAGE Message — Flow</h3>
   <div class="card">
-    <div class="flow-box">ลูกค้าส่งรูป → Promise.all([SET <code>img:{userId}</code> EX 300, SET <code>img_data:{userId}</code> EX 360])</div>
+    <div class="flow-box">ลูกค้าส่งรูป → RPUSH <code>img_list:{userId}</code> {id,ts} → LTRIM เหลือ 5 รายการล่าสุด → EXPIRE 300s <span class="warn" style="display:inline">(เปลี่ยนจาก 2 key เดี่ยว <code>img:</code>/<code>img_data:</code> เป็น list เดียว — เรื่องที่ 32, กันรูปหายเมื่อส่งหลายรูปติดกัน)</span></div>
     <div class="flow-arrow">↓ ถ้า Redis สำเร็จ</div>
     <div class="flow-box"><s>safeReply([greet?, "ได้รับรูปแล้วค่ะ กำลังดูให้นะคะ 📷"])</s> — เอาข้อความออกแล้ว (2026-08-01, เรื่องที่ 22) เหลือแค่ safeReply([getWelcomeMessage()]) ถ้า greetFirst เท่านั้น ไม่งั้นไม่ส่งอะไรเลย</div>
     <div class="flow-arrow">↓ ถ้า Redis ล้มเหลว (fallback)</div>
@@ -454,7 +456,7 @@
     <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('fb')</code> → เงียบ</div>
       <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch ข้อความตัวอักษรเท่านั้น — branch รูปภาพ (<code>attachments...type === 'image'</code>) ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('fb')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
     </div></div>
-    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET+DEL <code>fb_img_url:fb:{psid}</code> · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">LRANGE <code>fb_img_list:fb:{psid}</code> เอารายการแรก+DEL ทั้ง list · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return <span class="warn" style="display:inline">(เปลี่ยนจาก key เดี่ยว <code>fb_img_url:</code> เป็น list — เรื่องที่ 32, ฟังก์ชันนี้ยังรูปเดียวเดิม)</span></div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(getWelcomeMessage())</div>
     <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 23) เหมือน LINE — <code>getWelcomeMessage()</code> ใหม่ ดูรายละเอียดที่หัวข้อ LINE ขั้น 12</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
@@ -486,12 +488,14 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0">
       <div>
         <div class="badge badge-green" style="margin-bottom:6px">มี caption</div>
-        <div class="flow-box" style="font-size:11px"><code>analyzeImageWithText(b64, caption)</code> timeout 10s<br>unclear → fbSend(UNAVAILABLE_MSG)<br>มี confirmMessage → saveHistory + fbSend(confirmMessage) → return</div>
+        <div class="flow-box" style="font-size:11px"><code>analyzeImageWithText(base64Images[], caption)</code> timeout dynamic <code>10000+8000*(n-1)</code>ms<br>unclear → fbSend(UNAVAILABLE_MSG)<br>มี confirmMessage → saveHistory + fbSend(confirmMessage) → return</div>
         <div class="ok" style="font-size:11px;margin-top:4px">(เปลี่ยนแล้ว 2026-08-01, เรื่องที่ 29) เดิม generateReplyWithImage() ตอบทันที ค้นเว็บอัตโนมัติเสมอ — เปลี่ยนเป็นสรุป+ถามยืนยันก่อน พอลูกค้ายืนยันแล้วเดินเข้า generateReply() ปกติ (ค้นชีตก่อน)</div>
+        <div class="warn" style="font-size:11px;margin-top:4px">(แก้บั๊กแล้ว 2026-08-05, เรื่องที่ 32) รับหลายรูปได้แล้ว (เดิมรูปเดียว) + <code>.filter()</code> แทน <code>.find()</code> ดึงทุกรูปในอัลบั้มเดียวกัน (เดิมดึงมาแค่รูปแรก รูปที่ 2 เป็นต้นไปหายไปตั้งแต่ต้นทาง)</div>
       </div>
       <div>
         <div class="badge badge-blue" style="margin-bottom:6px">ไม่มี caption</div>
-        <div class="flow-box" style="font-size:11px"><code>analyzeImageIntent(b64)</code><br>unclear → ถามชื่อรุ่น → return<br>other → saveHistory(confirmMessage) + fbSend(confirmMessage) → return<br>product → saveHistory + SET <code>fb_img_url:fb:{psid}</code> EX 600<br>→ fbSendQuickReplies 3 ปุ่ม:<br>  [ราคา {model}] [สเปค/ฟังก์ชัน] [วิธีสั่งซื้อ]</div>
+        <div class="flow-box" style="font-size:11px"><code>analyzeImageIntent(base64Images[])</code><br>unclear → ถามชื่อรุ่น → return<br>other → saveHistory(confirmMessage) + fbSend(confirmMessage) → return<br>product → saveHistory + RPUSH <code>fb_img_list:fb:{psid}</code> EX 600<br>→ fbSendQuickReplies 3 ปุ่ม:<br>  [ราคา {model}] [สเปค/ฟังก์ชัน] [วิธีสั่งซื้อ]</div>
+        <div class="ok" style="font-size:11px;margin-top:4px">(เรื่องที่ 32) <code>kind:"product"</code> ใช้ได้เฉพาะทุกรูปเป็นสินค้าเดียวกันชัดเจนเท่านั้น คนละสินค้าตกไป <code>other</code> แทน</div>
       </div>
     </div>
     <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 26) เหมือน LINE — ดูรายละเอียดที่หัวข้อ LINE ขั้น 5</div>
@@ -690,8 +694,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>off_hours:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td>—</td><td><s>แสดง off-hours notice แล้ววันนี้</s> — เลิกใช้แล้ว (2026-08-01, เรื่องที่ 21)</td></tr>
     <tr><td><code>holiday_notified:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>(ใหม่ 2026-07-31) แสดงประกาศวันหยุดแล้ววันนี้</td></tr>
     <tr><td><code>msg_rate:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit 5/10s</td></tr>
-    <tr><td><code>img:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">300s</span></td><td>Image message ID สำหรับ "สอบถามสเปก"</td></tr>
-    <tr><td><code>img_data:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">360s</span></td><td><code>{id, ts}</code> รูปค้างรอข้อความ (window 5 min)</td></tr>
+    <tr><td><code>img_list:{userId}</code></td><td><span class="tag tag-string">list</span></td><td><span class="ttl">300s (reset ทุก push)</span></td><td>(เรื่องที่ 32) <code>{id,ts}</code> ต่อรายการ สูงสุด 5 รายการล่าสุด — แทน <code>img:</code>+<code>img_data:</code> เดิม (key เดี่ยวทับกัน)</td></tr>
     <tr><td><code>takeover:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">7200s</span></td><td>Admin takeover LINE เท่านั้น · บอทเงียบ</td></tr>
     <tr><td><code>pre_handoff:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>Trigger message ค้างไว้ (GETDEL)</td></tr>
     <tr><td><code>routed:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">300s</span></td><td>ส่งต่อแอดมินแล้ว</td></tr>
@@ -711,7 +714,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>off_hours:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td>—</td><td><s>Off-hours notice FB</s> — เลิกใช้แล้ว (2026-08-01, เรื่องที่ 21)</td></tr>
     <tr><td><code>holiday_notified:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>(ใหม่ 2026-07-31) ประกาศวันหยุด FB</td></tr>
     <tr><td><code>msg_rate:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit FB 5/10s</td></tr>
-    <tr><td><code>fb_img_url:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>FB image URL รอ "สเปค/ฟังก์ชัน"</td></tr>
+    <tr><td><code>fb_img_list:fb:{psid}</code></td><td><span class="tag tag-string">list</span></td><td><span class="ttl">600s</span></td><td>(เรื่องที่ 32) FB image URL(s) รอ "สเปค/ฟังก์ชัน" — แทน <code>fb_img_url:</code> เดิม (key เดี่ยว)</td></tr>
     <tr><td><code>pre_handoff:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>Pre-handoff trigger FB (GETDEL + stale check)</td></tr>
     <tr><td><code>routed:fb:{psid}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">300s</span></td><td>ส่งต่อแอดมินแล้ว FB</td></tr>
     <tr><td><code>handoff_notified:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>นับแจ้งแอดมิน FB</td></tr>

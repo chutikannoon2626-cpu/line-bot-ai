@@ -751,6 +751,28 @@ Commit+push แล้ว (`bb2c6fc`)
 
 ---
 
+## เรื่องที่ 32 — บั๊กรูปหายเมื่อลูกค้าส่งหลายรูปติดกัน (LINE + Facebook)
+
+**ปัญหาที่เจอ:** ระบบเก็บ "รูปที่รอวิเคราะห์" ด้วย `redis.set()` (key เดี่ยว: `img:{userId}`/`img_data:{userId}` ฝั่ง LINE, `fb_img_url:{userId}` ฝั่ง Facebook) — พอลูกค้าส่ง **2 รูปติดกันภายใน 5 นาที** รูปที่ 2 จะทับข้อมูลรูปแรกใน Redis ทันที ทำให้บอทเห็นแค่รูปล่าสุดตอนวิเคราะห์ รูปแรกหายไปจากการวิเคราะห์เงียบๆ (เจอจากเคสจริง: ลูกค้าส่งรูปฉลาก S/N 2 ใบ ตามด้วยคำถาม บอทวิเคราะห์ได้แค่รูปที่ 2 รูปเดียว)
+
+**เจอเพิ่มระหว่างสำรวจ (Facebook):** `event.message.attachments?.find(a => a.type === 'image')` ดึงมาแค่**รูปแรกรูปเดียว**จากอัลบั้ม — ถ้าลูกค้าส่งหลายรูปพร้อมกันในข้อความเดียว (Facebook รองรับ) รูปที่ 2 เป็นต้นไปหายไปตั้งแต่ต้นทางเลย ไม่ผ่าน Redis ด้วยซ้ำ คนละกลไกกับบั๊กหลักแต่ผลลัพธ์เดียวกัน
+
+**วิธีแก้:**
+1. **LINE** ([line-webhook.ts](app/api/line-webhook/route.ts)) — รวม `img:`+`img_data:` เป็น `img_list:{userId}` (Redis list, `rpush`+`ltrim` เก็บ 5 รายการล่าสุด+`expire` reset TTL 300s ทุกครั้งที่มีรูปใหม่) ทั้ง 2 branch เดิม (elapsed<5min → `analyzeImageWithText`, elapsed≥5min → `analyzeImageIntent`) อ่านทั้ง list แทนตัวเดียว · ปุ่ม "สอบถามสเปก" อ่านรูปล่าสุดจาก list (ยังใช้ `generateReplyWithImage()` แบบรูปเดียวเดิม ไม่แตะ)
+2. **Facebook** ([fb-webhook.ts](app/api/fb-webhook/route.ts)) — `.find()` → `.filter()` ดึงทุกรูปในอัลบั้ม · `fb_img_url:` → `fb_img_list:{userId}` (list) เฉพาะกรณีไม่มี caption (กรณีมี caption ประมวลผลทันทีในคำขอเดียว ไม่ผ่าน Redis อยู่แล้ว ไม่มีบั๊กนี้)
+3. **lib/gemini.ts** — `analyzeImageWithText()`/`analyzeImageIntent()` เปลี่ยนรับ `base64Images: string[]` แทนรูปเดียว ส่งเข้า Gemini พร้อมกันในคำขอเดียว (หลาย `inlineData` part) ปรับ prompt ให้สรุปแยกรายรูป ("รูปที่ 1... รูปที่ 2...") เมื่อมีมากกว่า 1 รูป — `analyzeImageIntent()` ใช้ `kind:"product"` ได้เฉพาะกรณีทุกรูปเป็นสินค้าตัวเดียวกันชัดเจนเท่านั้น ถ้าคนละสินค้ากันตกไป `kind:"other"` แทน (กันเมนู 3 ปุ่มที่ผูกกับสินค้าเดียวไปจับคู่ผิดกับรูปที่ไม่ตรงกัน) · timeout dynamic ตามจำนวนรูป: LINE `15000 + 8000*(n-1)` ms, Facebook `10000 + 8000*(n-1)` ms (คำนวณฝั่ง webhook ที่ `Promise.race`)
+
+**ทำไมไม่กระทบอย่างอื่น:** เป็นการแก้ชั้น storage/prompt ล้วนๆ ไม่แตะ `imei_protocol`/`repair_protocol`/`generateReply()`/`generateReplyWithImage()` เลย · ไม่แตะ Web Chat (ไม่มีการรับรูปภาพอยู่แล้ว) · รูปเดี่ยว (กรณีส่วนใหญ่) ยังทำงานเหมือนเดิมทุกประการ ต่างแค่ตอนนี้รองรับหลายรูปเพิ่มด้วย
+
+**ขอบเขตที่ตั้งใจไว้ (ไม่แตะ ตามที่ตกลงไว้ก่อนแก้):** เรื่องการจำแนกรูปละเอียดขึ้น (6 ประเภท A-F ตามความเสี่ยง) และเรื่องลำดับการค้นหาคำตอบ **ยกไปเป็นงานแยก** — ไม่สร้าง JSON output format/search-then-handoff logic ใหม่ซ้ำกับ `imei_protocol`/`repair_protocol` ที่มีอยู่แล้ว (เรื่องที่ 31 ทำหน้าที่ค้นชีต→เว็บ→HANDOFF ให้ทุกกรณีอยู่แล้ว รวมถึงที่มาจากรูปภาพด้วย)
+
+**ทดสอบก่อน commit (จำลองด้วย Gemini API จริง + mock Redis สำหรับ storage):**
+- **เจอบั๊กเพิ่มระหว่างทดสอบจริง:** `maxOutputTokens: 400` (ค่าเดิมของทั้ง `analyzeImageIntent()`/`analyzeImageWithText()`) **ไม่พอสำหรับกรณีหลายรูป** — ทดสอบส่ง 2 รูปจริงเข้า Gemini แล้วเจอ `finishReason: MAX_TOKENS` ตอบ JSON ไม่จบ (`thoughtsTokenCount` สูงถึง 600-670 โดยไม่มี cap เพราะทั้ง 2 ฟังก์ชันนี้ไม่เคยตั้ง `thinkingConfig` มาก่อนเลย ต่างจาก `generateReply()` ที่ตั้ง `thinkingBudget: 1024` ไว้อยู่แล้ว) — แก้เพิ่มโดยเพิ่ม `thinkingConfig: { thinkingBudget: 300 }` และขยับ `maxOutputTokens` เป็น 800 ให้ทั้ง 2 ฟังก์ชัน ทดสอบซ้ำแล้ว `finishReason: STOP` ตอบ JSON ครบทุกครั้ง — **เผลอไปแก้ `generateReplyWithImage()`'s OCR call (บรรทัดที่ดันมีค่า `maxOutputTokens: 400` ตรงกันพอดี) ไปด้วยตอนใช้ replace_all แบบไม่ระวัง รีบแก้กลับเป็นค่าเดิมก่อน commit** (ฟังก์ชันนี้อยู่นอกขอบเขตที่ตกลงไว้ ไม่ควรถูกแตะเลย)
+- **เทสต์ storage (mock Redis):** ยืนยันพฤติกรรมเดิม (บั๊ก) ส่ง 3 รูปติดกันเหลือแค่รูปล่าสุด 1 รูปจริง เทียบกับพฤติกรรมใหม่เก็บครบทั้ง 3 รูป + `ltrim` จำกัด 5 รายการล่าสุดถูกต้องเมื่อส่ง 8 รูป
+- **เทสต์ Gemini จริง (ผ่าน `GEMINI_API_KEY` ที่มีอยู่ใน `.env.local`):** เรียก `analyzeImageIntent()`/`analyzeImageWithText()` จริงจาก `lib/gemini.ts` (ไม่ใช่โค้ดจำลอง) ด้วยรูปทดสอบ 2 ใบที่มีข้อความต่างกัน (ยืนยันว่า Gemini เห็น+อ่านเนื้อหาได้ทั้ง 2 รูปจริง ไม่ใช่แค่รูปเดียว, จำแนก `other`/`confirm` แยกรายรูปตามที่ตั้งใจ, รูปเดี่ยวยัง backward-compatible ตอบ `product` ปกติ) — ไฟล์ทดสอบทั้งหมดลบออกจาก repo แล้ว ไม่ commit
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

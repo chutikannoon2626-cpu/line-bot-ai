@@ -305,12 +305,14 @@ export async function POST(req: NextRequest) {
               return
             }
 
-            // ลูกค้ากด [สเปค/ฟังก์ชัน] จาก image quick reply → โหลดรูปที่บันทึกไว้
+            // ลูกค้ากด [สเปค/ฟังก์ชัน] จาก image quick reply → โหลดรูปที่บันทึกไว้ (อ่านจาก
+            // fb_img_list: เอารูปแรกพอ เพราะ generateReplyWithImage() ยังเป็นฟังก์ชันรูปเดียว) (2026-08-05)
             if (userMessage === 'สเปค/ฟังก์ชัน') {
               let fbImgUrl: string | null = null
               try {
-                fbImgUrl = await redis.get<string>(`fb_img_url:${userId}`)
-                if (fbImgUrl) await redis.del(`fb_img_url:${userId}`)
+                const raw = await redis.lrange<string>(`fb_img_list:${userId}`, 0, 0)
+                fbImgUrl = raw[0] ?? null
+                await redis.del(`fb_img_list:${userId}`)
               } catch { /* Redis ล่ม */ }
 
               if (fbImgUrl) {
@@ -642,23 +644,30 @@ export async function POST(req: NextRequest) {
             }
 
             const history = await getHistory(userId)
-            const imageUrl = event.message?.attachments?.find(a => a.type === 'image')?.payload?.url
+            // .filter() แทน .find() — เดิมดึงมาแค่รูปแรกรูปเดียว ถ้าลูกค้าส่งอัลบั้มหลายรูป
+            // พร้อมกันในข้อความเดียว รูปที่ 2 เป็นต้นไปหายไปตั้งแต่ต้นทางเลย (2026-08-05)
+            const imageUrls = (event.message?.attachments ?? [])
+              .filter(a => a.type === 'image')
+              .map(a => a.payload?.url)
+              .filter((u): u is string => !!u)
             const caption = event.message?.text
 
             if (holidayNotice) await fbSend(psid, holidayNotice)
             if (greetFirst) await fbSend(psid, getWelcomeMessage())
 
-            if (!imageUrl) {
+            if (imageUrls.length === 0) {
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               log.info('fb.image.no_url', { userId })
               return
             }
 
-            // ดาวน์โหลดรูป (Facebook ส่ง URL มาตรงๆ)
-            let b64 = ''
+            // ดาวน์โหลดรูปทั้งหมด (Facebook ส่ง URL มาตรงๆ)
+            const base64Images: string[] = []
             try {
-              const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) })
-              b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64')
+              for (const url of imageUrls) {
+                const imgRes = await fetch(url, { signal: AbortSignal.timeout(8000) })
+                base64Images.push(Buffer.from(await imgRes.arrayBuffer()).toString('base64'))
+              }
             } catch (err) {
               log.error('fb.image.download_failed', { userId, err: (err as Error).message })
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
@@ -668,30 +677,31 @@ export async function POST(req: NextRequest) {
             // กรณีส่งรูป + caption พร้อมกัน → อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ
             // แทนตอบทันที (เดิมค้นเว็บอัตโนมัติทุกครั้งผ่าน generateReplyWithImage() แม้คำถามไม่
             // เกี่ยวกับสเปกสินค้าเลยก็ตาม) เมื่อลูกค้ายืนยันแล้วข้อความตอบกลับจะเดินเข้า flow ข้อความ
-            // ปกติเอง (ค้นชีตก่อน) (2026-08-01)
+            // ปกติเอง (ค้นชีตก่อน) (2026-08-01) — timeout dynamic ตามจำนวนรูป (2026-08-05)
             if (caption) {
+              const dynamicTimeout = 10000 + 8000 * (base64Images.length - 1)
               const withTextResult = await Promise.race([
-                analyzeImageWithText(b64, caption),
-                new Promise<{ kind: 'unclear' }>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+                analyzeImageWithText(base64Images, caption),
+                new Promise<{ kind: 'unclear' }>((_, reject) => setTimeout(() => reject(new Error('timeout')), dynamicTimeout)),
               ]).catch(() => ({ kind: 'unclear' as const }))
 
               if (withTextResult.kind === 'unclear') {
                 await fbSend(psid, UNAVAILABLE_MSG)
-                log.info('fb.image_text.unclear', { userId, latencyMs: Date.now() - startTime })
+                log.info('fb.image_text.unclear', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
                 return
               }
 
               await fbSend(psid, withTextResult.confirmMessage)
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
-              log.info('fb.image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime })
+              log.info('fb.image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
               return
             }
 
             // วิเคราะห์รูป — ระบุยี่ห้อ/รุ่น หรือจำแนกเจตนาอื่น (2026-08-01)
             let intent: Awaited<ReturnType<typeof analyzeImageIntent>> = { kind: 'unclear' }
             try {
-              intent = await analyzeImageIntent(b64)
-              log.info('fb.image.intent_analyzed', { userId, kind: intent.kind })
+              intent = await analyzeImageIntent(base64Images)
+              log.info('fb.image.intent_analyzed', { userId, kind: intent.kind, imageCount: base64Images.length })
             } catch { /* วิเคราะห์ล้มเหลว */ }
 
             // 5.2: อ่านไม่ออก → ถามชื่อรุ่น (พฤติกรรมเดิม)
@@ -710,10 +720,15 @@ export async function POST(req: NextRequest) {
             }
 
             // 5.3: เจอรุ่นสินค้า → บันทึก URL + quick reply ผูก model (พฤติกรรมเดิม)
+            // เก็บเป็น list แทน key เดี่ยว (fb_img_list: แทน fb_img_url:) — เผื่อรองรับหลายรูปในอนาคต
+            // ตอนนี้ปุ่ม "สเปค/ฟังก์ชัน" ยังใช้ generateReplyWithImage() แบบรูปเดียวเดิม จึงอ่านแค่
+            // รูปแรก (product เดียวกันทุกรูปอยู่แล้วตามเงื่อนไขใหม่ของ analyzeImageIntent) (2026-08-05)
             const ocrProduct = intent.product
             await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
             try {
-              await redis.set(`fb_img_url:${userId}`, imageUrl, { ex: FB_IMG_TTL })
+              await redis.del(`fb_img_list:${userId}`)
+              await redis.rpush(`fb_img_list:${userId}`, ...imageUrls)
+              await redis.expire(`fb_img_list:${userId}`, FB_IMG_TTL)
             } catch { /* Redis ล่ม */ }
 
             const priceBtn = (`ราคา ${ocrProduct}`).slice(0, 20)

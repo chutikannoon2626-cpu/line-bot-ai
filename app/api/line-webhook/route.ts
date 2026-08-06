@@ -259,49 +259,56 @@ export async function POST(req: NextRequest) {
           }
 
           // ตรวจ pending image — ลูกค้าส่งรูปแล้วพิมพ์ข้อความตามมา
-          let imgData: { id: string; ts: number } | null = null
+          // อ่านทั้ง list แทนตัวเดียว (เดิมอ่านแค่ img_data: ตัวเดียว ทำให้ส่งหลายรูปติดกัน
+          // รูปแรกๆ หายไป เพราะถูกทับด้วยรูปหลังใน redis.set ก่อนจะถูกอ่าน) (2026-08-05)
+          let imgList: { id: string; ts: number }[] = []
           try {
-            const raw = await redis.get<unknown>(`img_data:${userId}`)
-            if (raw) imgData = (typeof raw === 'string' ? JSON.parse(raw) : raw) as { id: string; ts: number }
+            const raw = await redis.lrange<string>(`img_list:${userId}`, 0, -1)
+            imgList = raw.map(r => (typeof r === 'string' ? JSON.parse(r) : r) as { id: string; ts: number })
           } catch { /* Redis ล่ม */ }
 
-          if (imgData) {
-            const elapsed = Date.now() - imgData.ts
+          if (imgList.length > 0) {
+            const elapsed = Date.now() - imgList[0].ts // นับจากรูปแรกที่ส่งมาในชุดนี้
             if (elapsed < 300000) {
-              try { await redis.del(`img_data:${userId}`) } catch { /* */ }
+              try { await redis.del(`img_list:${userId}`) } catch { /* */ }
               const blobClient = new messagingApi.MessagingApiBlobClient({
                 channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
               })
-              const stream = await blobClient.getMessageContent(imgData.id)
-              const chunks: Buffer[] = []
-              for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-              const base64Image = Buffer.concat(chunks).toString('base64')
+              const base64Images: string[] = []
+              for (const img of imgList) {
+                const stream = await blobClient.getMessageContent(img.id)
+                const chunks: Buffer[] = []
+                for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+                base64Images.push(Buffer.concat(chunks).toString('base64'))
+              }
               // อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ แทนตอบทันที (เดิมค้นเว็บอัตโนมัติ
               // ทุกครั้งผ่าน generateReplyWithImage() แม้คำถามไม่เกี่ยวกับสเปกสินค้าเลยก็ตาม)
               // เมื่อลูกค้ายืนยันแล้วข้อความตอบกลับจะเดินเข้า flow ข้อความปกติเอง (ค้นชีตก่อน) (2026-08-01)
+              // timeout dynamic ตามจำนวนรูป: รูปแรก 15s + รูปที่เพิ่มมาอีกรูปละ 8s (2026-08-05)
+              const dynamicTimeout = 15000 + 8000 * (base64Images.length - 1)
               const withTextResult = await Promise.race([
-                analyzeImageWithText(base64Image, userMessage),
+                analyzeImageWithText(base64Images, userMessage),
                 new Promise<{ kind: 'unclear' }>((_, reject) =>
-                  setTimeout(() => reject(new Error('gemini_timeout')), 15000)
+                  setTimeout(() => reject(new Error('gemini_timeout')), dynamicTimeout)
                 ),
               ]).catch((err) => {
-                log.error('gemini.image_text_failed', { err: (err as Error).message, userId })
+                log.error('gemini.image_text_failed', { err: (err as Error).message, userId, imageCount: base64Images.length })
                 return { kind: 'unclear' as const }
               })
 
               if (withTextResult.kind === 'unclear') {
                 await pushOnly(UNAVAILABLE_MSG)
-                log.info('image_text.unclear', { userId, latencyMs: Date.now() - startTime })
+                log.info('image_text.unclear', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
                 return
               }
 
               await pushOnly(withTextResult.confirmMessage)
               await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
-              log.info('image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime })
+              log.info('image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
               return
             } else {
               // เกิน 5 นาที → วิเคราะห์รูปก่อน บันทึก context → แสดง card / ถามยืนยัน / ถามชื่อรุ่น
-              try { await redis.del(`img_data:${userId}`) } catch { /* */ }
+              try { await redis.del(`img_list:${userId}`) } catch { /* */ }
 
               let intent: Awaited<ReturnType<typeof analyzeImageIntent>> = { kind: 'unclear' }
 
@@ -309,12 +316,15 @@ export async function POST(req: NextRequest) {
                 const blobClient2 = new messagingApi.MessagingApiBlobClient({
                   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
                 })
-                const stream2 = await blobClient2.getMessageContent(imgData.id)
-                const chunks2: Buffer[] = []
-                for await (const chunk of stream2) chunks2.push(Buffer.from(chunk))
-                const b64 = Buffer.concat(chunks2).toString('base64')
-                intent = await analyzeImageIntent(b64)
-                log.info('image.intent_analyzed', { userId, kind: intent.kind })
+                const base64Images2: string[] = []
+                for (const img of imgList) {
+                  const stream2 = await blobClient2.getMessageContent(img.id)
+                  const chunks2: Buffer[] = []
+                  for await (const chunk of stream2) chunks2.push(Buffer.from(chunk))
+                  base64Images2.push(Buffer.concat(chunks2).toString('base64'))
+                }
+                intent = await analyzeImageIntent(base64Images2)
+                log.info('image.intent_analyzed', { userId, kind: intent.kind, imageCount: base64Images2.length })
               } catch { /* วิเคราะห์ล้มเหลว — ข้ามได้ */ }
 
               if (intent.kind === 'unclear') {
@@ -337,12 +347,17 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard
+          // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard — อ่านจาก img_list: เอารูปล่าสุด
+          // (ตัวเดียวพอ เพราะ generateReplyWithImage() ยังเป็นฟังก์ชันรูปเดี่ยวเดิม ไม่แตะ) (2026-08-05)
           if (userMessage === 'สอบถามสเปก') {
             let imageId: string | null = null
             try {
-              imageId = await redis.get<string>(`img:${userId}`)
-              if (imageId) await redis.del(`img:${userId}`)
+              const raw = await redis.lrange<string>(`img_list:${userId}`, -1, -1)
+              if (raw.length) {
+                const last = (typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0]) as { id: string; ts: number }
+                imageId = last.id
+              }
+              await redis.del(`img_list:${userId}`)
             } catch { /* Redis ล่ม — ตกลงไป FAQ flow ปกติ */ }
 
             if (imageId) {
@@ -659,10 +674,14 @@ export async function POST(req: NextRequest) {
           const imageId = (event.message as { id: string }).id
           let savedToRedis = false
 
+          // เก็บเป็น list แทน key เดี่ยว (เดิม redis.set ทับกันทุกครั้ง ทำให้ส่งหลายรูปติดกัน
+          // รูปแรกๆ หายไปจากการวิเคราะห์ เหลือแค่รูปล่าสุด) — reset TTL 300s ทุกครั้งที่มีรูปใหม่
+          // เข้ามา + จำกัดไม่เกิน 5 รูปล่าสุดกันรายการยาวเกินไป (2026-08-05)
           try {
+            await redis.rpush(`img_list:${userId}`, JSON.stringify({ id: imageId, ts: Date.now() }))
             await Promise.all([
-              redis.set(`img:${userId}`, imageId, { ex: 300 }),
-              redis.set(`img_data:${userId}`, JSON.stringify({ id: imageId, ts: Date.now() }), { ex: 360 }),
+              redis.ltrim(`img_list:${userId}`, -5, -1),
+              redis.expire(`img_list:${userId}`, 300),
             ])
             savedToRedis = true
             log.info('image.received_waiting', { userId, imageId })
