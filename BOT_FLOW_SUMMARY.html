@@ -604,6 +604,7 @@ HANDOFF: ซ่อม/เคลม | รุ่น: ไม่ระบุ (รอ
 <div class="tip"><code>fbSendProductCard()</code> (<code>fb-webhook.ts:118</code>) ยุบ <code>\n{2,}</code>→<code>\n</code> เดียวสำหรับ title/subtitle ของการ์ด Facebook — ไม่แตะ เพราะขอบเขตแค่การ์ด ไม่ใช่ plain text ทั่วไป และ card title ควรเป็นบรรทัดเดียวตามธรรมชาติของ UI element นี้อยู่แล้ว</div>
 <div class="tip">ทดสอบก่อน commit ด้วย Gemini API จริง (เครือข่าย sandbox เข้าถึง Google Sheet/Serper จริงไม่ได้ช่วงทดสอบ จึงจำลอง CSV และผลค้นเว็บด้วยเนื้อหาจริงแทน แต่เรียก Gemini จริงทุกครั้ง): FAQ multi-line (3 ขั้นตอน) → Gemini ตอบพร้อม <code>\n</code> ตรงกับต้นฉบับ · Product multi-line (3 จุดเด่น) → คงโครงสร้างหลายบรรทัดในคำตอบ · ผลค้นหาสังเคราะห์ที่เขียนเป็นพารากราฟยาวติดกันไม่มี <code>\n</code> เลย → Gemini จัดกลุ่มเป็นหัวข้อแยกสินค้า+bullet เว้นบรรทัดถูกต้องเอง</div>
 <div class="tip">ไม่แตะ logic การค้นหา/จำแนกรูปภาพ (Type A-G) หรือ handoff logic (เรื่องที่ 36-37) เลย — แก้แค่ 2 ไฟล์ (<code>lib/sheet.ts</code>, <code>lib/prompts.ts</code>) ไม่แตะ webhook ทั้ง 3 ช่องทางเลยเพราะพิสูจน์แล้วว่าไม่ใช่ต้นตอปัญหา</div>
+<div class="ok"><strong>ต่อยอด (2026-08-07 เพิ่มภายหลัง):</strong> เพิ่มกฎสำนวนขึ้นต้นมาตรฐานก่อน list/bullet/เปรียบเทียบใน <code>&lt;output_format&gt;</code> — เดิมปล่อยให้ Gemini เลือกคำเอง เจอ "ให้ฟังนะคะ" ที่เป็นภาษาพูดเกินไป บังคับใช้แค่ "ดังนี้นะคะ"/"ตามนี้ค่ะ" เท่านั้น ไม่ว่าคำตอบจะมาจาก FAQ หรือค้นเว็บ — ทดสอบ Gemini จริง 5 รอบ ผ่านครบ ใช้สำนวนที่กำหนดทุกรอบ</div>
 
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
