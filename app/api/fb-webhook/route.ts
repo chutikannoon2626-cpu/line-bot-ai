@@ -533,11 +533,15 @@ export async function POST(req: NextRequest) {
             }
 
             // HANDOFF / HANDOFF: — Gemini ส่งต่อแอดมิน (IMEI confirm หรือ repair)
-            if (reply === 'HANDOFF' || reply.toUpperCase().startsWith('HANDOFF')) {
-              const summary = reply.replace(/^HANDOFF[:\s]*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
-              // self_repair_protocol ส่ง "HANDOFF: ขอวิธีทำเอง | ..." มาเฉพาะกรณีถามวิธีทำเอง (ไม่ใช่แจ้งเครื่องเสีย)
+            // ค้นหา "HANDOFF:" ที่ไหนก็ได้ในข้อความ (ไม่ anchor ที่ต้น) เพราะ Gemini บางครั้งใส่ประโยค
+            // นำหน้ามาก่อน "HANDOFF:" ทั้งที่ prompt สั่งห้ามไว้ — เดิมใช้ startsWith('HANDOFF') ทำให้เคส
+            // แบบนี้หลุดไปทั้งก้อน (ข้อความดิบ + "HANDOFF: ...") ให้ลูกค้าเห็นตรงๆ แทนที่จะถูกแทนด้วย
+            // handoffMsg (เจอบั๊กจริงจาก screenshot ลูกค้า 2026-08-07)
+            if (reply === 'HANDOFF' || reply.toUpperCase().includes('HANDOFF:')) {
+              const summary = reply.replace(/^[\s\S]*?HANDOFF:?\s*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
+              // self_repair_protocol ส่ง "...HANDOFF: ขอวิธีทำเอง | ..." มาเฉพาะกรณีถามวิธีทำเอง (ไม่ใช่แจ้งเครื่องเสีย)
               // imei_protocol ส่ง "...| IMEI: ... | ..." — เรื่อง Spendernetwork ให้ชี้ทางไป LINE แทนรอแอดมินทาง Facebook (2026-07-31)
-              const replyMsg = /^HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
+              const replyMsg = /HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
                 ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
                 : summary.includes('IMEI:')
                 ? getSpendernetworkRedirectMessage()
