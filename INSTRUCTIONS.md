@@ -904,6 +904,18 @@ HANDOFF: ซ่อม/เคลม | รุ่น: ไม่ระบุ (รอ
 
 ---
 
+## เรื่องที่ 37 — ปิด notifyAdmin() สำหรับ Handoff ฝั่งข้อความล้วน (LINE + Facebook)
+
+**เหตุผล:** แอดมินเช็คแชทเองทุกวันเป็นปกติอยู่แล้ว ไม่จำเป็นต้องพึ่ง push notification — ให้พฤติกรรมเหมือนกับที่ตัดสินใจไว้แล้วสำหรับ Type D fallback ฝั่งรูปภาพ (เรื่องที่ 35)
+
+**วิธีแก้:** เอาการเรียก `notifyAdmin()`/`notifyAdminFacebook()` ออกจากบล็อกจัดการ HANDOFF ของข้อความล้วน (repair_protocol/self_repair_protocol/imei_protocol) ที่ [line-webhook.ts:594-620](app/api/line-webhook/route.ts#L594-L620) และ [fb-webhook.ts:535-560](app/api/fb-webhook/route.ts#L535-L560) — คงส่วน redis state (`routed`/`takeover`/`handoff_notified`) ไว้เหมือนเดิม เปลี่ยนแค่ catch block log event name จาก `handoff.notify_failed` เป็น `handoff.state_failed` เพื่อสะท้อนว่าตอนนี้ catch แค่ error จาก redis เท่านั้น — `replyMsg` ที่ลูกค้าเห็น (`handoffMsg`/ข้อความควบคุมตามเวลาทำการ) **ไม่เปลี่ยนแปลงเลย**
+
+**ไม่แตะ `lib/handoff.ts`** — ฟังก์ชัน `notifyAdmin()`/`notifyAdminFacebook()` เองยังอยู่ครบ ยังใช้งานอยู่ที่ Type E/G/F+สต็อก ฝั่งรูปภาพตามปกติ (line-webhook.ts:313/323/362/370, fb-webhook.ts:708/717/745/753) — ยืนยันแล้วว่าเป็นจุดเรียกคนละที่ ไม่มี code path ร่วมกับบล็อก HANDOFF ข้อความล้วนเลย
+
+**ทดสอบก่อน commit:** ตรวจ diff โดยตรง + grep ยืนยันว่าไม่มีการเรียก `notifyAdmin`/`notifyAdminFacebook` เหลืออยู่ในช่วงบรรทัดของบล็อก HANDOFF ข้อความล้วนทั้ง 2 ไฟล์ (มีแค่ comment อธิบาย ไม่ใช่ function call จริง) — `tsc` ผ่าน — บรรทัดที่กำหนดค่า `replyMsg` ไม่ถูกแก้เลย (ยืนยันจาก diff ว่าลูกค้ายังได้ `handoffMsg` เหมือนเดิมทุกประการ)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

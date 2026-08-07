@@ -590,6 +590,12 @@ HANDOFF: ซ่อม/เคลม | รุ่น: ไม่ระบุ (รอ
 <div class="ok">ทดสอบก่อน deploy (local, mock Redis เพราะ .env.local ไม่มี UPSTASH credentials จริง): เทสต์ serialize ปกติ (ข้อความ 2 รอจริง ~2.1 วิ) ✅ และเทสต์ bypass กัน deadlock (bypass ที่ ~12 วิพอดี ไม่ค้างตลอดไป) ✅ — ยังไม่ commit+push รอยืนยันก่อน</div>
 <div class="ok">ไม่กระทบอย่างอื่น: lock ครอบคลุมแค่ช่วงส่งข้อความเท่านั้น ไม่ครอบ Gemini/Serper/ค้นชีต (ยังคู่ขนานได้ปกติ) · คนละลูกค้าไม่มีทางชน lock กัน (key แยกตาม userId) · ไม่แตะ Web Chat</div>
 
+<h2>9.14 ปิด notifyAdmin() สำหรับ Handoff ฝั่งข้อความล้วน (เพิ่ม 2026-08-07 — เรื่องที่ 37, LINE + Facebook)</h2>
+<p>แอดมินเช็คแชทเองทุกวันเป็นปกติอยู่แล้ว ไม่จำเป็นต้องพึ่ง push notification สำหรับ Handoff ฝั่งข้อความล้วน (repair_protocol/self_repair_protocol/imei_protocol) — ให้พฤติกรรมเหมือนกับที่ตัดสินใจไว้แล้วสำหรับ Type D fallback ฝั่งรูปภาพ (เรื่องที่ 35)</p>
+<div class="ok">เอาการเรียก <code>notifyAdmin()</code>/<code>notifyAdminFacebook()</code> ออกจากบล็อกจัดการ HANDOFF ของข้อความล้วนใน <code>app/api/line-webhook/route.ts</code> และ <code>app/api/fb-webhook/route.ts</code> — คงส่วน redis state (<code>routed</code>/<code>takeover</code>/<code>handoff_notified</code>) ไว้เหมือนเดิม เปลี่ยนแค่ catch block log event name (<code>handoff.notify_failed</code> → <code>handoff.state_failed</code>) เพื่อสะท้อนว่าตอนนี้ catch แค่ error จาก redis เท่านั้น — ลูกค้ายังเห็น <code>handoffMsg</code> ตามเวลาทำการเหมือนเดิมทุกประการ ไม่เปลี่ยนแปลง</div>
+<div class="tip">ไม่แตะ <code>lib/handoff.ts</code> — ฟังก์ชัน <code>notifyAdmin()</code>/<code>notifyAdminFacebook()</code> เองยังอยู่ครบ ยังใช้งานอยู่ที่ Type E/G/F+สต็อก ฝั่งรูปภาพตามปกติ (ดูหัวข้อ 9.13/เรื่องที่ 32-35) — ยืนยันแล้วว่าเป็นจุดเรียกคนละที่ ไม่มี code path ร่วมกับบล็อก HANDOFF ข้อความล้วนเลย</div>
+<div class="tip">ทดสอบก่อน commit: ตรวจ diff โดยตรง + grep ยืนยันไม่มีการเรียก <code>notifyAdmin</code>/<code>notifyAdminFacebook</code> เหลืออยู่ในช่วงบรรทัดของบล็อก HANDOFF ข้อความล้วนทั้ง 2 ไฟล์ — <code>tsc</code> ผ่าน — บรรทัดที่กำหนดค่า <code>replyMsg</code> ไม่ถูกแก้เลย</div>
+
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
 

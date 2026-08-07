@@ -546,14 +546,16 @@ export async function POST(req: NextRequest) {
                 : summary.includes('IMEI:')
                 ? getSpendernetworkRedirectMessage()
                 : handoffMsg
+              // (เรื่องที่ 37) ไม่ notifyAdminFacebook() อีกต่อไปสำหรับ handoff ข้อความล้วน — แอดมินเช็คแชทเองเป็นปกติ
+              // อยู่แล้ว เหมือนที่ตัดสินใจไว้กับ Type D fallback ฝั่งรูปภาพ (เรื่องที่ 35) — notifyAdminFacebook()
+              // เองยังไม่ได้แตะ ยังใช้อยู่ที่ Type E/G/F+สต็อก ฝั่งรูปภาพตามปกติ (line 701/711/738/747)
               try {
                 await Promise.all([
                   redis.set(`routed:${userId}`, '1', { ex: 300 }),
                   redis.del(`handoff_notified:${userId}`),
                 ])
-                await notifyAdminFacebook(psid, `[สรุปคำสั่ง]: ${summary}`)
-              } catch (notifyErr) {
-                log.error('fb.handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+              } catch (stateErr) {
+                log.error('fb.handoff.state_failed', { err: (stateErr as Error).message, userId })
               }
               await fbSend(psid, replyMsg)
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
