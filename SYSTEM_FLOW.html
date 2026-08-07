@@ -850,7 +850,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">prompts.ts</span></td>
-      <td>buildSystemPrompt รวม: hallucination guard, recommend_protocol (2-tier), use_case_map, reasoning_protocol (step 2.5 refinement detection — แก้แล้วให้กลับไป recommend_protocol ใหม่ถ้า history ไม่มีสินค้าที่เคยแนะนำ) · search_tool "ค้นเว็บไม่เจอ" ใช้ <code>&#36;{handoffMsg}</code> แบบไดนามิกตามช่องทาง (ไม่ hardcode ข้อความ LINE/FB แล้ว)</td>
+      <td>buildSystemPrompt รวม: hallucination guard, recommend_protocol (2-tier), use_case_map, reasoning_protocol (step 2.5 refinement detection — แก้แล้วให้กลับไป recommend_protocol ใหม่ถ้า history ไม่มีสินค้าที่เคยแนะนำ) · search_tool "ค้นเว็บไม่เจอ" ใช้ <code>&#36;{handoffMsg}</code> แบบไดนามิกตามช่องทาง (ไม่ hardcode ข้อความ LINE/FB แล้ว) · (เพิ่ม 2026-08-07, เรื่องที่ 38) <code>&lt;output_format&gt;</code> เพิ่ม 2 กฎ: เว้นบรรทัดแยกแต่ละประเด็นเสมอ (ไม่ว่าจากคำตอบ FAQ หรือค้นเว็บ) + คงการเว้นบรรทัดเดิมของ <code>&lt;faq&gt;</code> ไว้ ไม่รวบเป็นย่อหน้าเดียว</td>
       <td><code>buildSystemPrompt()</code></td>
     </tr>
     <tr>
@@ -860,7 +860,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">sheet.ts</span></td>
-      <td>Fetch CSV · parse 12-col Row (แก้จาก 13 คอลัมน์แล้ว — เอา stock ที่ไม่มีจริงในชีตออก) · 3 types: product/faq/license · license map lookup (license_required/license_ref อ่าน index ถูกต้องแล้ว) · cache เก็บทั้ง text + rows + licenseMap · in-memory cache 60s + stale fallback · custom CSV parser รองรับ quoted newlines · <code>findExactMatch()</code> ทางลัดก่อน Gemini (ดูหัวข้อ Exact Keyword Match)</td>
+      <td>Fetch CSV · parse 12-col Row (แก้จาก 13 คอลัมน์แล้ว — เอา stock ที่ไม่มีจริงในชีตออก) · 3 types: product/faq/license · license map lookup (license_required/license_ref อ่าน index ถูกต้องแล้ว) · cache เก็บทั้ง text + rows + licenseMap · in-memory cache 60s + stale fallback (ไม่ใช่ Redis) · custom CSV parser รองรับ quoted newlines · <code>findExactMatch()</code> ทางลัดก่อน Gemini (ดูหัวข้อ Exact Keyword Match) · (แก้บั๊กแล้ว 2026-08-07, เรื่องที่ 38) ลบ <code>clean()</code> ที่เคยลบ <code>\n</code> ทิ้งก่อนสร้าง context <code>&lt;faq&gt;</code> ทำให้การเว้นบรรทัดที่ตั้งใจพิมพ์ในชีต (Alt+Enter) หายไปตั้งแต่ก่อน Gemini เห็นด้วยซ้ำ — เปลี่ยนเป็น <code>cleanKeepLines()</code> ทั้ง 5 จุด (formatFaq/formatLicense/formatProduct/buildLicenseMap/customerProduct)</td>
       <td><code>fetchFAQ()</code> <code>findExactMatch()</code></td>
     </tr>
     <tr>

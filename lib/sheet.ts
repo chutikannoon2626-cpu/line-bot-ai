@@ -109,7 +109,7 @@ function buildLicenseMap(rows: Row[]): Map<string, LicenseInfo> {
   const licenseMap = new Map<string, LicenseInfo>()
   for (const r of rows) {
     if (r.type === 'license' && r.id) {
-      licenseMap.set(r.id, { answer: clean(r.answer), url: r.url })
+      licenseMap.set(r.id, { answer: cleanKeepLines(r.answer), url: r.url })
     }
   }
   return licenseMap
@@ -133,13 +133,13 @@ function rowsToFaqText(rows: Row[], licenseMap: Map<string, LicenseInfo>): strin
 // --- Format License row ---
 function formatLicense(row: Row): string {
   const urlInfo = row.url ? ` ดูขั้นตอน: ${row.url}` : ''
-  return `[ใบอนุญาต] ${row.keywords}\n→ ${clean(row.answer)}${urlInfo}`
+  return `[ใบอนุญาต] ${row.keywords}\n→ ${cleanKeepLines(row.answer)}${urlInfo}`
 }
 
 // --- Format FAQ row ---
 function formatFaq(row: Row): string {
   const urlInfo = row.url ? ` ข้อมูลเพิ่มเติม: ${row.url}` : ''
-  return `[${row.category}] ${row.keywords}\n→ ${clean(row.answer)}${urlInfo}`
+  return `[${row.category}] ${row.keywords}\n→ ${cleanKeepLines(row.answer)}${urlInfo}`
 }
 
 // --- Format Product row ---
@@ -176,7 +176,7 @@ function formatProduct(row: Row, licenseMap: Map<string, LicenseInfo>): string {
 
   return `[สินค้า] ${name} | ${row.category} | ${row.keywords}
 → PRICE: ${priceText || 'สอบถามราคากับแอดมินได้เลยค่ะ'}
-  INFO: ${clean(row.answer)}
+  INFO: ${cleanKeepLines(row.answer)}
   LICENSE: ${licenseText || '-'} รับประกัน 2 ปี
   ${urlLine}
   CTA: ลูกค้าสนใจสั่งเลยไหมคะ?`
@@ -213,7 +213,7 @@ function customerProduct(row: Row, licenseMap: Map<string, LicenseInfo>): string
 
   return [
     `${name} ${priceText} ค่ะ 📻`,
-    `• ${clean(row.answer)}`,
+    `• ${cleanKeepLines(row.answer)}`,
     `• ${licenseText ? licenseText + ' ' : ''}รับประกัน 2 ปี`,
     row.url,
     'ลูกค้าสนใจสั่งเลยไหมคะ?',
@@ -230,12 +230,10 @@ function customerLicense(row: Row): string {
   return [cleanKeepLines(row.answer), urlLine].filter(Boolean).join('\n')
 }
 
-function clean(text: string): string {
-  return text.replace(/\r?\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
-}
-
-// สำหรับข้อความส่งลูกค้าโดยตรง — รักษาบรรทัดใหม่ที่ตั้งใจพิมพ์ไว้ในชีต
-// (ต่างจาก clean() ที่รวมเป็นบรรทัดเดียวเพื่อประหยัด token ตอนส่งบริบทให้ Gemini)
+// รักษาบรรทัดใหม่ที่ตั้งใจพิมพ์ไว้ในชีต (Alt+Enter) ทั้งฝั่งบริบทที่ส่งให้ Gemini อ่านและ
+// ข้อความที่ส่งลูกค้าโดยตรงจาก findExactMatch — เดิมมี clean() แยกต่างหากที่รวมทุกอย่างเป็น
+// บรรทัดเดียว (replace \n ด้วยช่องว่าง) ใช้สร้างบริบท <faq> ให้ Gemini ทำให้ Gemini ไม่เคยเห็น
+// การเว้นบรรทัดต้นฉบับเลย จึงตอบกลับมาเป็นก้อนเดียวเสมอแม้แก้ชีตให้เว้นบรรทัดแล้วก็ตาม (2026-08-07)
 function cleanKeepLines(text: string): string {
   return text
     .split(/\r?\n/)
