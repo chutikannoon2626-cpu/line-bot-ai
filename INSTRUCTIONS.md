@@ -990,6 +990,37 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 39 — เก็บ history ไว้ช่วงปิดบอทตามตารางเวลา + TTL แบบไดนามิก (LINE + Facebook, ไม่เกี่ยวกับ Web Chat)
+
+**ปัญหาที่พบ:** ช่วง `isScheduledOff() = true` (บอทปิดตามตารางเวลา แอดมินดูแลเอง) ทั้ง 4 จุดตรวจ (LINE TEXT/IMAGE, Facebook TEXT/IMAGE) return เงียบทันทีโดยไม่บันทึกอะไรเข้า `saveHistory()` เลย — มีแค่ `logChat()` (log แยกต่างหาก อายุ 30 วัน ไม่เกี่ยวกับ Gemini context) ที่ถูกเรียกใน TEXT branch เท่านั้น ไม่มีเลยใน IMAGE branch ทั้ง 2 ช่องทาง — ตัดสินใจแล้วว่าจะ**เก็บประวัติไว้เฉยๆ รอลูกค้าทักมาใหม่** (ไม่ auto-reply)
+
+**ความเสี่ยงที่ตรวจสอบก่อนแก้:** `saveHistory()` เดิม TTL แค่ 10 นาที (`HISTORY_TTL = 600` วิ) — ถ้าใช้ TTL เดิมตรงๆ ข้อความที่ลูกค้าพิมพ์ตอนปิดบอทตอนเช้าจะหายไปก่อนบอทจะเปิดตอนเย็นอยู่ดี ไม่ช่วยอะไร — และถ้าลูกค้าพิมพ์หลายข้อความติดกันช่วงปิดบอท (ไม่มี `'model'` turn คั่นเลย) ต้องเช็คว่า Gemini API ยอมรับ history ที่มี role `'user'` ติดกันหลายรอบไหม — **ทดสอบแล้วยอมรับปกติ ไม่ error** (Gemini `contents` เป็น array ของ turn เฉยๆ ไม่บังคับ strict alternation) จึงไม่ต้องออกแบบพิเศษ (ไม่ต้องรวม turn หรือใส่ placeholder model คั่น) — append ตรงไปตรงมาได้เลย
+
+**วิธีแก้:**
+1. [lib/history.ts](lib/history.ts) — เพิ่ม parameter `ttlSeconds: number = HISTORY_TTL` ให้ `saveHistory()` (optional, ไม่ระบุ = พฤติกรรมเดิมทุกประการ ทุก call site เดิมไม่กระทบเลย) — **ไม่แตะ `MAX_TURNS`** ตามที่ตกลงไว้
+2. เพิ่มฟังก์ชัน `computeOffHoursHistoryTtl(channel)` เป็น local helper **ในแต่ละ webhook file** (ไม่ export จาก `lib/schedule.ts` — อ่าน `getRules()` ที่มีอยู่แล้วมาคำนวณเท่านั้น ไม่แก้ `isScheduledOff()`/logic การเช็คตารางเลย มิเรอร์วิธีจับคู่ day/time แบบเดียวกันทุกประการ): หา rule ที่ตรงกับเวลาปัจจุบัน คำนวณนาทีที่เหลือจนกว่าจะถึง `endTime` (รองรับทั้งช่วงในวันเดียวกันและข้ามคืน) + buffer 30 นาที — ถ้าคำนวณไม่ได้ (rules ว่าง/ไม่มี rule ตรง) fallback 12 ชม.
+3. แก้ 4 จุดให้เรียก `saveHistory(userId, [...history, {role:'user', text: userMessage}], ttl)` ก่อน `return`:
+   - [line-webhook.ts](app/api/line-webhook/route.ts) TEXT branch — `history`/`userMessage` มีอยู่แล้วในสโคป
+   - line-webhook.ts IMAGE branch — เพิ่ม `getHistory(userId)` ก่อน (ไม่เคยถูกเรียกใน branch นี้เลย) บันทึกด้วย placeholder `[ลูกค้าส่งรูปภาพ]` (ยังไม่วิเคราะห์รูป ณ จุดนี้)
+   - [fb-webhook.ts](app/api/fb-webhook/route.ts) TEXT branch — เหมือน LINE
+   - fb-webhook.ts IMAGE branch — เหมือน LINE (เพิ่ม `getHistory()` ก่อน)
+4. วันที่เปิดบอท 24 ชม. (ไม่มี rule ตรงกับวันนั้น) → `isScheduledOff()` คืน false ตั้งแต่ต้น → ไม่เข้า branch นี้เลย → ใช้ `saveHistory()` ปกติ (TTL 10 นาทีเดิมโดยอัตโนมัติ ไม่ต้องเขียน special case)
+
+**การตัดสินใจร่วมกับผู้ใช้ (นอกขอบเขต "แก้ 4 จุด" เดิม):** เพื่อให้ `saveHistory()` รับ TTL แบบ dynamic ได้ ต้องแก้ `lib/history.ts` เพิ่มเติมด้วย (ไม่ได้อยู่ใน "แก้ 4 จุด" เดิมที่ระบุไว้) — แจ้งผู้ใช้ก่อนแล้วเลือก **เพิ่ม optional parameter ใน `saveHistory()`** (backward-compatible เต็มรูปแบบ) แทนการก็อป logic `slice(-MAX_TURNS)`+serialize ซ้ำในเว็บฮุคทั้ง 2 ไฟล์
+
+**ทำไมไม่กระทบอย่างอื่น:** ไม่แตะ `MAX_TURNS`, `logChat()`/`lib/chatlog.ts`, ตัวฟังก์ชัน `isScheduledOff()` เอง, Admin Takeover, ข้อความ off-hours/greeting, `imei_protocol`/`repair_protocol`/`self_repair_protocol`, ระบบจำแนกรูปภาพ Type A-G, handoff logic (เรื่องที่ 36-37), sendLock/retry-backoff (เรื่องที่ 30), Web Chat เลยแม้แต่จุดเดียว — ทุก call site เดิมของ `saveHistory()` (ไม่ระบุ ttlSeconds) ได้ TTL 600 วิเหมือนเดิมทุกประการ
+
+**ทดสอบก่อน commit:**
+- ข้อความเข้าตอน 10:00 (ปิดบอท 08:00-18:00) → TTL 8 ชม. 30 นาที (8 ชม.เหลือ + buffer 30 นาที) ✅
+- ข้อความเข้าตอน 17:45 (ใกล้ปิดช่วงปิดบอท) → TTL 45 นาที (15 นาทีเหลือ + buffer 30 นาที) ✅
+- วันเปิด 24 ชม. (ไม่มี rule ตรงกับวันนั้น) → `computeOffHoursHistoryTtl()` ไม่ถูกเรียกเลย ยืนยัน fallback ปลอดภัย 12 ชม. แม้ถูกเรียกผิดจังหวะ ✅
+- rules ว่างเปล่า/คำนวณไม่ได้ → fallback 12 ชม. ✅
+- rule ข้ามคืน (เผื่อ schema รองรับ แม้ config จริงไม่ใช้แบบนี้) เช่น 22:00-06:00 ตอนนี้ 23:00 → TTL 7 ชม. 30 นาที ✅
+- `saveHistory()` ไม่ระบุ ttlSeconds → default 600 วิ (10 นาทีเดิม) ✅ / ระบุ ttlSeconds → ใช้ค่าที่ส่งเข้าไปจริง ✅
+- ลูกค้าพิมพ์ 4 ข้อความติดกันช่วงปิดบอท (append `role:'user'` ล้วนไม่มี `'model'` คั่น) → ไม่ error ✅ แล้วเรียก `generateReply()` จริงด้วย history ชุดนี้หลังบอทเปิด → ไม่ error ตอบราคาสินค้าได้ถูกต้องปกติ ✅
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

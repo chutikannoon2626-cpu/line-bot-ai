@@ -14,9 +14,11 @@ export async function getHistory(userId: string): Promise<Turn[]> {
   }
 }
 
-export async function saveHistory(userId: string, turns: Turn[]): Promise<void> {
+// ttlSeconds override — ใช้ตอนปิดบอทตามตารางเวลา (isScheduledOff) เพื่อยืด TTL ให้ history
+// ไม่หมดอายุก่อนบอทจะกลับมาเปิดตอบอีกครั้ง (เรื่องที่ 39, 2026-08-08) — ไม่ระบุ = ใช้ HISTORY_TTL เดิมทุกประการ
+export async function saveHistory(userId: string, turns: Turn[], ttlSeconds: number = HISTORY_TTL): Promise<void> {
   try {
-    await redis.set(`history:${userId}`, turns.slice(-MAX_TURNS), { ex: HISTORY_TTL })
+    await redis.set(`history:${userId}`, turns.slice(-MAX_TURNS), { ex: ttlSeconds })
   } catch {
     // Redis ล่ม — ข้าม
   }

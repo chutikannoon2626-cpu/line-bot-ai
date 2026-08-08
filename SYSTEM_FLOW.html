@@ -260,6 +260,7 @@
         <div class="step-title">Schedule Check</div>
         <div class="step-desc"><code>isScheduledOff('line')</code> → ถ้า off = เงียบ (return โดยไม่ reply)</div>
         <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch <code>msgType === 'text'</code> เท่านั้น — branch <code>msgType === 'image'</code> ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('line')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
+        <div class="warn">(เพิ่ม 2026-08-08, เรื่องที่ 39) ก่อน return เงียบ เพิ่ม <code>saveHistory(userId, [...history, {'{'}role:'user',text{'}'}], ttl)</code> ทั้ง 2 branch (TEXT/IMAGE — IMAGE เพิ่ม <code>getHistory()</code> ก่อนด้วยเพราะไม่เคยเรียกใน branch นี้) เก็บข้อความลูกค้าไว้เฉยๆ รอทักมาใหม่ตอนบอทเปิด (ไม่ auto-reply) — TTL คำนวณไดนามิกจาก <code>computeOffHoursHistoryTtl()</code> (local helper อ่าน <code>getRules()</code> มาคำนวณเวลาที่เหลือจนกว่าตารางจะเปิด +buffer 30 นาที ไม่แก้ logic <code>isScheduledOff()</code> เลย) แทน TTL ปกติ 10 นาที กัน history หมดอายุก่อนบอทจะกลับมาตอบ — <code>saveHistory()</code> เพิ่ม parameter <code>ttlSeconds</code> แบบ optional ใน <code>lib/history.ts</code> (ไม่ระบุ = พฤติกรรมเดิมทุกประการ) · ทดสอบแล้ว Gemini ยอมรับ history ที่มี <code>role:'user'</code> ติดกันหลายรอบไม่มี <code>'model'</code> คั่นได้ปกติ ไม่ error</div>
       </div>
     </div>
     <div class="step">
@@ -463,6 +464,7 @@
     <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">logChat(user) + getHistory + Rate Limit</div><div class="step-desc">INCR <code>msg_rate:fb:{psid}</code> EX 10s (pipeline) · เกิน 5: ครั้งแรก reply ครั้งต่อไปเงียบ</div></div></div>
     <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Schedule Check</div><div class="step-desc"><code>isScheduledOff('fb')</code> → เงียบ</div>
       <div class="ok">(แก้บั๊กแล้ว 2026-07-31) เดิมเช็คแค่ branch ข้อความตัวอักษรเท่านั้น — branch รูปภาพ (<code>attachments...type === 'image'</code>) ไม่เคยเช็คเลย ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ ตอนนี้เพิ่มเช็ค <code>isScheduledOff('fb')</code> ที่ต้น IMAGE branch ด้วยแล้ว</div>
+      <div class="warn">(เพิ่ม 2026-08-08, เรื่องที่ 39) เหมือน LINE ทุกประการ — <code>saveHistory()</code> ก่อน return เงียบ ด้วย TTL ไดนามิกจาก <code>computeOffHoursHistoryTtl()</code> (ดูรายละเอียดที่หัวข้อ LINE ขั้น 3)</div>
     </div></div>
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">LRANGE <code>fb_img_list:fb:{psid}</code> เอารายการแรก+DEL ทั้ง list · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return <span class="warn" style="display:inline">(เปลี่ยนจาก key เดี่ยว <code>fb_img_url:</code> เป็น list — เรื่องที่ 32, ฟังก์ชันนี้ยังรูปเดียวเดิม)</span></div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(getWelcomeMessage())</div>
@@ -875,7 +877,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">history.ts</span></td>
-      <td>LINE + FB conversation history · max 6 turns · key <code>history:{userId}</code> TTL 600s</td>
+      <td>LINE + FB conversation history · max 6 turns · key <code>history:{userId}</code> TTL 600s ปกติ · (เพิ่ม 2026-08-08, เรื่องที่ 39) <code>saveHistory()</code> รับ <code>ttlSeconds</code> optional (ไม่ระบุ = 600s เดิม) ใช้ตอนปิดบอทตามตารางเวลาให้ TTL ยืดตามเวลาที่เหลือจริง</td>
       <td><code>getHistory()</code> <code>saveHistory()</code></td>
     </tr>
     <tr>
