@@ -621,6 +621,13 @@ HANDOFF: ซ่อม/เคลม | รุ่น: ไม่ระบุ (รอ
 <div class="tip">ทดสอบก่อน commit: บอทเปิด → logChat เรียกครบ 2 ครั้ง (user 1 + bot 1 จาก shared helper ไม่ซ้ำ) ✅ · บอทปิด → บันทึก placeholder ไว้ 1 ครั้งแม้บอทไม่ตอบ ✅ · Facebook เหมือน LINE ✅ · เรียก logChat() จริงด้วย argument shape ที่โค้ดใหม่ใช้ → ไม่ throw ✅ · regression: TEXT branch logChat(userMessage) ยังมีแค่ 1 จุดเดิมทั้ง 2 ไฟล์ ไม่ถูกแตะเลย ✅</div>
 <div class="tip">ไม่แตะ <code>saveHistory()</code>/<code>getHistory()</code> (เรื่องที่ 39), ระบบจำแนกรูปภาพ Type A-G, <code>isScheduledOff()</code>/<code>lib/schedule.ts</code>, <code>MAX_TURNS</code>/<code>lib/history.ts</code>, handoff logic (เรื่องที่ 36-37), Web Chat เลยแม้แต่จุดเดียว</div>
 
+<h2>9.18 Keep-warm endpoint กัน Cold Start (เพิ่ม 2026-08-08 — เรื่องที่ 41)</h2>
+<p>ผู้ใช้รายงาน <code>GEMINI_UNAVAILABLE</code> (timeout) หลายเคสจริง สงสัย cold start (เจอชัดตอนข้อความแรกของวันหลังไม่มี traffic นาน) — สำรวจ Vercel Runtime Logs ย้อนหลัง 7 วันไม่ได้เพราะไม่มี <code>vercel</code> CLI/token/`.vercel/` link ในสภาพแวดล้อมนี้เลย และ <code>log.*</code> เขียนแค่ <code>console.log()</code> ไม่มี log store อื่นให้ query จึงแก้เชิงป้องกันแทนโดยไม่ต้องรอข้อมูลย้อนหลัง</p>
+<div class="warn">ตรวจสอบก่อนแก้: โปรเจกต์อยู่บน <strong>Vercel Hobby tier</strong> (ระบุใน CLAUDE.md) — Vercel Cron บน Hobby จำกัดแค่ 1 ครั้ง/วัน ไม่พอสำหรับ ping ทุก 5 นาที — แจ้งผู้ใช้ก่อนแล้วเลือกใช้ <strong>external cron service</strong> แทน Vercel Cron ทั้งหมด จึงไม่แก้ <code>vercel.json</code> เลย</div>
+<div class="ok">สร้างไฟล์ใหม่ <code>app/api/cron/keep-warm/route.ts</code> — endpoint เบาที่สุด ไม่เรียก Gemini/Redis/Sheet เลย เช็ค header <code>Authorization: Bearer &lt;CRON_SECRET&gt;</code> ตรงหรือไม่ → ตรง = <code>200 OK</code> ทันที / ไม่ตรงหรือไม่ได้ตั้ง <code>CRON_SECRET</code> = <code>401</code></div>
+<div class="tip">ทดสอบก่อน commit (เรียก route handler จริงด้วย NextRequest จำลอง): ไม่ตั้ง CRON_SECRET → 401 ✅ · ไม่มี header → 401 ✅ · secret ผิด → 401 ✅ · secret ถูก → 200 OK body "OK" ตอบเร็ว 0ms (ไม่มี network call ใดๆ) ✅</div>
+<div class="tip">เป็นไฟล์ใหม่ล้วนๆ ไม่แก้ไฟล์เดิมเลยสักไฟล์ (รวม vercel.json) ไม่เพิ่ม dependency ใหม่ — สิ่งที่ผู้ใช้ต้องทำต่อเอง (นอกเหนือจากโค้ด): ตั้ง <code>CRON_SECRET</code> ใน Vercel env vars + ตั้ง external cron service ให้ยิง GET ทุก 5 นาทีพร้อม header เดียวกัน</div>
+
 <!-- ===== 10. Summary ===== -->
 <h2>10. สรุปข้อมูลสำคัญ</h2>
 

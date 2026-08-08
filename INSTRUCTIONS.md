@@ -1045,6 +1045,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 41 — Keep-warm endpoint กัน Cold Start (GEMINI_UNAVAILABLE)
+
+**ปัญหาที่พบ:** ผู้ใช้รายงาน `GEMINI_UNAVAILABLE` (timeout) หลายเคสจริง (07:50-07:51 วันหนึ่ง — ข้อความแรกของวัน หลังไม่มี traffic นาน) สงสัย cold start — สำรวจ Vercel Runtime Logs ย้อนหลัง 7 วันไม่ได้ (ไม่มี `vercel` CLI/token/`.vercel/` link ในสภาพแวดล้อมนี้ และ `log.*` เขียนแค่ `console.log()` ไม่มี log store อื่นให้ query) จึงแก้เชิงป้องกันแทนโดยไม่ต้องรอข้อมูลย้อนหลัง
+
+**การตรวจสอบก่อนแก้ (ตามที่สั่ง):** โปรเจกต์นี้อยู่บน **Vercel Hobby tier** (ระบุไว้ใน `CLAUDE.md`) — Vercel Cron บน Hobby จำกัดความถี่สูงสุดแค่ 1 ครั้ง/วัน ไม่พอสำหรับ ping ทุก 5 นาทีตามที่ต้องการ — แจ้งผู้ใช้ก่อนแล้วเลือกใช้ **external cron service** (เช่น cron-job.org/GitHub Actions scheduled workflow ยิงจากภายนอก repo) แทน Vercel Cron ทั้งหมด — จึง**ไม่แก้ `vercel.json` เลย** (ไม่มี config ฝั่ง Vercel ให้เพิ่มเมื่อไม่ได้ใช้ Vercel Cron)
+
+**วิธีแก้:** สร้างไฟล์ใหม่ [app/api/cron/keep-warm/route.ts](app/api/cron/keep-warm/route.ts) — endpoint เบาที่สุดเท่าที่ทำได้ ไม่เรียก Gemini/Redis/Sheet ใดๆ เลย แค่ตรวจ header `Authorization: Bearer ${'{'}CRON_SECRET{'}'}` (env var ใหม่ ต้องตั้งค่าใน Vercel Environment Variables + ตั้งใน external cron service ให้ส่ง header เดียวกันมา) ตรงหรือไม่ → ตรง = ตอบ `200 OK` ทันที / ไม่ตรงหรือไม่ได้ตั้ง `CRON_SECRET` เลย = ตอบ `401 Unauthorized` กันถูกเรียกจากภายนอกที่ไม่รู้ secret
+
+**ทำไมไม่กระทบอย่างอื่น:** เป็นไฟล์ใหม่ล้วนๆ ไม่แก้ไฟล์เดิมเลยสักไฟล์ (ไม่แก้ `vercel.json` ด้วยตามเหตุผลข้างต้น) — ไม่แตะ `line-webhook.ts`/`fb-webhook.ts`/`web-chat/route.ts`, `lib/gemini.ts` (timeout ทุกค่าคงเดิม: 20s ข้อความล้วน, 7s FB postback, 15s สอบถามสเปก, dynamic รูป+ข้อความ), `lib/prompts.ts`, `lib/history.ts`, `lib/schedule.ts`, `lib/handoff.ts`, `lib/sendLock.ts`, `lib/sheet.ts`, `lib/chatlog.ts`, `lib/greeting.ts`, `lib/holidays.ts` เลยแม้แต่บรรทัดเดียว — ไม่เพิ่ม dependency ใหม่ (ใช้แค่ `next/server` ที่มีอยู่แล้ว)
+
+**ทดสอบก่อน commit:** เรียก endpoint จริงผ่าน route handler ด้วย `NextRequest` จำลอง 4 เคส — ไม่ตั้ง `CRON_SECRET` เลย → 401 ✅ · ไม่มี header `Authorization` → 401 ✅ · secret ผิด → 401 ✅ · secret ถูกต้อง → 200 OK, body `"OK"`, ตอบเร็วมาก (0ms, ไม่มี network call ใดๆ ในโค้ดเลย) ✅
+
+**สิ่งที่ผู้ใช้ต้องทำต่อ (นอกเหนือจากโค้ด — ไม่ใช่ส่วนที่ Claude ทำได้เอง):** ตั้งค่า `CRON_SECRET` เป็น env var ใน Vercel Project Settings (สุ่มค่าเอง) แล้วตั้ง external cron service ให้ยิง GET ไปที่ `https://<domain>/api/cron/keep-warm` ทุก 5 นาที พร้อมแนบ header `Authorization: Bearer <CRON_SECRET เดียวกัน>`
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
