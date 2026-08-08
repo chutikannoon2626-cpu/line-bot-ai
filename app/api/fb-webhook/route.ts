@@ -687,6 +687,12 @@ export async function POST(req: NextRequest) {
 
           // --- IMAGE (รวมกรณีรูป + caption ในข้อความเดียว) ---
           if (event.message?.attachments?.some(a => a.type === 'image')) {
+            // บันทึกฝั่งลูกค้าไว้ก่อน isScheduledOff() check เสมอ (ไม่ว่าบอทเปิดหรือปิด) ให้แอดมิน
+            // เห็นในหน้าประวัติแชทว่าลูกค้าส่งรูปมา — คำตอบบอทไม่ต้อง log ซ้ำตรงนี้ เพราะ fbSend()/
+            // fbSendReply() ที่ทุกจุดตอบใน branch นี้ใช้อยู่แล้ว log ฝั่งบอทให้อัตโนมัติหลังส่งสำเร็จ
+            // (เรื่องที่ 40, 2026-08-08)
+            logChat({ userId, channel: 'Facebook', role: 'user', message: '[ลูกค้าส่งรูปภาพ]', ts: Date.now() })
+
             // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
             // (เดิม branch นี้ลืมเช็ค ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้)
             // เก็บไว้ใน history เฉยๆ (ไม่วิเคราะห์รูป/ไม่ auto-reply) รอลูกค้าทักมาใหม่ตอนบอทเปิด — TTL

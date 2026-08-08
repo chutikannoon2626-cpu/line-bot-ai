@@ -1021,6 +1021,30 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 40 — เพิ่ม logChat() ให้ครอบคลุมรูปภาพ (LINE + Facebook เท่านั้น)
+
+**ปัญหาที่พบ:** branch รูปภาพไม่เคยเรียก `logChat()` เลย ไม่ว่าบอทเปิดหรือปิด — แอดมินเปิดหน้าประวัติแชทย้อนหลังไม่เห็นว่าลูกค้าเคยส่งรูปมาบ้าง
+
+**การตรวจสอบก่อนแก้ (ตามที่สั่ง):**
+1. `logChat()` ใน TEXT branch เรียก 2 ครั้งต่อ 1 รอบสนทนาจริง (ฝั่งลูกค้า + ฝั่งบอท) แต่**ไม่ได้เขียน manual ทั้งคู่** — ฝั่งลูกค้าเรียกทันทีตอนรับข้อความ ([line-webhook.ts:224](app/api/line-webhook/route.ts#L224) / [fb-webhook.ts:322](app/api/fb-webhook/route.ts#L322)) ส่วนฝั่งบอท**ฝังอยู่ในฟังก์ชันส่งข้อความกลาง** — ไม่ใช่ manual call ที่แต่ละจุดตอบ
+2. ฝั่งบอทเรียกที่ `safeReply()`/`safePush()` (LINE, บรรทัด 176/185/273) และ `fbSend()`/`fbSendProductCard()` (Facebook, บรรทัด 139/188) — เรียก**หลังส่งข้อความสำเร็จจริง**เท่านั้น (หลัง `replyMessage()`/`pushMessage()`/Graph API สำเร็จ)
+3. รูปแบบข้อมูล: `{ userId, channel: 'LINE'|'Facebook', role: 'user'|'bot', message: string, ts: number }` (`ChatLogEntry` ใน `lib/chatlog.ts`)
+
+**สิ่งที่พบเพิ่มก่อนแก้ (กระทบแผนเดิม):** ทุกจุดที่ตอบเรื่องรูปภาพ (unclear/handoff/ackHandoff/confirm/สอบถามสเปก/รับทราบ) ส่งผ่าน `pushOnly()`→`safePush()`, `ans()`→`safeReply()`/`safePush()` (LINE) และ `fbSend()`/`fbSendReply()` (Facebook) อยู่แล้วทุกจุด — **ซึ่งมี `logChat({role:'bot',...})` ฝังอยู่แล้วอัตโนมัติ** — แจ้งผู้ใช้ก่อนแล้วตัดสินใจ**ไม่เพิ่ม logChat() ซ้ำสำหรับคำตอบบอท** (จะทำให้ log ซ้ำ 2 รอบต่อข้อความ) — เพิ่มแค่ **1 จุดต่อไฟล์** สำหรับฝั่งลูกค้าเท่านั้น
+
+**วิธีแก้:** เพิ่ม `logChat({userId, channel, role:'user', message:'[ลูกค้าส่งรูปภาพ]', ts:Date.now()})` ที่ต้นสุดของ branch รูปภาพ **ก่อน** `isScheduledOff()` check ([line-webhook.ts:754](app/api/line-webhook/route.ts#L754) / [fb-webhook.ts:689](app/api/fb-webhook/route.ts#L689)) — ใช้ placeholder เดียวกับที่ `saveHistory()` ใช้อยู่แล้วจากเรื่องที่ 39 — ทำให้บันทึกไม่ว่าบอทเปิดหรือปิดด้วยจุดเดียว
+
+**ทำไมไม่กระทบอย่างอื่น:** ไม่แตะ `saveHistory()`/`getHistory()` (เรื่องที่ 39), ระบบจำแนกรูปภาพ Type A-G, `isScheduledOff()`/`lib/schedule.ts`, `MAX_TURNS`/`lib/history.ts`, handoff logic (เรื่องที่ 36-37), Web Chat เลยแม้แต่จุดเดียว — TEXT branch ไม่ถูกแตะเลย (ยืนยันด้วยการอ่านโค้ดจริง ยังมี `logChat(userMessage)` แค่ 1 จุดเดิมทั้ง 2 ไฟล์)
+
+**ทดสอบก่อน commit:**
+- ลูกค้าส่งรูปช่วงบอทเปิด → `logChat()` เรียกครบ 2 ครั้ง (user 1 + bot 1 จาก shared helper, ไม่ซ้ำ) ✅
+- ลูกค้าส่งรูปช่วงบอทปิด → บันทึก placeholder ไว้ 1 ครั้งแม้บอทไม่ตอบ ✅
+- Facebook เหมือน LINE ทุกประการ ✅
+- เรียก `logChat()` จริงด้วย argument shape ที่โค้ดใหม่ใช้ → ไม่ throw (fire-and-forget ตามดีไซน์เดิม) ✅
+- regression: TEXT branch `logChat(userMessage)` ยังมีแค่ 1 จุดเดิมทั้ง 2 ไฟล์ ไม่ถูกแตะเลย ✅
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
