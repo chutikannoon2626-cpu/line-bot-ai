@@ -256,8 +256,8 @@
     <div class="step">
       <div class="step-num">2</div>
       <div class="step-content">
-        <div class="step-title">Admin Release: <code>คืนบอท:{targetId}</code></div>
-        <div class="step-desc">DEL <code>takeover:{targetId}</code> → safeReply "✅ คืนน้องใจดีดูแลลูกค้าแล้วค่ะ ({id.slice(-6)})" → return</div>
+        <div class="step-title"><s>Admin Release: <code>คืนบอท:{targetId}</code></s> — ลบออกแล้ว</div>
+        <div class="step-desc warn">(ลบแล้ว 2026-08-08, เรื่องที่ 42) เดิม DEL <code>takeover:{targetId}</code> → safeReply "✅ คืนน้องใจดีดูแลลูกค้าแล้วค่ะ" → return — ไม่มีการตรวจสอบสิทธิ์ผู้ส่งเลย ใครคุยกับบอทตรงๆ ก็ปลด takeover ของคนอื่นได้ ลบคำสั่งนี้ทิ้งทั้งหมด ข้อความ "คืนบอท:xxx" ไหลเข้า flow ปกติเหมือนข้อความอื่นแล้ว ใช้ <code>TAKEOVER_TTL</code> auto-expire (ลดเหลือ 1 ชม.) เป็นทางออกทางเดียวแทน</div>
       </div>
     </div>
     <div class="step">
@@ -317,8 +317,9 @@
       <div class="step-content">
         <div class="step-title">Pre-Handoff State</div>
         <div class="step-desc">GETDEL <code>pre_handoff:{userId}</code> · ถ้ามี pending trigger:
-          <div class="indent">SET <code>routed:{userId}</code> EX 300 + SET <code>takeover:{userId}</code> EX 7200 + DEL <code>handoff_notified:{userId}</code> (pipeline) → notifyAdmin() → ans(handoffMsg) → saveHistory → return</div>
+          <div class="indent">SET <code>routed:{userId}</code> EX 300 + SET <code>takeover:{userId}</code> EX 3600 + DEL <code>handoff_notified:{userId}</code> (pipeline) <s>→ notifyAdmin()</s> (ปิดแล้ว เรื่องที่ 42) → ans(handoffMsg) → saveHistory → return</div>
         </div>
+        <div class="warn">(เพิ่ม 2026-08-08, เรื่องที่ 42) <code>TAKEOVER_TTL</code> ลดจาก 7200s (2 ชม.) เหลือ 3600s (1 ชม.) — auto-expire เป็นทางออกทางเดียวจาก takeover state แล้ว (ลบคำสั่ง <code>คืนบอท:</code> ทิ้ง) · <code>notifyAdmin()</code> ปิดแล้วสำหรับจุดนี้เช่นกัน (กลไกแยกจาก HANDOFF sentinel เรื่องที่ 37 แต่ปิดให้สม่ำเสมอกัน) redis state อื่นคงเดิม</div>
       </div>
     </div>
     <div class="step">
@@ -477,7 +478,8 @@
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">LRANGE <code>fb_img_list:fb:{psid}</code> เอารายการแรก+DEL ทั้ง list · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return <span class="warn" style="display:inline">(เปลี่ยนจาก key เดี่ยว <code>fb_img_url:</code> เป็น list — เรื่องที่ 32, ฟังก์ชันนี้ยังรูปเดียวเดิม)</span></div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(getWelcomeMessage())</div>
     <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 23) เหมือน LINE — <code>getWelcomeMessage()</code> ใหม่ ดูรายละเอียดที่หัวข้อ LINE ขั้น 12</div></div></div>
-    <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified → notifyAdminFacebook(psid, ...) → fbSend(handoffMsg) → return</div></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified <s>→ notifyAdminFacebook(psid, ...)</s> (ปิดแล้ว เรื่องที่ 42) → fbSend(handoffMsg) → return</div>
+      <div class="warn" style="font-size:11px;margin-top:4px">(เพิ่ม 2026-08-08, เรื่องที่ 42) ปิด <code>notifyAdminFacebook()</code> สำหรับจุดนี้ให้สม่ำเสมอกับ LINE — redis state (<code>routed</code>/<code>handoff_notified</code>) คงเดิม ไม่มี takeover key ให้แก้อยู่แล้ว (LINE เท่านั้น)</div></div></div>
     <div class="step"><div class="step-num">5b</div><div class="step-content"><div class="step-title">"ขอเจ้าของ" นอกเวลาทำการ (<code>isOwnerRequest</code>)</div><div class="step-desc">Bangkok thaiHour ≥18 หรือ &lt;8 → fbSend(OWNER_REQUEST_OFF_HOURS_MSG "ขณะนี้อยู่นอกเวลาทำการค่ะ...") → saveHistory → return · ไม่ handoff เลย</div></div></div>
     <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">shouldHandoffImmediate || isOwnerRequest ในเวลาทำการ</div><div class="step-desc">"คุยกับคน/ขอแอดมิน/ติดต่อแอดมิน" · "ฟ้อง/ร้องเรียน/ไม่พอใจ" · หรือ "ขอเจ้าของ" เฉพาะเวลาทำการ 08:00–17:59 — ข้ามค้นชีต/เว็บได้เลย<br>already routed → INCR <code>handoff_notified:fb:{psid}</code> EX 10min · count=1: reply / count≥2: เงียบ<br>ไม่ routed → SET <code>pre_handoff:fb:{psid}</code> EX 600 → fbSend("กรุณาแจ้งรายละเอียด...") → return</div></div></div>
     <div class="step"><div class="step-num">5d</div><div class="step-content"><div class="step-title">Spendernetwork Request (<code>isSpendernetworkRequest</code>) — เฉพาะ Facebook</div><div class="step-desc">คำว่า "เข้ากลุ่ม/ลบกลุ่ม/เพิ่มกลุ่ม/กลุ่มสาธารณะ/กลุ่มปิด/spendernetwork" — ข้ามค้นชีต/เว็บ/Gemini ไปเลย<br>INCR <code>spendernetwork_notified:fb:{psid}</code> EX 10min · count=1: fbSend(<code>getSpendernetworkRedirectMessage()</code>) → saveHistory · count≥2: เงียบ → return<br><strong>ไม่ใช่ handoff จริง</strong> — ไม่ set routed/takeover, ไม่ notifyAdminFacebook (ยังไม่มีข้อมูลอะไรให้แอดมินดำเนินการ แค่ชี้ทางไปแอดไลน์)</div>
@@ -720,7 +722,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>holiday_notified:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">23h</span></td><td>(ใหม่ 2026-07-31) แสดงประกาศวันหยุดแล้ววันนี้</td></tr>
     <tr><td><code>msg_rate:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10s</span></td><td>Rate limit 5/10s</td></tr>
     <tr><td><code>img_list:{userId}</code></td><td><span class="tag tag-string">list</span></td><td><span class="ttl">300s (reset ทุก push)</span></td><td>(เรื่องที่ 32) <code>{id,ts}</code> ต่อรายการ สูงสุด 5 รายการล่าสุด — แทน <code>img:</code>+<code>img_data:</code> เดิม (key เดี่ยวทับกัน)</td></tr>
-    <tr><td><code>takeover:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">7200s</span></td><td>Admin takeover LINE เท่านั้น · บอทเงียบ</td></tr>
+    <tr><td><code>takeover:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">3600s (ลดจาก 7200s, เรื่องที่ 42)</span></td><td>Admin takeover LINE เท่านั้น · บอทเงียบ · auto-expire เป็นทางออกทางเดียว (ไม่มีคำสั่ง <code>คืนบอท:</code> ให้ปลด manual แล้ว)</td></tr>
     <tr><td><code>pre_handoff:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">600s</span></td><td>Trigger message ค้างไว้ (GETDEL)</td></tr>
     <tr><td><code>routed:{userId}</code></td><td><span class="tag tag-bool">bool</span></td><td><span class="ttl">300s</span></td><td>ส่งต่อแอดมินแล้ว</td></tr>
     <tr><td><code>handoff_notified:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">10m</span></td><td>นับแจ้งแอดมิน: count=1 reply count≥2 เงียบ</td></tr>

@@ -1061,6 +1061,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 42 — แก้ปัญหา "แอดมินลืมคืนบอท" (Admin Takeover, LINE เท่านั้น)
+
+**การสำรวจก่อนแก้ (ทำแยกต่างหากก่อนหน้านี้แล้ว):** พบว่าคำสั่ง `คืนบอท:{userId}` ([line-webhook.ts](app/api/line-webhook/route.ts)) **ไม่มีการตรวจสอบสิทธิ์ผู้ส่งเลย** — ใครก็ได้ที่คุยกับบอทตรงๆ (ไม่ต้องอยู่ในกลุ่มแอดมิน) พิมพ์ `คืนบอท:{userId ของคนอื่น}` ก็ปลด takeover ของคนอื่นได้ทันที — เป็นช่องโหว่จริงที่ควรปิด
+
+**การเปลี่ยนแปลง:**
+1. **ลบคำสั่ง `คืนบอท:{userId}` ทิ้งทั้งหมด** — ข้อความที่ขึ้นต้นด้วยคำนี้ไหลเข้า flow ข้อความปกติเหมือนข้อความอื่นๆ ไม่มีความหมายพิเศษอีกต่อไป ปิดช่องโหว่โดยตรงเพราะไม่มีคำสั่งให้ใช้ประโยชน์ได้อีกแล้ว
+2. **`TAKEOVER_TTL` ลดจาก 2 ชั่วโมง (7200 วิ) เหลือ 1 ชั่วโมง (3600 วิ)** ([line-webhook.ts:22-24](app/api/line-webhook/route.ts#L22-L24)) — auto-expire เป็น**ทางออกทางเดียว**จาก takeover state แล้ว (ไม่มีทาง manual อีกต่อไป) จึงลด TTL ให้กลับมาตอบเร็วขึ้นกันแอดมินลืม
+3. **ลบข้อความสอนแอดมินพิมพ์ `คืนบอท:{userId}`** ออกจาก `notifyAdmin()` ([lib/handoff.ts:133](lib/handoff.ts#L133)) — เหลือแค่ข้อความแจ้งบริบทเคส + ลิงก์ไป manager.line.biz
+4. **ปิด `notifyAdmin()`/`notifyAdminFacebook()` สำหรับ pre-handoff trigger path ด้วย** ([line-webhook.ts:482-497](app/api/line-webhook/route.ts#L482-L497), [fb-webhook.ts:397-419](app/api/fb-webhook/route.ts#L397-L419)) — จุดนี้เป็นกลไกแยกจาก HANDOFF sentinel ที่ปิดไปแล้วในเรื่องที่ 37 (`shouldHandoffDeferred`/`shouldHandoffImmediate` — "ขายส่ง"/"ใบเสนอราคา"/"ตัวแทนจำหน่าย"/"คุยกับคน"/"ร้องเรียน") ตรวจสอบก่อนแล้วพบว่ายังเรียกอยู่ทั้ง 2 ช่องทาง ปิดให้สม่ำเสมอกันทั้งหมด (แอดมินเช็คแชทเองทุกเรื่องเหมือนกัน) — redis state (`routed`/`takeover`/`handoff_notified` LINE, `routed`/`handoff_notified` FB) ยังคงเดิมทุกประการ
+
+**ทำไมไม่กระทบอย่างอื่น:** ไม่แตะระบบจำแนกรูปภาพ Type A-G, `saveHistory()`/`getHistory()`, `logChat()`, `isScheduledOff()` เลย — ไม่แตะ `routed:{userId}` (คนละ key คนละหน้าที่) — ไม่แตะ Facebook takeover (ไม่มีกลไกนี้อยู่แล้วตามที่สำรวจไว้) — ไม่แก้จุด (ก) ที่รูปภาพไม่ suppress ระหว่าง takeover (แยกเป็นงานอื่น) — ไม่แตะขั้นตอนยืนยันที่ลูกค้าเห็นก่อนสรุปเป็น HANDOFF (ข้อความยืนยัน IMEI/กลุ่ม ยังทำงานปกติทุกประการ) — `replyMsg`/`handoffMsg` ที่ลูกค้าเห็นไม่เปลี่ยนแปลงเลย
+
+**ทดสอบก่อน commit:** จำลอง Redis พร้อม TTL semantics จริง (in-memory mock เดินเวลาได้) — takeover set แล้วผ่านไป 59 นาทียังไม่หมดอายุ ✅ ผ่านไป 61 นาที auto-expire แล้ว ✅ · ยืนยันจาก source จริงว่าไม่มี `startsWith('คืนบอท:')` เหลืออยู่เลยในโค้ด ✅ และไม่มีข้อความสอน `คืนบอท:` ใน `lib/handoff.ts` เหลืออยู่เลย (ตรวจ template literal จริง ไม่ใช่แค่คอมเมนต์) ✅ · pre-handoff trigger (จำลอง "ขายส่ง"): redis state (`routed`/`takeover`) set ถูกต้อง `notifyAdmin` เรียก 0 ครั้ง ✅ · regression: takeover ยัง set ถูกต้องทั้ง 2 จุด (pre-handoff + HANDOFF sentinel) ✅ · regression: `handoffMsg` ที่ลูกค้าเห็นไม่เปลี่ยนแปลง ✅
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

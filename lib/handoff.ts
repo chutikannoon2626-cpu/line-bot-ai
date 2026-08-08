@@ -130,7 +130,9 @@ export async function notifyAdmin(userId: string, userMessage: string): Promise<
     messages: [
       {
         type: 'text',
-        text: `🔔 ลูกค้าต้องการคุยกับแอดมิน\n\nUserID: ${userId}\nข้อความ: ${userMessage}\n\nไปคุยที่: https://manager.line.biz/chats\n\n✅ เมื่อดูแลเสร็จ ส่ง:\nคืนบอท:${userId}`,
+        // (เรื่องที่ 42, 2026-08-08) เอาคำสั่ง "คืนบอท:" ออกจากข้อความแล้ว — คำสั่งนี้ถูกลบทิ้งจาก
+        // webhook แล้ว (ไม่มีการตรวจสอบสิทธิ์ผู้ส่งเลย) ใช้ TAKEOVER_TTL auto-expire (1 ชม.) แทน
+        text: `🔔 ลูกค้าต้องการคุยกับแอดมิน\n\nUserID: ${userId}\nข้อความ: ${userMessage}\n\nไปคุยที่: https://manager.line.biz/chats`,
       },
     ],
   })

@@ -19,7 +19,9 @@ const UNAVAILABLE_MSG = 'ขออภัยค่ะ ระบบกำลัง
 // รูปภาพประเภท E (มีข้อความ/แบบฟอร์ม/บทสนทนาของบุคคลที่สาม) — handoff ทันทีไม่ผ่านขั้นยืนยัน
 // ไม่ไหลเข้า protocol ไหนเลย (2026-08-06, ส่วนที่ 2 ของงานจำแนกรูปภาพ)
 const IMAGE_HANDOFF_MSG = 'รบกวนรอแอดมินตรวจสอบและติดต่อกลับนะคะ 🙏'
-const TAKEOVER_TTL = 2 * 3600
+// ลดจาก 2 ชม. เป็น 1 ชม. (2026-08-08, เรื่องที่ 42) — auto-resume เร็วขึ้น กันแอดมินลืมคืนบอท
+// นานเกินไป ตอนนี้เป็นทางออกทางเดียวจาก takeover state แล้ว (ลบคำสั่ง "คืนบอท:" ทิ้งแล้ว)
+const TAKEOVER_TTL = 1 * 3600
 const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
 const RETRY_TTL = 600
@@ -225,16 +227,9 @@ export async function POST(req: NextRequest) {
           const history = await getHistory(userId)
           const handoffMsg = getHandoffMessage()
 
-          // Admin release takeover
-          if (userMessage.startsWith('คืนบอท:')) {
-            const targetId = userMessage.slice('คืนบอท:'.length).trim()
-            if (targetId) {
-              try { await redis.del(`takeover:${targetId}`) } catch { /* Redis ล่ม */ }
-              await safeReply([{ type: 'text', text: `✅ คืนน้องใจดีดูแลลูกค้าแล้วค่ะ (${targetId.slice(-6)})` }])
-              log.info('takeover.released', { by: userId, target: targetId })
-              return
-            }
-          }
+          // (เรื่องที่ 42, 2026-08-08) เดิมมีคำสั่ง "คืนบอท:{userId}" ให้แอดมินพิมพ์ปลด takeover เอง
+          // แต่ไม่มีการตรวจสอบสิทธิ์ผู้ส่งเลย — ใครก็พิมพ์คุยกับบอทตรงๆ แล้วปลด takeover ของคนอื่นได้
+          // ลบคำสั่งนี้ทิ้งทั้งหมด ใช้ TAKEOVER_TTL auto-expire เป็นทางออกทางเดียวแทน
 
           // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
           // เก็บข้อความลูกค้าไว้ใน history เฉยๆ (ไม่ auto-reply) รอลูกค้าทักมาใหม่ตอนบอทเปิด — TTL
@@ -485,15 +480,17 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ข้าม */ }
 
           if (pendingTrigger !== null) {
+            // (เรื่องที่ 42) ไม่ notifyAdmin() อีกต่อไปสำหรับ pre-handoff trigger — แอดมินเช็คแชท
+            // เองเป็นปกติอยู่แล้ว เหมือนที่ตัดสินใจไว้กับ HANDOFF sentinel (เรื่องที่ 37) และ Type D
+            // fallback ฝั่งรูปภาพ (เรื่องที่ 35) — ให้สม่ำเสมอกันทั้งหมด redis state ยังคงเดิมทุกประการ
             try {
               await Promise.all([
                 redis.set(`routed:${userId}`, '1', { ex: 300 }),
                 redis.set(`takeover:${userId}`, '1', { ex: TAKEOVER_TTL }),
                 redis.del(`handoff_notified:${userId}`),
               ])
-              await notifyAdmin(userId, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
-            } catch (notifyErr) {
-              log.error('handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+            } catch (stateErr) {
+              log.error('handoff.state_failed', { err: (stateErr as Error).message, userId })
             }
             await ans(txt(handoffMsg))
             await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])

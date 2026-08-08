@@ -403,14 +403,16 @@ export async function POST(req: NextRequest) {
             }
 
             if (pendingTrigger !== null) {
+              // (เรื่องที่ 42) ไม่ notifyAdminFacebook() อีกต่อไปสำหรับ pre-handoff trigger — แอดมิน
+              // เช็คแชทเองเป็นปกติอยู่แล้ว เหมือนที่ตัดสินใจไว้กับ HANDOFF sentinel (เรื่องที่ 37) และ
+              // Type D fallback ฝั่งรูปภาพ (เรื่องที่ 35) — ให้สม่ำเสมอกันทั้งหมด redis state คงเดิม
               try {
                 await Promise.all([
                   redis.set(`routed:${userId}`, '1', { ex: 300 }),
                   redis.del(`handoff_notified:${userId}`),
                 ])
-                await notifyAdminFacebook(psid, `[เรื่องที่ต้องการ]: ${pendingTrigger}\n[รายละเอียด]: ${userMessage}`)
-              } catch (notifyErr) {
-                log.error('fb.handoff.notify_failed', { err: (notifyErr as Error).message, userId })
+              } catch (stateErr) {
+                log.error('fb.handoff.state_failed', { err: (stateErr as Error).message, userId })
               }
               await fbSend(psid, handoffMsg)
               await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
