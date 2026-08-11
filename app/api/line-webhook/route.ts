@@ -7,7 +7,7 @@ import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
 import { imageIntentCard } from '@/lib/flex-cards'
 import { getHistory, saveHistory } from '@/lib/history'
-import { isScheduledOff, getRules } from '@/lib/schedule'
+import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
@@ -43,44 +43,6 @@ function getHandoffMessage(): string {
   return thaiHour >= 18 || thaiHour < 8
     ? 'น้องใจดีรับทราบค่ะ และจะแจ้งแอดมินให้ติดต่อกลับในเวลาทำการนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
     : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
-}
-
-// คำนวณ TTL ของ saveHistory() แบบไดนามิกช่วงปิดบอทตามตารางเวลา (isScheduledOff = true) — ใช้เวลาที่
-// เหลือจริงจนกว่าตารางจะเปิดบอทอีกครั้ง (+buffer 30 นาที) แทน TTL ปกติ 10 นาที กัน history หมดอายุก่อน
-// บอทจะกลับมาตอบ · อ่าน rules ที่มีอยู่แล้วมาคำนวณเท่านั้น ไม่แก้ logic การเช็คตารางใน isScheduledOff()
-// เลย (มิเรอร์วิธีจับคู่ day/time แบบเดียวกันทุกประการ) · วันที่เปิด 24 ชม. isScheduledOff() จะคืน false
-// อยู่แล้วตั้งแต่ต้น ฟังก์ชันนี้เลยไม่ถูกเรียกในวันนั้น ใช้ TTL ปกติ 10 นาทีโดยอัตโนมัติ (เรื่องที่ 39, 2026-08-08)
-async function computeOffHoursHistoryTtl(channel: 'line' | 'fb'): Promise<number> {
-  const FALLBACK_TTL = 12 * 3600 // คำนวณเวลาเปิดใหม่ไม่ได้ (rules ว่าง/parse พัง) → fallback 12 ชม.
-  const BUFFER_SEC = 30 * 60
-  try {
-    const rules = await getRules(channel)
-    const bangkokNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
-    const dow = bangkokNow.getDay()
-    const cur = bangkokNow.getHours() * 60 + bangkokNow.getMinutes()
-
-    let maxRemainingMin = -1
-    for (const r of rules) {
-      if (!r.enabled || !r.days.includes(dow)) continue
-      const [sh, sm] = r.startTime.split(':').map(Number)
-      const [eh, em] = r.endTime.split(':').map(Number)
-      const start = sh * 60 + sm
-      const end = eh * 60 + em
-      const isOvernight = start >= end
-      const matches = isOvernight ? (cur >= start || cur < end) : (cur >= start && cur < end)
-      if (!matches) continue
-
-      const remainingMin = isOvernight
-        ? (cur >= start ? (1440 - cur) + end : end - cur)
-        : end - cur
-      if (remainingMin > maxRemainingMin) maxRemainingMin = remainingMin
-    }
-
-    if (maxRemainingMin < 0) return FALLBACK_TTL
-    return maxRemainingMin * 60 + BUFFER_SEC
-  } catch {
-    return FALLBACK_TTL
-  }
 }
 
 export const runtime = 'nodejs'
@@ -232,12 +194,12 @@ export async function POST(req: NextRequest) {
           // ลบคำสั่งนี้ทิ้งทั้งหมด ใช้ TAKEOVER_TTL auto-expire เป็นทางออกทางเดียวแทน
 
           // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
-          // เก็บข้อความลูกค้าไว้ใน history เฉยๆ (ไม่ auto-reply) รอลูกค้าทักมาใหม่ตอนบอทเปิด — TTL
-          // ยืดตามเวลาที่เหลือจริงจนกว่าตารางจะเปิดบอทอีกครั้ง แทน TTL ปกติ 10 นาที (เรื่องที่ 39, 2026-08-08)
+          // (ยกเลิกเรื่องที่ 39, 2026-08-10 — เดิมเคยเก็บข้อความลูกค้าไว้ใน history ระหว่างปิดบอทเพื่อ
+          // ให้บอทดึงมาต่อเวลาเปิดใหม่ แต่เจอปัญหาจริง: แอดมินมักคุยจบเรื่องกับลูกค้าเองนอกระบบไปแล้ว
+          // ระหว่างปิดบอท พอบอทเปิดกลับไปหยิบ history เก่าที่ยังไม่หมดอายุมาต่อ ทำให้ดึงเรื่องที่จบไปแล้ว
+          // กลับมาคุยซ้ำ — กลับไปเงียบเฉยๆ ไม่บันทึกอะไรเหมือนก่อนเรื่องที่ 39 ทุกประการ)
           if (await isScheduledOff('line')) {
-            const ttl = await computeOffHoursHistoryTtl('line')
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }], ttl)
-            log.info('reply.scheduled_off', { userId, historyTtlSec: ttl })
+            log.info('reply.scheduled_off', { userId })
             return
           }
 
@@ -756,14 +718,12 @@ export async function POST(req: NextRequest) {
           logChat({ userId, channel: 'LINE', role: 'user', message: '[ลูกค้าส่งรูปภาพ]', ts: Date.now() })
 
           // ตรวจ schedule — ถ้าอยู่ในช่วงปิดบอท ไม่ตอบ (แอดมินดูแลเอง)
-          // (เดิม branch นี้ลืมเช็ค ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้)
-          // เก็บไว้ใน history เฉยๆ (ไม่วิเคราะห์รูป/ไม่ auto-reply) รอลูกค้าทักมาใหม่ตอนบอทเปิด — TTL
-          // ยืดตามเวลาที่เหลือจริงจนกว่าตารางจะเปิดบอทอีกครั้ง เหมือน TEXT branch (เรื่องที่ 39, 2026-08-08)
+          // (เดิม branch นี้ลืมเช็ค ทำให้บอทตอบรูปภาพได้แม้ตั้งเวลาปิดไว้ — การเช็คนี้คงไว้ ไม่ยกเลิก)
+          // (ยกเลิกเรื่องที่ 39, 2026-08-10 — เดิมเคยเก็บไว้ใน history ระหว่างปิดบอทเพื่อดึงมาต่อตอนเปิด
+          // เจอปัญหาจริงเหมือน TEXT branch: แอดมินคุยจบเรื่องกับลูกค้าเองนอกระบบไปแล้วระหว่างปิดบอท
+          // บอทเปิดมาแล้วดึง history เก่ามาต่อซ้ำ — กลับไปเงียบเฉยๆ ไม่บันทึกอะไรเหมือนก่อนเรื่องที่ 39)
           if (await isScheduledOff('line')) {
-            const imgHistory = await getHistory(userId)
-            const ttl = await computeOffHoursHistoryTtl('line')
-            await saveHistory(userId, [...imgHistory, { role: 'user', text: '[ลูกค้าส่งรูปภาพ]' }], ttl)
-            log.info('image.scheduled_off', { userId, historyTtlSec: ttl })
+            log.info('image.scheduled_off', { userId })
             return
           }
 
