@@ -286,8 +286,11 @@ export async function POST(req: NextRequest) {
               // อ่านรูป+ข้อความพร้อมกัน สรุป+ถามยืนยันก่อนเสมอ แทนตอบทันที (เดิมค้นเว็บอัตโนมัติ
               // ทุกครั้งผ่าน generateReplyWithImage() แม้คำถามไม่เกี่ยวกับสเปกสินค้าเลยก็ตาม)
               // เมื่อลูกค้ายืนยันแล้วข้อความตอบกลับจะเดินเข้า flow ข้อความปกติเอง (ค้นชีตก่อน) (2026-08-01)
-              // timeout dynamic ตามจำนวนรูป: รูปแรก 15s + รูปที่เพิ่มมาอีกรูปละ 8s (2026-08-05)
-              const dynamicTimeout = 15000 + 8000 * (base64Images.length - 1)
+              // timeout dynamic ตามจำนวนรูป: รูปแรก 25s + รูปที่เพิ่มมาอีกรูปละ 10s (2026-08-05,
+              // ปรับเพิ่ม 2026-08-10 — เจอเคสจริง 2 รูปถ่ายจริงของป้าย S/N + ข้อความยาว + FAQ เต็ม
+              // timeout เดิม 23s ไม่พอ ต้องตกไปตอบ UNAVAILABLE_MSG) capped ที่ 45s กันเกินงบ
+              // maxDuration=60s ทั้งหมดเมื่อส่งมาหลายรูป (เหลือ buffer ~15s ให้ดาวน์โหลดรูป/ส่งข้อความ)
+              const dynamicTimeout = Math.min(25000 + 10000 * (base64Images.length - 1), 45000)
               const faqTextForImage = await fetchFAQ()
               const withTextResult = await Promise.race([
                 analyzeImageWithText(base64Images, userMessage, faqTextForImage),
