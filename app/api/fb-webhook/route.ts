@@ -4,7 +4,7 @@ import { fetchFAQ, findExactMatch } from '@/lib/sheet'
 import { generateReply, generateReplyWithImage, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
 import { shouldHandoff, shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
-import { getHistory, saveHistory } from '@/lib/history'
+import { getHistory, saveHistoryExtended } from '@/lib/history'
 import { log } from '@/lib/log'
 import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
@@ -333,7 +333,7 @@ export async function POST(req: NextRequest) {
                     new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
                   ]).catch(() => UNAVAILABLE_MSG)
                   await fbSendReply(psid, reply)
-                  await saveHistory(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
                   log.info('fb.image_spec.sent', { userId, latencyMs: Date.now() - startTime })
                 } catch (err) {
                   log.error('fb.image_spec.failed', { userId, err: (err as Error).message })
@@ -377,7 +377,7 @@ export async function POST(req: NextRequest) {
                 log.error('fb.handoff.state_failed', { err: (stateErr as Error).message, userId })
               }
               await fbSend(psid, handoffMsg)
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
               log.info('fb.handoff.after_pre_handoff', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -385,7 +385,7 @@ export async function POST(req: NextRequest) {
             // "ขอเจ้าของ" นอกเวลาทำการ — ไม่ handoff เลย ตอบข้อความนอกเวลาแทน
             if (isOwnerRequest(userMessage) && (thaiHour >= 18 || thaiHour < 8)) {
               await fbSend(psid, OWNER_REQUEST_OFF_HOURS_MSG)
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OWNER_REQUEST_OFF_HOURS_MSG }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OWNER_REQUEST_OFF_HOURS_MSG }])
               log.info('fb.handoff.owner_request_off_hours', { userId })
               return
             }
@@ -416,7 +416,7 @@ export async function POST(req: NextRequest) {
 
               const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
               await fbSend(psid, preHandoffQ)
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
               log.info('fb.handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -435,7 +435,7 @@ export async function POST(req: NextRequest) {
                 if (count === 1) {
                   const redirectMsg = getSpendernetworkRedirectMessage()
                   await fbSend(psid, redirectMsg)
-                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
                   log.info('fb.spendernetwork.redirected', { userId })
                 } else {
                   log.info('fb.spendernetwork.redirect_suppressed', { userId, count })
@@ -460,7 +460,7 @@ export async function POST(req: NextRequest) {
                 if (repeatCount === 1) {
                   const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
                   await fbSend(psid, reminder)
-                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
                   log.info('fb.reply.duplicate_reminded', { userId })
                 } else {
                   log.info('fb.reply.duplicate_suppressed', { userId, repeatCount })
@@ -477,7 +477,7 @@ export async function POST(req: NextRequest) {
                 await redis.del(`repeat_count:${userId}`)
               } catch { /* Redis ล่ม */ }
               await fbSend(psid, exactMatch)
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
               log.info('fb.exact_match.sent', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -487,7 +487,7 @@ export async function POST(req: NextRequest) {
               const isOffHours = thaiHour >= 18 || thaiHour < 8
               if (isOffHours) {
                 await fbSend(psid, ORDER_CONFIRM_OFF_HOURS_MSG)
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_OFF_HOURS_MSG }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_OFF_HOURS_MSG }])
                 log.info('fb.order_confirm.off_hours', { userId })
                 return
               }
@@ -506,7 +506,7 @@ export async function POST(req: NextRequest) {
                 await redis.set(`order_confirm:${userId}`, '1', { ex: ORDER_CONFIRM_TTL })
               } catch { /* Redis ล่ม */ }
               await fbSend(psid, ORDER_CONFIRM_WAIT_MSG)
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_WAIT_MSG }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_WAIT_MSG }])
               log.info('fb.order_confirm.wait_reply', { userId })
               return
             }
@@ -533,7 +533,7 @@ export async function POST(req: NextRequest) {
             if (reply === 'CANCEL_IMEI') {
               const cancelMsg = 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ'
               await fbSend(psid, cancelMsg)
-              await saveHistory(userId, [])
+              await saveHistoryExtended(userId, [])
               log.info('fb.imei.cancelled', { userId })
               return
             }
@@ -564,7 +564,7 @@ export async function POST(req: NextRequest) {
                 log.error('fb.handoff.state_failed', { err: (stateErr as Error).message, userId })
               }
               await fbSend(psid, replyMsg)
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
               log.info('fb.handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
               return
             }
@@ -581,7 +581,7 @@ export async function POST(req: NextRequest) {
               } catch { /* Redis ล่ม */ }
               if (nonsenseCount <= 1) {
                 await fbSend(psid, OUT_OF_DOMAIN_MSG)
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
                 log.info('fb.reply.out_of_domain', { userId })
               } else {
                 log.info('fb.reply.nonsense_suppressed', { userId, nonsenseCount })
@@ -599,7 +599,7 @@ export async function POST(req: NextRequest) {
 
                 const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
                 await fbSend(psid, preHandoffQ)
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
                 log.info('fb.handoff.deferred_after_not_found', { userId, latencyMs: Date.now() - startTime })
                 return
               }
@@ -610,12 +610,12 @@ export async function POST(req: NextRequest) {
                 if (hasRetried) {
                   await redis.del(retryKey)
                   await fbSend(psid, handoffMsg)
-                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
                 } else {
                   await redis.set(retryKey, '1', { ex: RETRY_TTL })
                   const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ สามารถติดต่อแอดมินหรือช่างเทคนิคได้ในเวลาทำการ 08:00–17:00 น. ค่ะ'
                   await fbSend(psid, retryMsg)
-                  await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
                   try {
                     await redis.lpush('unanswered_log', JSON.stringify({ ts: new Date().toISOString(), userId, question: userMessage }))
                     await redis.ltrim('unanswered_log', 0, 499)
@@ -644,7 +644,7 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม — ส่งปกติ */ }
 
             await fbSendReply(psid, finalReply)
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
             log.info('fb.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
             try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
           }
@@ -737,7 +737,7 @@ export async function POST(req: NextRequest) {
               }
 
               await fbSend(psid, withTextResult.confirmMessage)
-              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
               log.info('fb.image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
               return
             }
@@ -774,7 +774,7 @@ export async function POST(req: NextRequest) {
 
             // 5.2b: รูปประเภทอื่น (error/IMEI/สกรีนช็อต/เอกสาร) → สรุป+ถามยืนยัน แล้วรอข้อความตอบกลับ
             if (intent.kind === 'other') {
-              await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพ: ${intent.summary}]` }, { role: 'model', text: intent.confirmMessage }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพ: ${intent.summary}]` }, { role: 'model', text: intent.confirmMessage }])
               await fbSend(psid, intent.confirmMessage)
               log.info('fb.image.intent_confirm_sent', { userId, latencyMs: Date.now() - startTime })
               return
@@ -785,7 +785,7 @@ export async function POST(req: NextRequest) {
             // ตอนนี้ปุ่ม "สเปค/ฟังก์ชัน" ยังใช้ generateReplyWithImage() แบบรูปเดียวเดิม จึงอ่านแค่
             // รูปแรก (product เดียวกันทุกรูปอยู่แล้วตามเงื่อนไขใหม่ของ analyzeImageIntent) (2026-08-05)
             const ocrProduct = intent.product
-            await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
             try {
               await redis.del(`fb_img_list:${userId}`)
               await redis.rpush(`fb_img_list:${userId}`, ...imageUrls)
@@ -835,7 +835,7 @@ export async function POST(req: NextRequest) {
                 if (repeatCount === 1) {
                   const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
                   await fbSend(psid, reminder)
-                  await saveHistory(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: reminder }])
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: reminder }])
                   log.info('fb.postback.duplicate_reminded', { userId })
                 } else {
                   log.info('fb.postback.duplicate_suppressed', { userId, repeatCount })
@@ -860,7 +860,7 @@ export async function POST(req: NextRequest) {
             } catch { /* Redis ล่ม — ส่งปกติ */ }
 
             await fbSendReply(psid, finalReply)
-            await saveHistory(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
             log.info('fb.postback.replied', { userId, payload, latencyMs: Date.now() - startTime })
           }
 

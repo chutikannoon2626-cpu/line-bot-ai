@@ -6,7 +6,7 @@ import { shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_RE
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
 import { imageIntentCard } from '@/lib/flex-cards'
-import { getHistory, saveHistory } from '@/lib/history'
+import { getHistory, saveHistoryExtended } from '@/lib/history'
 import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
@@ -328,7 +328,7 @@ export async function POST(req: NextRequest) {
               }
 
               await pushOnly(withTextResult.confirmMessage)
-              await saveHistory(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: `[รูปภาพ+ข้อความ] ${withTextResult.summary}` }, { role: 'model', text: withTextResult.confirmMessage }])
               log.info('image_text.confirm_sent', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
               return
             } else {
@@ -375,13 +375,13 @@ export async function POST(req: NextRequest) {
               }
 
               if (intent.kind === 'other') {
-                await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพ: ${intent.summary}]` }, { role: 'model', text: intent.confirmMessage }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพ: ${intent.summary}]` }, { role: 'model', text: intent.confirmMessage }])
                 await ans(txt(intent.confirmMessage))
                 log.info('image.intent_confirm_sent', { userId, elapsedMs: elapsed })
                 return
               }
 
-              await saveHistory(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${intent.product}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${intent.product}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
               await ans([imageIntentCard(intent.product) as messagingApi.Message])
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
               return
@@ -458,7 +458,7 @@ export async function POST(req: NextRequest) {
               log.error('handoff.state_failed', { err: (stateErr as Error).message, userId })
             }
             await ans(txt(handoffMsg))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
             log.info('handoff.after_pre_handoff', { userId, latencyMs: Date.now() - startTime })
             return
           }
@@ -466,7 +466,7 @@ export async function POST(req: NextRequest) {
           // "ขอเจ้าของ" นอกเวลาทำการ — ไม่ handoff เลย ตอบข้อความนอกเวลาแทน
           if (isOwnerRequest(userMessage) && (thaiHour >= 18 || thaiHour < 8)) {
             await ans(txt(OWNER_REQUEST_OFF_HOURS_MSG))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OWNER_REQUEST_OFF_HOURS_MSG }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OWNER_REQUEST_OFF_HOURS_MSG }])
             log.info('handoff.owner_request_off_hours', { userId })
             return
           }
@@ -500,7 +500,7 @@ export async function POST(req: NextRequest) {
             }
             const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
             await ans(txt(preHandoffQ))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
             log.info('handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
             return
           }
@@ -518,7 +518,7 @@ export async function POST(req: NextRequest) {
               if (repeatCount === 1) {
                 const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
                 await ans(txt(reminder))
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
                 log.info('reply.duplicate_reminded', { userId })
               } else {
                 log.info('reply.duplicate_suppressed', { userId, repeatCount })
@@ -535,7 +535,7 @@ export async function POST(req: NextRequest) {
               await redis.del(`repeat_count:${userId}`)
             } catch { /* Redis ล่ม */ }
             await ans(txt(exactMatch))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
             log.info('exact_match.sent', { userId, latencyMs: Date.now() - startTime })
             return
           }
@@ -545,7 +545,7 @@ export async function POST(req: NextRequest) {
             const isOffHours = thaiHour >= 18 || thaiHour < 8
             if (isOffHours) {
               await ans(txt(ORDER_CONFIRM_OFF_HOURS_MSG))
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_OFF_HOURS_MSG }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_OFF_HOURS_MSG }])
               log.info('order_confirm.off_hours', { userId })
               return
             }
@@ -564,7 +564,7 @@ export async function POST(req: NextRequest) {
               await redis.set(`order_confirm:${userId}`, '1', { ex: ORDER_CONFIRM_TTL })
             } catch { /* Redis ล่ม */ }
             await ans(txt(ORDER_CONFIRM_WAIT_MSG))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_WAIT_MSG }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: ORDER_CONFIRM_WAIT_MSG }])
             log.info('order_confirm.wait_reply', { userId })
             return
           }
@@ -590,7 +590,7 @@ export async function POST(req: NextRequest) {
           if (reply === 'CANCEL_IMEI') {
             const cancelMsg = 'ยกเลิกรายการแล้วค่ะ มีอะไรให้น้องใจดีช่วยอีกไหมคะ'
             await ans(txt(cancelMsg))
-            await saveHistory(userId, [])
+            await saveHistoryExtended(userId, [])
             log.info('imei.cancelled', { userId })
             return
           }
@@ -620,7 +620,7 @@ export async function POST(req: NextRequest) {
               log.error('handoff.state_failed', { err: (stateErr as Error).message, userId })
             }
             await ans(txt(replyMsg))
-            await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
             log.info('handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
             return
           }
@@ -638,7 +638,7 @@ export async function POST(req: NextRequest) {
 
             if (nonsenseCount <= 1) {
               await ans(txt(OUT_OF_DOMAIN_MSG))
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: OUT_OF_DOMAIN_MSG }])
               log.info('reply.out_of_domain', { userId })
             } else {
               log.info('reply.nonsense_suppressed', { userId, nonsenseCount })
@@ -658,7 +658,7 @@ export async function POST(req: NextRequest) {
               }
               const preHandoffQ = 'กรุณาแจ้งรายละเอียดที่ต้องการให้แอดมินช่วยด้วยนะคะ เพื่อให้ดูแลได้ถูกต้องค่ะ'
               await ans(txt(preHandoffQ))
-              await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
               log.info('handoff.deferred_after_not_found', { userId, latencyMs: Date.now() - startTime })
               return
             }
@@ -669,13 +669,13 @@ export async function POST(req: NextRequest) {
               if (hasRetried) {
                 await redis.del(retryKey)
                 await ans(txt(handoffMsg))
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: handoffMsg }])
                 log.info('retry.admin_routed', { userId })
               } else {
                 await redis.set(retryKey, '1', { ex: RETRY_TTL })
                 const retryMsg = 'ขออภัยค่ะ ไม่พบข้อมูลในระบบ สามารถติดต่อแอดมินหรือช่างเทคนิคได้ในเวลาทำการ 08:00–17:00 น. ค่ะ หรือลองอธิบายเพิ่มเติมได้เลยนะคะ'
                 await ans(txt(retryMsg))
-                await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
+                await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: retryMsg }])
                 log.info('retry.first_attempt', { userId })
                 try {
                   await redis.lpush(`unanswered_log`, JSON.stringify({
@@ -707,7 +707,7 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ส่งปกติ */ }
 
           await ans(txt(finalReply))
-          await saveHistory(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
+          await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
           log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
           try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
         }
