@@ -52,7 +52,7 @@ function getHandoffMessage(): string {
 // protocol เดิมเลย บทสนทนาจึงเดินต่อไม่ได้ (ทางตัน) — เพิ่มการเช็คนี้ก่อนเสมอ ถ้าเข้าเงื่อนไขให้ข้าม
 // การรวมรูป+ข้อความไปเลย ปล่อยข้อความไหลเข้า flow ปกติแทน (ซึ่งมี step1AckException ใน prompts.ts
 // รองรับการส่งต่อคำยืนยันให้ protocol เดิมอยู่แล้ว) รูปที่ค้างจะยังอยู่ใน img_list ต่อไปจนกว่าจะ
-// หมดอายุหรือมีข้อความบรรยายรูปจริงๆ ตามมา (2026-08-12, เรื่องที่ 43)
+// หมดอายุหรือมีข้อความบรรยายรูปจริงๆ ตามมา (2026-08-12, เรื่องที่ 45)
 function looksLikePendingConfirmReply(history: Turn[], userMessage: string): boolean {
   const lastBot = [...history].reverse().find(t => t.role === 'model')
   if (!lastBot) return false
