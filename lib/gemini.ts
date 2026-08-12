@@ -14,6 +14,17 @@ function isRecommendQuestion(text: string): boolean {
 const DEFAULT_REPLY = '[NOT_FOUND]'
 const API_ERROR_REPLY = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
 
+// เจอเคสจริง: Gemini บางครั้งพ่นขั้นตอนคิดภายในปนกับคำตอบจริงที่ส่งถึงลูกค้า ทั้งที่
+// <reasoning_protocol> สั่งไว้ชัดเจนว่า "ไม่ต้องเขียนออก" — มักขึ้นต้นด้วย "คิดก่อน:" (คำเดียวกับที่
+// ใช้ในคำสั่ง prompt เอง "ก่อนตอบทุกครั้ง คิดเป็นขั้นนี้") ตามด้วยข้อความเหตุผลยาวๆ แล้วเว้นบรรทัด
+// ก่อนคำตอบจริง — ตัดทิ้งถ้าเจอรูปแบบนี้ เป็นตาข่ายรองรับชั้นสุดท้ายนอกเหนือจากคำสั่งใน prompt เอง
+// เพราะ Gemini ไม่ทำตามคำสั่งได้เสมอไป (temperature=1.0 ไม่ deterministic) — ต่างจากบั๊ก HANDOFF
+// sentinel เดิม (เรื่องที่ 36) ตรงที่เคสนี้ไม่มี sentinel ให้เกาะเลย เป็นคำตอบธรรมดาล้วนๆ (2026-08-12)
+function stripLeakedReasoning(text: string): string {
+  const match = text.match(/^\s*คิดก่อน\s*[:：][\s\S]*?\n\s*\n/)
+  return match ? text.slice(match[0].length).trim() : text
+}
+
 const SEARCH_TOOL = {
   functionDeclarations: [
     {
@@ -135,7 +146,7 @@ export async function generateReply(
     }))
 
     if (finishReason2 === 'MAX_TOKENS') return DEFAULT_REPLY
-    return finalResponse.text?.trim() || DEFAULT_REPLY
+    return stripLeakedReasoning(finalResponse.text?.trim() || DEFAULT_REPLY) || DEFAULT_REPLY
   }
 
   const usage = response.usageMetadata
@@ -151,7 +162,7 @@ export async function generateReply(
   }))
 
   if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
-  return response.text?.trim() || DEFAULT_REPLY
+  return stripLeakedReasoning(response.text?.trim() || DEFAULT_REPLY) || DEFAULT_REPLY
 }
 
 export async function generateReplyWithImage(
