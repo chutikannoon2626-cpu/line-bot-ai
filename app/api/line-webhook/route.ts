@@ -6,7 +6,7 @@ import { shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_RE
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
 import { imageIntentCard } from '@/lib/flex-cards'
-import { getHistory, saveHistoryExtended } from '@/lib/history'
+import { getHistory, saveHistoryExtended, type Turn } from '@/lib/history'
 import { isScheduledOff } from '@/lib/schedule'
 import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
@@ -43,6 +43,27 @@ function getHandoffMessage(): string {
   return thaiHour >= 18 || thaiHour < 8
     ? 'น้องใจดีรับทราบค่ะ และจะแจ้งแอดมินให้ติดต่อกลับในเวลาทำการนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
     : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
+}
+
+// เคสจริง: ลูกค้ากำลังอยู่ระหว่างขั้นยืนยันของ protocol อื่น (เช่น imei_protocol ขั้นที่ 3,
+// repair_protocol ขั้นที่ 2, self_repair_protocol) ที่ไม่เกี่ยวกับรูปภาพเลย แต่บังเอิญมีรูปที่ส่งมา
+// ก่อนหน้าค้างอยู่ใน img_list ยังไม่ครบ 5 นาที — โค้ดด้านล่าง (ตรวจ pending image) จะแย่งตีความ
+// คำตอบยืนยันสั้นๆ นี้ว่าเป็นคำบรรยายรูปที่ค้างอยู่แทน ทำให้หลุดเข้า analyzeImageWithText() ที่ไม่รู้จัก
+// protocol เดิมเลย บทสนทนาจึงเดินต่อไม่ได้ (ทางตัน) — เพิ่มการเช็คนี้ก่อนเสมอ ถ้าเข้าเงื่อนไขให้ข้าม
+// การรวมรูป+ข้อความไปเลย ปล่อยข้อความไหลเข้า flow ปกติแทน (ซึ่งมี step1AckException ใน prompts.ts
+// รองรับการส่งต่อคำยืนยันให้ protocol เดิมอยู่แล้ว) รูปที่ค้างจะยังอยู่ใน img_list ต่อไปจนกว่าจะ
+// หมดอายุหรือมีข้อความบรรยายรูปจริงๆ ตามมา (2026-08-12, เรื่องที่ 43)
+function looksLikePendingConfirmReply(history: Turn[], userMessage: string): boolean {
+  const lastBot = [...history].reverse().find(t => t.role === 'model')
+  if (!lastBot) return false
+  if (!/(ใช่ไหมคะ|ถูกต้องไหมคะ|ยืนยัน.*ไหมคะ)/.test(lastBot.text)) return false
+
+  // anchor ทั้งสองด้าน ($ ปิดท้ายด้วย) — ต้องเป็นคำยืนยันล้วนๆ เท่านั้น ห้ามมีเนื้อหาอื่นปนต่อท้าย
+  // (เดิมเช็คแค่ขึ้นต้น ทำให้แคปชั่นบรรยายรูปจริงๆ ที่ขึ้นต้นด้วย "ครับ"/"ค่ะ" เช่น "ครับ ตามรูปนี้เลย"
+  // โดนเข้าใจผิดว่าเป็นคำยืนยันไปด้วย)
+  const msg = userMessage.trim()
+  if (msg.length > 20) return false
+  return /^(?:(?:ใช่|ไม่ใช่|ไม่ถูกต้อง|ถูกต้อง|ยืนยัน|ไม่ยืนยัน|ยกเลิก|โอเค|ตกลง|ok|okay)\s*(?:ครับผม|ครับ|ค่ะ|ค๊ะ|คะ|คับ)?|ครับผม|ครับ|ค่ะ|ค๊ะ|คะ|คับ)$/i.test(msg)
 }
 
 export const runtime = 'nodejs'
@@ -269,7 +290,7 @@ export async function POST(req: NextRequest) {
             imgList = raw.map(r => (typeof r === 'string' ? JSON.parse(r) : r) as { id: string; ts: number })
           } catch { /* Redis ล่ม */ }
 
-          if (imgList.length > 0) {
+          if (imgList.length > 0 && !looksLikePendingConfirmReply(history, userMessage)) {
             const elapsed = Date.now() - imgList[0].ts // นับจากรูปแรกที่ส่งมาในชุดนี้
             if (elapsed < 300000) {
               try { await redis.del(`img_list:${userId}`) } catch { /* */ }
