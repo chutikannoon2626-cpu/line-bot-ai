@@ -199,11 +199,6 @@
     <span class="endpoint-method method-delete">DEL</span> <code>body:{id}</code> — ลบ
   </div>
 
-  <h3 style="margin-top:18px">Cron / Keep-warm (เพิ่ม 2026-08-08, เรื่องที่ 41)</h3>
-  <div class="endpoint">
-    <span class="endpoint-method method-get">GET</span><code>/api/cron/keep-warm</code> — ต้องมี header <code>Authorization: Bearer &lt;CRON_SECRET&gt;</code> ตรงกัน ไม่งั้น 401 · ไม่เรียก Gemini/Redis/Sheet เลย ตอบ <code>200 OK</code> ทันที
-    <div class="ok" style="margin-top:6px;font-size:12px">ยิงจาก <strong>external cron service</strong> (ไม่ใช่ Vercel Cron — Hobby plan จำกัดแค่ 1 ครั้ง/วัน ไม่พอสำหรับทุก 5 นาที) เพื่อกัน cold start ของ line-webhook/fb-webhook/web-chat function ที่ทำให้ Gemini call แรกหลังไม่มี traffic นาน timeout (<code>GEMINI_UNAVAILABLE</code>) — ต้องตั้ง <code>CRON_SECRET</code> env var ใน Vercel + ตั้ง external service ให้ส่ง header เดียวกันมาเอง (ไม่ใช่ส่วนที่โค้ดทำอัตโนมัติ)</div>
-  </div>
 </div>
 
 <!-- ─── LINE FLOW ─── -->
@@ -1069,7 +1064,6 @@ if (exactMatch) {
       <tr><td><code>ADMIN_SCHEDULE_PASSWORD</code></td><td>Admin pages auth (?key=)</td><td><span class="badge badge-red">Required</span></td></tr>
       <tr><td><code>SERPER_API_KEY</code></td><td>Serper search API · ไม่มี = fallback scraping spenderclub.com</td><td><span class="badge badge-yellow">Optional</span></td></tr>
       <tr><td><code>ADMIN_GROUP_ID</code></td><td>LINE group ID สำหรับ notifyAdmin + notifyAdminFacebook</td><td><span class="badge badge-yellow">Optional</span></td></tr>
-      <tr><td><code>CRON_SECRET</code></td><td>(เพิ่ม 2026-08-08, เรื่องที่ 41) ป้องกัน <code>/api/cron/keep-warm</code> จากการถูกเรียกจากภายนอกที่ไม่รู้ secret — external cron service ต้องส่ง header <code>Authorization: Bearer &lt;ค่านี้&gt;</code> มาตรงกัน</td><td><span class="badge badge-red">Required (ถ้าจะใช้ keep-warm)</span></td></tr>
     </table>
   </div>
   <div class="tip" style="margin-top:10px">

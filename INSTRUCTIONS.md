@@ -1129,7 +1129,9 @@ SPENDER TC-15HW
 
 ---
 
-## เรื่องที่ 41 — Keep-warm endpoint กัน Cold Start (GEMINI_UNAVAILABLE)
+## เรื่องที่ 41 — Keep-warm endpoint กัน Cold Start (GEMINI_UNAVAILABLE) — ⚠️ ลบออกแล้ว (2026-08-14)
+
+> **อัปเดต 2026-08-14:** ผู้ใช้เลิกใช้ external cron service ที่เคย ping endpoint นี้แล้ว จึงลบ [app/api/cron/keep-warm/route.ts](app/api/cron/keep-warm/route.ts) ทิ้ง — ผู้ใช้รับทราบและยอมรับความเสี่ยงว่าปัญหา cold start (`GEMINI_UNAVAILABLE`) เดิมที่หัวข้อนี้เคยแก้ไว้อาจกลับมาเกิดได้อีกถ้าไม่มีกลไกอื่นทดแทน — เนื้อหาด้านล่างเก็บไว้เป็นบันทึกประวัติเท่านั้น ไม่ใช่สถานะปัจจุบันของระบบ
 
 **ปัญหาที่พบ:** ผู้ใช้รายงาน `GEMINI_UNAVAILABLE` (timeout) หลายเคสจริง (07:50-07:51 วันหนึ่ง — ข้อความแรกของวัน หลังไม่มี traffic นาน) สงสัย cold start — สำรวจ Vercel Runtime Logs ย้อนหลัง 7 วันไม่ได้ (ไม่มี `vercel` CLI/token/`.vercel/` link ในสภาพแวดล้อมนี้ และ `log.*` เขียนแค่ `console.log()` ไม่มี log store อื่นให้ query) จึงแก้เชิงป้องกันแทนโดยไม่ต้องรอข้อมูลย้อนหลัง
 
