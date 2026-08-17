@@ -142,7 +142,14 @@ async function searchWithSerper(query: string, apiKey: string): Promise<SearchRe
     const organic = data.organic ?? []
     if (organic.length === 0) return { text: '', url: '' }
 
-    const text = organic.map(r => `${r.title}\n${r.snippet}`).join('\n\n').slice(0, 3000)
+    // แนบลิงก์ของแต่ละรายการไว้ในเนื้อหาด้วย (เดิมมีแค่ url เดียวของรายการแรกแยกไว้ต่างหาก
+    // ทำให้ Gemini เห็นชื่อ+คำอธิบายของหลายสินค้าที่ชื่อคล้ายกันปนกัน แต่ไม่รู้ว่าลิงก์ไหนคู่กับ
+    // อันไหน เสี่ยงหยิบราคาจากรายการหนึ่งมาผสมกับลิงก์ของอีกรายการที่ไม่ตรงกัน — เรื่องที่ 52,
+    // 2026-08-17) ยังคงคืนค่า url ของรายการแรกไว้เป็นค่าเริ่มต้นเหมือนเดิม เผื่อกรณีเจอผลเดียว
+    const text = organic
+      .map(r => `${r.title}\n${r.snippet}\nลิงก์: ${cleanUrl(r.link)}`)
+      .join('\n\n')
+      .slice(0, 3000)
     return { text, url: cleanUrl(organic[0].link) }
   } catch (err) {
     console.log(JSON.stringify({
