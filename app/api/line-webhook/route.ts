@@ -311,7 +311,13 @@ export async function POST(req: NextRequest) {
               // ปรับเพิ่ม 2026-08-10 — เจอเคสจริง 2 รูปถ่ายจริงของป้าย S/N + ข้อความยาว + FAQ เต็ม
               // timeout เดิม 23s ไม่พอ ต้องตกไปตอบ UNAVAILABLE_MSG) capped ที่ 45s กันเกินงบ
               // maxDuration=60s ทั้งหมดเมื่อส่งมาหลายรูป (เหลือ buffer ~15s ให้ดาวน์โหลดรูป/ส่งข้อความ)
-              const dynamicTimeout = Math.min(25000 + 10000 * (base64Images.length - 1), 45000)
+              // ปรับเพิ่มอีกครั้ง 2026-08-18 (เรื่องที่ 54) — เจอเคสจริง 1 รูปเดียว + ข้อความสั้น
+              // ("แก้ไงครับ") รูปชัดเจนอ่านง่าย (ประเภท D: จอ error) ไม่มีเหตุผลด้านเนื้อหาที่ควร
+              // ทำให้ช้า แต่ตกไปตอบ UNAVAILABLE_MSG เหมือนกัน (นานกว่า 25s) — ไม่มี log ยืนยันสาเหตุ
+              // แน่ชัด (ดูไม่ทันเพราะ log หมดเวลา) แต่จากภาพสนับสนุนว่าน่าจะเป็น Gemini ช้ากว่าปกติ
+              // ชั่วคราวมากกว่าปัญหาเนื้อหา — ขยับฐานจาก 25s เป็น 35s ให้ margin เผื่อความหน่วง
+              // ครั้งคราวแบบนี้ ยังอยู่ในงบ maxDuration=60s สบายๆ (เหลือ buffer มากกว่าเดิม)
+              const dynamicTimeout = Math.min(35000 + 10000 * (base64Images.length - 1), 45000)
               const faqTextForImage = await fetchFAQ()
               const withTextResult = await Promise.race([
                 analyzeImageWithText(base64Images, userMessage, faqTextForImage),
