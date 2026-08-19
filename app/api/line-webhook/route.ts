@@ -317,6 +317,7 @@ export async function POST(req: NextRequest) {
               // แน่ชัด (ดูไม่ทันเพราะ log หมดเวลา) แต่จากภาพสนับสนุนว่าน่าจะเป็น Gemini ช้ากว่าปกติ
               // ชั่วคราวมากกว่าปัญหาเนื้อหา — ขยับฐานจาก 25s เป็น 35s ให้ margin เผื่อความหน่วง
               // ครั้งคราวแบบนี้ ยังอยู่ในงบ maxDuration=60s สบายๆ (เหลือ buffer มากกว่าเดิม)
+              let imageTextFailureReason: string | null = null
               const dynamicTimeout = Math.min(35000 + 10000 * (base64Images.length - 1), 45000)
               const faqTextForImage = await fetchFAQ()
               const withTextResult = await Promise.race([
@@ -325,13 +326,29 @@ export async function POST(req: NextRequest) {
                   setTimeout(() => reject(new Error('gemini_timeout')), dynamicTimeout)
                 ),
               ]).catch((err) => {
-                log.error('gemini.image_text_failed', { err: (err as Error).message, userId, imageCount: base64Images.length })
+                imageTextFailureReason = (err as Error).message
+                log.error('gemini.image_text_failed', { err: imageTextFailureReason, userId, imageCount: base64Images.length })
                 return { kind: 'unclear' as const }
               })
 
               if (withTextResult.kind === 'unclear') {
                 await pushOnly(UNAVAILABLE_MSG)
-                log.info('image_text.unclear', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
+                const latencyMs = Date.now() - startTime
+                log.info('image_text.unclear', { userId, latencyMs, imageCount: base64Images.length })
+                // บันทึกถาวรลง Redis แทนพึ่ง Vercel live log อย่างเดียว (2026-08-19, เรื่องที่ 56)
+                // เคสจริง: เจอ UNAVAILABLE_MSG ซ้ำหลัง deploy เรื่องที่ 54 (25s→35s) ไปแล้วจริง แต่
+                // ดู Vercel log ไม่ทันเพราะหมดเวลาเก็บ ฟันธงไม่ได้ว่าเป็น timeout จริงหรือ
+                // analyzeImageWithText() ตอบ unclear เองโดยไม่เกี่ยวกับเวลาเลย (reason จะเป็น null
+                // ถ้ามาจากทางนี้ เพราะ .catch() ด้านบนไม่ทำงาน) — เก็บ reason ('gemini_timeout' จาก
+                // .catch() ด้านบน หรือ 'model_unclear' ถ้าไม่มี error เลย) + latencyMs ไว้ถาวร
+                // เพื่อ query ย้อนหลังได้โดยไม่ต้องแข่งกับเวลา retention ของ Vercel log อีก
+                try {
+                  await redis.lpush('image_text_failure_log', JSON.stringify({
+                    ts: new Date().toISOString(), userId, latencyMs, imageCount: base64Images.length,
+                    channel: 'line', reason: imageTextFailureReason ?? 'model_unclear',
+                  }))
+                  await redis.ltrim('image_text_failure_log', 0, 499)
+                } catch { /* Redis ล่ม — ข้าม */ }
                 return
               }
 

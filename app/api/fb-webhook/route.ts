@@ -705,16 +705,34 @@ export async function POST(req: NextRequest) {
             // 2026-08-10 ให้ตรงกับ LINE — เจอเคสจริง 2 รูปถ่ายจริง+ข้อความยาว+FAQ เต็ม timeout เดิม
             // ไม่พอ ต้องตกไปตอบ UNAVAILABLE_MSG — capped ที่ 45s กันเกินงบ maxDuration=60s)
             if (caption) {
-              const dynamicTimeout = Math.min(25000 + 10000 * (base64Images.length - 1), 45000)
+              // ขยับฐานจาก 25s เป็น 35s ให้ตรงกับ LINE (2026-08-18, เรื่องที่ 54 เดิมแก้แค่
+              // line-webhook/route.ts ไม่ได้ sync มาที่นี่ด้วย ทั้งที่โค้ดเหมือนกันเป๊ะ — แก้ตาม
+              // ตอนนี้ 2026-08-19, เรื่องที่ 56)
+              let imageTextFailureReason: string | null = null
+              const dynamicTimeout = Math.min(35000 + 10000 * (base64Images.length - 1), 45000)
               const faqTextForImage = await fetchFAQ()
               const withTextResult = await Promise.race([
                 analyzeImageWithText(base64Images, caption, faqTextForImage),
                 new Promise<{ kind: 'unclear' }>((_, reject) => setTimeout(() => reject(new Error('timeout')), dynamicTimeout)),
-              ]).catch(() => ({ kind: 'unclear' as const }))
+              ]).catch((err) => {
+                imageTextFailureReason = (err as Error).message
+                log.error('fb.image_text_failed', { err: imageTextFailureReason, userId, imageCount: base64Images.length })
+                return { kind: 'unclear' as const }
+              })
 
               if (withTextResult.kind === 'unclear') {
                 await fbSend(psid, UNAVAILABLE_MSG)
-                log.info('fb.image_text.unclear', { userId, latencyMs: Date.now() - startTime, imageCount: base64Images.length })
+                const latencyMs = Date.now() - startTime
+                log.info('fb.image_text.unclear', { userId, latencyMs, imageCount: base64Images.length })
+                // บันทึกถาวรลง Redis แทนพึ่ง Vercel live log อย่างเดียว — sync กับ line-webhook/route.ts
+                // (2026-08-19, เรื่องที่ 56) ใช้ key ร่วมกันข้ามช่องทาง แยกด้วย field channel
+                try {
+                  await redis.lpush('image_text_failure_log', JSON.stringify({
+                    ts: new Date().toISOString(), userId, latencyMs, imageCount: base64Images.length,
+                    channel: 'facebook', reason: imageTextFailureReason ?? 'model_unclear',
+                  }))
+                  await redis.ltrim('image_text_failure_log', 0, 499)
+                } catch { /* Redis ล่ม — ข้าม */ }
                 return
               }
 

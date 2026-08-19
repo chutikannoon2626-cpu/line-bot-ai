@@ -1485,6 +1485,29 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 56 — Sync timeout เรื่องที่ 54 ไป Facebook + บันทึก log ถาวรกัน Vercel log หมดเวลา (LINE + Facebook)
+
+**เคสจริงที่พบ:** ลูกค้า LINE เจอ UNAVAILABLE_MSG ("ระบบกำลังประมวลผลนานกว่าปกติ") หลังส่งรูป+ข้อความตามมาเร็ว ซ้ำอีกครั้ง**หลัง**จาก deploy เรื่องที่ 54 (ขยาย timeout 25s→35s) ไปแล้วจริง (ยืนยันจาก Vercel dashboard ว่า deployment ขึ้นสถานะ "Ready" ก่อนเวลาที่เคสนี้เกิด) — พยายามดู Vercel log เพื่อฟันธงสาเหตุแต่ดูไม่ทันเพราะเกินระยะเวลาที่ Vercel เก็บ log ไว้ให้
+
+**สาเหตุ 2 เรื่องที่พบระหว่างตรวจสอบ:**
+1. **เรื่องที่ 54 แก้ไม่ครบ** — ตอนแก้ ขยับ `dynamicTimeout` จาก 25s เป็น 35s ใน [app/api/line-webhook/route.ts](app/api/line-webhook/route.ts) เท่านั้น แต่ [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts) มีโค้ด `analyzeImageWithText()` + `dynamicTimeout` แบบเดียวกันเป๊ะ (บรรทัด 706-716) ที่**ไม่เคยถูกแก้ไปด้วย** ยังเป็น 25s อยู่ — ผิดกฎที่ตกลงกันไว้เองว่า "ทุกครั้งที่แก้ line-webhook/lib ให้แก้ fb-webhook พร้อมกัน" (เป็นความผิดพลาดของการแก้เรื่องที่ 54 เอง ไม่ใช่บั๊กใหม่)
+2. **ไม่มีทางแยกสาเหตุ "timeout จริง" กับ "Gemini ตอบ unclear เองโดยไม่เกี่ยวกับเวลา" ได้แบบถาวร** — `analyzeImageWithText()` มี try/catch ภายในตัวเอง ถ้า parse ผลลัพธ์ไม่ได้หรือโมเดลสรุปว่า "ดูไม่ออก" จะ return `unclear` แบบปกติ ไม่ error ไม่ timeout เลย ให้ผลลัพธ์ที่ลูกค้าเห็นเหมือนกับ timeout จริงทุกตัวอักษร — เดิมมีแค่ log ชั่วคราวใน Vercel (`gemini.image_text_failed` เฉพาะกรณี error/timeout, `image_text.unclear` ทุกกรณี) ไม่มีการเก็บถาวร พอ log หมดเวลาก็ไม่มีทางย้อนดูได้อีกเลย
+
+**วิธีแก้:** แก้ 2 ไฟล์พร้อมกัน:
+1. Sync `dynamicTimeout` ฐานจาก 25000 เป็น 35000 ใน `fb-webhook.ts` ให้ตรงกับ LINE
+2. เพิ่มตัวแปร `imageTextFailureReason` เก็บ error message จริงตอน `.catch()` ทำงาน (มาจาก timeout) แล้วบันทึกลง Redis list ถาวร (`image_text_failure_log`, จำกัด 500 รายการล่าสุดด้วย `ltrim` แบบเดียวกับ `unanswered_log` ที่มีอยู่แล้ว) ทุกครั้งที่ตอบ UNAVAILABLE_MSG จากเส้นทางนี้ — เก็บ `latencyMs`, `imageCount`, `channel` ('line'/'facebook'), และ `reason` (`'gemini_timeout'` ถ้ามาจาก race timeout จริง หรือ `'model_unclear'` ถ้า `analyzeImageWithText()` return unclear เองโดยไม่มี error เลย) — ทำใน `fb-webhook.ts` ด้วย (เดิมไม่มี `log.error` ตอน catch เลยด้วยซ้ำ เพิ่มเข้าไปให้ตรงกับ LINE)
+
+**ทดสอบก่อน commit (Gemini API จริงผ่าน `.env.local`, ไฟล์ทดสอบลบออกจาก repo แล้ว):** ยิง `analyzeImageWithText()` จริงด้วยรูป JPEG ทดสอบขั้นต่ำ (1x1 พิกเซล) 2 เคส:
+1. บังคับ timeout สั้น (100ms) ให้ race timeout ชนะแน่นอน → ผลจริง: `kind: unclear`, `latencyMs: 103`, `failureReason: 'gemini_timeout'` — ตรงตามที่ออกแบบ ✅
+2. timeout ปกติ (30s) ปล่อยให้ Gemini ทำงานจบเอง → ผลจริง: Gemini ใช้เวลา 15.8 วิ (ไม่เกิน timeout เลย) แต่ตอบ `kind: unclear` เอง เพราะรูปทดสอบว่างเปล่าไม่มีข้อมูลอะไรให้วิเคราะห์ → `failureReason: null` → fallback เป็น `'model_unclear'` ถูกต้อง — **เคสทดสอบนี้พิสูจน์ตัวอย่างจริงของสถานการณ์ "unclear ที่ไม่ใช่ timeout" ที่ระบบเดิมแยกไม่ออกเลย** ✅
+- Redis จริงทดสอบไม่ได้ในเครื่อง (ไม่มี `UPSTASH_REDIS_URL`/`TOKEN` ใน `.env.local` เหมือนข้อจำกัดเดิมที่เจอมาตลอดเซสชันนี้) แต่ shape ของ record ที่จะเขียนตรงกับที่ตั้งใจ และใช้ pattern เดียวกับ `unanswered_log` ที่ใช้งานจริงอยู่แล้วในระบบ (ไม่ใช่โค้ดใหม่ที่ไม่เคยพิสูจน์)
+
+**ทำไมไม่กระทบอย่างอื่น:** เป็นการ**เพิ่ม**การบันทึก log ถาวรเท่านั้น ไม่เปลี่ยนสิ่งที่ลูกค้าเห็นเลย (ยังตอบ UNAVAILABLE_MSG เหมือนเดิมทุกตัวอักษร) — Redis write ห่อด้วย try/catch เหมือนทุกจุดอื่นในระบบ ถ้า Redis ล่มก็ข้ามไปเฉยๆ ไม่กระทบการตอบลูกค้า · การ sync timeout ไป Facebook เป็นแค่ทำให้ค่าตรงกับ LINE เท่านั้น ไม่เปลี่ยนโครงสร้างหรือ cap 45000ms เดิม · ไม่แตะ `lib/prompts.ts`, `lib/gemini.ts`, Web Chat (ไม่มี flow นี้อยู่แล้ว) เลย
+
+**ขอบเขต:** แก้ 2 ไฟล์ ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts)) — **LINE + Facebook เท่านั้น** (Web Chat ไม่มี flow รูปภาพแบบนี้)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
