@@ -25,6 +25,17 @@ function stripLeakedReasoning(text: string): string {
   return match ? text.slice(match[0].length).trim() : text
 }
 
+// เจอเคสจริง: Gemini เขียนชื่อ tag ภายในของพรอมต์ (เช่น "<faq>") หลุดออกมาปนกับคำตอบจริงที่ส่งถึง
+// ลูกค้าตรงๆ (เช่น "พบข้อมูลใน <faq> ที่ตรงกับเงื่อนไข...") — คำว่า <faq> ถูกใช้อ้างอิงซ้ำมากกว่า
+// 30 จุดทั่ว buildSystemPrompt() (reasoning_protocol/guardrails/recommend_protocol/output_format
+// ฯลฯ) เป็นตระกูลเดียวกับบั๊ก "คิดก่อน:" ด้านบนและ HANDOFF sentinel เดิม (เรื่องที่ 36) — คำที่ใช้
+// ซ้ำมากในคำสั่งพรอมต์มีโอกาสหลุดปนเข้าคำตอบจริงได้เอง — ตัดทิ้งเป็นตาข่ายรองรับชั้นสุดท้าย
+// นอกเหนือจากกฎห้ามเขียน tag ภายในใน <guardrails> (เรื่องที่ 59, 2026-08-19)
+const LEAKED_TAG_RE = /<\/?(?:faq|guardrails|repair_protocol|self_repair_protocol|imei_protocol|recommend_protocol|use_case_map|search_tool|reasoning_protocol|out_of_scope_triggers|output_format|default_reply|product_template|license_template|role)>/gi
+function stripLeakedTags(text: string): string {
+  return text.replace(LEAKED_TAG_RE, '').replace(/ {2,}/g, ' ').trim()
+}
+
 const SEARCH_TOOL = {
   functionDeclarations: [
     {
@@ -146,7 +157,7 @@ export async function generateReply(
     }))
 
     if (finishReason2 === 'MAX_TOKENS') return DEFAULT_REPLY
-    return stripLeakedReasoning(finalResponse.text?.trim() || DEFAULT_REPLY) || DEFAULT_REPLY
+    return stripLeakedTags(stripLeakedReasoning(finalResponse.text?.trim() || DEFAULT_REPLY)) || DEFAULT_REPLY
   }
 
   const usage = response.usageMetadata
@@ -162,7 +173,7 @@ export async function generateReply(
   }))
 
   if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
-  return stripLeakedReasoning(response.text?.trim() || DEFAULT_REPLY) || DEFAULT_REPLY
+  return stripLeakedTags(stripLeakedReasoning(response.text?.trim() || DEFAULT_REPLY)) || DEFAULT_REPLY
 }
 
 export async function generateReplyWithImage(
