@@ -184,6 +184,10 @@
     <br><span class="endpoint-method method-delete">DEL</span><code>body:{target:'unanswered'|'freq'}</code> — ล้างข้อมูล
   </div>
   <div class="endpoint channel-admin">
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/image-failures?key=</code> — <code>image_text_failure_log</code> 100 รายการล่าสุด <span style="opacity:.7">(เพิ่ม 2026-08-19, เรื่องที่ 57)</span>
+    <br><span class="endpoint-method method-delete">DEL</span> — ล้างข้อมูลทั้งหมด
+  </div>
+  <div class="endpoint channel-admin">
     <span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=</code> — 100 conversations ล่าสุด (ZSet score order)
     <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=&amp;userId=</code> — messages ของ user คนนั้น
   </div>
@@ -1031,6 +1035,21 @@ if (exactMatch) {
             <li>⬇ icon per row → XLSX บทสนทนานั้น (ไม่จำกัดวัน)</li>
             <li>ปุ่มเขียว "ดาวน์โหลดวันนี้" → Export รายวัน (date Bangkok TZ)</li>
             <li>ปุ่มน้ำเงิน "ดาวน์โหลดทั้งหมด" (2026-07-07 เพิ่มใหม่) → Export ทุกบทสนทนาทุกวัน (จำกัดตาม TTL 30 วัน + 200 ข้อความ/user) · dropdown filter ช่องทางไม่มีผลกับปุ่มทั้ง 2 นี้ (ดาวน์โหลดทุกช่องทางเสมอ)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-purple">/admin/image-failures</span> <span style="opacity:.7;font-size:11px">(ใหม่ 2026-08-19, เรื่องที่ 57)</span></div>
+      <p style="font-size:12px;margin-bottom:8px">Auth: ADMIN_SCHEDULE_PASSWORD (password เดียวกับหน้า Admin อื่น)</p>
+      <div style="font-size:12px">
+        <div>ดู <code>image_text_failure_log</code> (เรื่องที่ 56) — เคส UNAVAILABLE_MSG หลังรูป+ข้อความตามมาเร็ว (LINE/Facebook)
+          <ul style="margin-left:14px;margin-top:4px;color:#64748b">
+            <li>100 รายการล่าสุด · สรุปจำนวนแยกตามสาเหตุด้านบนตาราง</li>
+            <li>ตาราง: เวลา | ช่องทาง | จำนวนรูป | เวลาที่ใช้ | สาเหตุ</li>
+            <li>สาเหตุ: "หมดเวลา (Gemini ช้า)" (<code>gemini_timeout</code>) หรือ "โมเดลตอบไม่ชัดเจน" (<code>model_unclear</code>)</li>
+            <li>Export Excel · ล้างทั้งหมด</li>
+            <li>ไม่แสดง userId ดิบในตาราง</li>
           </ul>
         </div>
       </div>

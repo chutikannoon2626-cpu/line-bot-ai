@@ -1508,6 +1508,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 57 — หน้า Admin ดู `image_text_failure_log` (feature ใหม่ ต่อยอดเรื่องที่ 56)
+
+**ที่มา:** เรื่องที่ 56 บันทึกเหตุการณ์ timeout รูปภาพลง Redis ถาวรแล้ว แต่ยังไม่มีหน้าเว็บให้เข้าไปดู — ต้องเข้า Upstash Console โดยตรงถึงจะเห็นข้อมูล ไม่สะดวกเท่าหน้า Admin อื่นๆ ที่มีอยู่แล้ว (เช่น `/admin/unanswered`)
+
+**สิ่งที่เพิ่ม:** สร้างหน้า Admin ใหม่ตาม pattern เดียวกับ `/admin/unanswered` ทุกประการ (auth ด้วย `ADMIN_SCHEDULE_PASSWORD` ตัวเดิม, สไตล์เดียวกัน, Export Excel, ปุ่มล้างรายการ):
+- [app/api/admin/image-failures/route.ts](app/api/admin/image-failures/route.ts) — GET (ดึง 100 รายการล่าสุดจาก `image_text_failure_log`) + DELETE (ล้างทั้งหมด)
+- [app/admin/image-failures/page.tsx](app/admin/image-failures/page.tsx) — ตารางแสดง เวลา/ช่องทาง/จำนวนรูป/เวลาที่ใช้/สาเหตุ (แปล `gemini_timeout` → "หมดเวลา (Gemini ช้า)", `model_unclear` → "โมเดลตอบไม่ชัดเจน (ไม่ใช่ timeout)") พร้อมสรุปจำนวนแยกตามสาเหตุด้านบนตาราง — ไม่แสดง `userId` ดิบในตาราง (ตามแนวทางเดิมที่ไม่ log/แสดงข้อมูลระบุตัวตนเกินจำเป็น)
+
+**ทดสอบก่อน commit:** `tsc --noEmit` ผ่าน + `next build` ผ่านสมบูรณ์ (ยืนยัน route `/admin/image-failures` และ `/api/admin/image-failures` compile และ generate ถูกต้อง ไม่มี error)
+
+**ทำไมไม่กระทบอย่างอื่น:** เป็นไฟล์ใหม่ 2 ไฟล์เท่านั้น ไม่แก้ไฟล์เดิมไฟล์ไหนเลย ไม่มีหน้า Admin อื่นลิงก์มาหาหน้านี้ (เข้าตรงผ่าน URL เหมือนหน้า Admin อื่นทั้งหมดในระบบ ไม่มี nav กลาง) — ใช้ password เดิมร่วมกับหน้า Admin อื่น ไม่ได้เพิ่ม env var ใหม่
+
+**ขอบเขต:** เพิ่ม 2 ไฟล์ใหม่ ([app/api/admin/image-failures/route.ts](app/api/admin/image-failures/route.ts), [app/admin/image-failures/page.tsx](app/admin/image-failures/page.tsx)) — ไม่กระทบโค้ดเดิมไฟล์ไหนเลย
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
