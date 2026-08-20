@@ -1598,6 +1598,25 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 61 — ขยาย log ถาวรครอบคลุม error ทั่วไปของ webhook (ไม่ใช่แค่รูปภาพ) + แท็บใหม่ในหน้า Admin (LINE + Facebook)
+
+**เคสจริงที่พบ:** 2 เคสในคืนเดียวกัน (1) ลูกค้ายืนยันรูปภาพแล้วพิมพ์ต่อ แต่**ไม่ได้รับคำตอบเลย** (เงียบสนิท) — สงสัยว่า Vercel ฆ่าฟังก์ชันทิ้งเพราะเกิน `maxDuration=60s` ก่อน catch-all จะได้ทำงาน (2) ลูกค้าพิมพ์ข้อความล้วนๆ (ไม่มีรูป) แล้วได้ `UNAVAILABLE_MSG` — เกิดจาก timeout 20 วิของ flow ข้อความทั่วไป — ทั้ง 2 เคสไม่มี log ถาวรรองรับเลย ต้องพึ่ง Vercel live log ซึ่งหมดเวลาเก็บไปแล้วก่อนจะเข้าไปดูทัน (ปัญหาเดิมที่เจอซ้ำเป็นครั้งที่ 3 ในเซสชันนี้)
+
+**สาเหตุ:** เรื่องที่ 56 (persistent log) ครอบคลุมแค่ **path วิเคราะห์รูปภาพ** (`analyzeImageWithText()`) เท่านั้น — จุดอื่นที่อาจทำให้ลูกค้าไม่ได้รับคำตอบยังพึ่ง Vercel live log อย่างเดียว: (1) `GEMINI_UNAVAILABLE` ของ flow ข้อความทั่วไป (2) reply+push ล้มเหลวทั้งคู่ (3) catch-all ท้ายสุดที่ดักทุก error ที่ไม่ถูกจับจุดอื่น
+
+**วิธีแก้:**
+1. เพิ่มฟังก์ชัน `logWebhookError()` ใน [app/api/line-webhook/route.ts](app/api/line-webhook/route.ts) และ [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts) — บันทึกลง Redis key ใหม่ **`webhook_error_log`** (แยกจาก `image_text_failure_log` เดิมเด็ดขาด ไม่กระทบเรื่องที่ 56/57) เรียกใช้ที่ 3 จุด: `gemini_text_timeout` (timeout 20 วิของข้อความทั่วไป), `reply_push_failed` (ส่งไม่สำเร็จทั้งคู่), `webhook_error` (catch-all ท้ายสุด)
+2. เพิ่ม [app/api/admin/webhook-errors/route.ts](app/api/admin/webhook-errors/route.ts) (ไฟล์ใหม่ — GET/DELETE ตาม pattern เดียวกับ `image-failures`)
+3. แก้ [app/admin/image-failures/page.tsx](app/admin/image-failures/page.tsx) เพิ่มเป็น **หน้าแท็บ** — แท็บ 1 "🖼️ รูปภาพตอบไม่ทัน" (เนื้อหา/logic เดิมจากเรื่องที่ 57 ไม่แก้เลย) + แท็บ 2 "⚠️ Error อื่นๆ" (ใหม่ เรียก API ใหม่แยกต่างหาก) — **URL เดิมไม่เปลี่ยน** (`/admin/image-failures`) ตามที่ขอ ไม่ต้องจำลิงก์ใหม่
+
+**ทดสอบก่อน commit:** `tsc --noEmit` ผ่าน + `next build` ผ่านสมบูรณ์ (ยืนยัน route `/api/admin/webhook-errors` ใหม่ และหน้า `/admin/image-failures` ที่แก้แล้ว compile/generate ถูกต้อง ไม่มี error) — เป็นการเพิ่ม logging/UI ล้วนๆ ไม่ใช่การเปลี่ยน logic การตีความ จึงไม่จำเป็นต้องทดสอบผ่าน Gemini จริงแบบผ่าน/ไม่ผ่าน (เหมือนแนวทางเดียวกับเรื่องที่ 57)
+
+**ทำไมไม่กระทบอย่างอื่น:** `logWebhookError()` ห่อด้วย try/catch เหมือนทุกจุดในระบบ (Redis ล่ม = ข้ามไปเฉยๆ) — ไม่เปลี่ยนข้อความที่ลูกค้าเห็นในทั้ง 3 จุดเลยแม้แต่ตัวอักษรเดียว (ยังคงตอบ UNAVAILABLE_MSG/DEFAULT_REPLY/notifyAdmin เหมือนเดิมทุกประการ) — ไม่แตะ `image_text_failure_log`/API เดิม (`/api/admin/image-failures`) แม้แต่บรรทัดเดียว แท็บ 1 จึงทำงานเหมือนเดิม 100% — ไม่แตะ timeout values (20s/35s), ไม่แตะ `lib/prompts.ts`, ไม่แตะ Web Chat (คนละไฟล์) — **ยังไม่ได้แก้ "internal safety-timeout" (ส่วนที่ 2 ที่เคยเสนอไว้คู่กัน)** เพราะซับซ้อนกว่าและเสี่ยงส่งข้อความซ้ำ ต้องออกแบบเพิ่มเติมก่อนแยกต่างหาก
+
+**ขอบเขต:** แก้ 2 ไฟล์เดิม ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts)) + แก้ 1 ไฟล์ ([app/admin/image-failures/page.tsx](app/admin/image-failures/page.tsx)) + เพิ่มไฟล์ใหม่ 1 ไฟล์ ([app/api/admin/webhook-errors/route.ts](app/api/admin/webhook-errors/route.ts)) — **LINE + Facebook เท่านั้น** (Web Chat ไม่มีโครงสร้าง webhook เดียวกัน)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

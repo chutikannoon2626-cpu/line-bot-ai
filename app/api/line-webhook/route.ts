@@ -38,6 +38,20 @@ const ORDER_CONFIRM_RE = /สั่งเลย|อยากสั่ง|ต้�
 const ORDER_CONFIRM_WAIT_MSG = 'กรุณารอสักครู่นะคะ'
 const ORDER_CONFIRM_OFF_HOURS_MSG = 'ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการในช่วงเวลา 08:00–17:00 น. นะคะ ลูกค้าสามารถพิมพ์ข้อความไว้โดยเจ้าหน้าที่จะรีบตอบกลับในวันทำการถัดไปนะคะ'
 
+// บันทึก error ถาวรลง Redis กัน Vercel log หมดเวลาก่อนเช็คทัน (2026-08-20, เรื่องที่ 61) — เคสจริง
+// 2 แบบที่เจอ: (1) ลูกค้าไม่ได้รับคำตอบเลย (19:43 — สงสัยว่า Vercel ฆ่าฟังก์ชันทิ้งเพราะเกิน
+// maxDuration=60s ก่อน catch-all จะได้ทำงาน) (2) ลูกค้าได้ UNAVAILABLE_MSG จาก timeout 20s ของ
+// flow ข้อความทั่วไป (07:01:15) — ทั้ง 2 เคสมีแค่ log ชั่วคราวที่ Vercel เท่านั้น ไม่มีบันทึกถาวร
+// เหมือน image_text_failure_log (เรื่องที่ 56) ที่ครอบคลุมแค่ path วิเคราะห์รูปภาพ — เพิ่ม key แยก
+// ต่างหาก (ไม่ใช้ร่วมกับ image_text_failure_log เดิม กันกระทบเรื่องที่ 56/57) ครอบคลุม 3 จุด:
+// gemini timeout ของข้อความทั่วไป, reply+push ล้มเหลวทั้งคู่, catch-all ท้ายสุด
+async function logWebhookError(entry: { userId: string; channel: 'line' | 'facebook'; type: string; detail: string }) {
+  try {
+    await redis.lpush('webhook_error_log', JSON.stringify({ ts: new Date().toISOString(), ...entry }))
+    await redis.ltrim('webhook_error_log', 0, 499)
+  } catch { /* Redis ล่ม — ข้าม */ }
+}
+
 function getHandoffMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
   return thaiHour >= 18 || thaiHour < 8
@@ -172,6 +186,7 @@ export async function POST(req: NextRequest) {
           } catch (pushErr) {
             log.error('reply.fallback_push_failed', { userId, err: (pushErr as Error).message })
             notifyAdmin(userId, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ (reply+push ล้มเหลวทั้งคู่) กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+            logWebhookError({ userId, channel: 'line', type: 'reply_push_failed', detail: (pushErr as Error).message }).catch(() => {})
           }
         }
       })
@@ -616,9 +631,11 @@ export async function POST(req: NextRequest) {
           const faqText = await fetchFAQ()
           const geminiController = new AbortController()
           const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
+          let geminiFailReason: string | null = null
           const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'line', geminiController.signal)
             .catch((err) => {
-              log.error('gemini.failed', { err: (err as Error).message })
+              geminiFailReason = (err as Error).message
+              log.error('gemini.failed', { err: geminiFailReason })
               return GEMINI_UNAVAILABLE
             })
           clearTimeout(geminiTimeoutId)
@@ -627,6 +644,7 @@ export async function POST(req: NextRequest) {
           if (reply === GEMINI_UNAVAILABLE) {
             await ans(txt(UNAVAILABLE_MSG))
             log.info('reply.gemini_unavailable', { userId })
+            logWebhookError({ userId, channel: 'line', type: 'gemini_text_timeout', detail: geminiFailReason ?? 'unknown' }).catch(() => {})
             return
           }
 
@@ -806,6 +824,7 @@ export async function POST(req: NextRequest) {
 
       } catch (err) {
         log.error('webhook.error', { err: (err as Error).message, userId })
+        logWebhookError({ userId, channel: 'line', type: 'webhook_error', detail: (err as Error).message }).catch(() => {})
         await safeReply([{ type: 'text', text: DEFAULT_REPLY }])
       }
     })

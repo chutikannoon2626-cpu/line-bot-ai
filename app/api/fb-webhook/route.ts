@@ -39,6 +39,15 @@ const ORDER_CONFIRM_RE = /สั่งเลย|อยากสั่ง|ต้�
 const ORDER_CONFIRM_WAIT_MSG = 'กรุณารอสักครู่นะคะ'
 const ORDER_CONFIRM_OFF_HOURS_MSG = 'ขณะนี้อยู่นอกเวลาทำการ โดยเจ้าหน้าที่จะเริ่มให้บริการในช่วงเวลา 08:00–17:00 น. นะคะ ลูกค้าสามารถพิมพ์ข้อความไว้โดยเจ้าหน้าที่จะรีบตอบกลับในวันทำการถัดไปนะคะ'
 
+// บันทึก error ถาวรลง Redis กัน Vercel log หมดเวลาก่อนเช็คทัน — sync กับ line-webhook/route.ts
+// (2026-08-20, เรื่องที่ 61)
+async function logWebhookError(entry: { userId: string; channel: 'line' | 'facebook'; type: string; detail: string }) {
+  try {
+    await redis.lpush('webhook_error_log', JSON.stringify({ ts: new Date().toISOString(), ...entry }))
+    await redis.ltrim('webhook_error_log', 0, 499)
+  } catch { /* Redis ล่ม — ข้าม */ }
+}
+
 function getHandoffMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
   return thaiHour >= 18 || thaiHour < 8
@@ -102,6 +111,7 @@ async function fbSend(psid: string, text: string) {
     } catch (err) {
       log.error('fb.send_failed', { psid, err: (err as Error).message })
       notifyAdminFacebook(psid, '⚠️ ส่งข้อความหาลูกค้าไม่สำเร็จ กรุณาติดต่อลูกค้าเองด้วยค่ะ').catch(() => {})
+      logWebhookError({ userId: `fb:${psid}`, channel: 'facebook', type: 'reply_push_failed', detail: (err as Error).message }).catch(() => {})
     }
   })
 }
@@ -515,9 +525,11 @@ export async function POST(req: NextRequest) {
             const faqText = await fetchFAQ()
             const geminiController = new AbortController()
             const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
+            let geminiFailReason: string | null = null
             const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'facebook', geminiController.signal)
               .catch((err) => {
-                log.error('fb.gemini.failed', { err: (err as Error).message, userId })
+                geminiFailReason = (err as Error).message
+                log.error('fb.gemini.failed', { err: geminiFailReason, userId })
                 return GEMINI_UNAVAILABLE
               })
             clearTimeout(geminiTimeoutId)
@@ -526,6 +538,7 @@ export async function POST(req: NextRequest) {
             if (reply === GEMINI_UNAVAILABLE) {
               await fbSend(psid, UNAVAILABLE_MSG)
               log.info('fb.reply.gemini_unavailable', { userId })
+              logWebhookError({ userId, channel: 'facebook', type: 'gemini_text_timeout', detail: geminiFailReason ?? 'unknown' }).catch(() => {})
               return
             }
 
@@ -884,6 +897,7 @@ export async function POST(req: NextRequest) {
 
         } catch (err) {
           log.error('fb.webhook.error', { err: (err as Error).message, userId })
+          logWebhookError({ userId, channel: 'facebook', type: 'webhook_error', detail: (err as Error).message }).catch(() => {})
           try { await fbSend(psid, DEFAULT_REPLY) } catch { /* swallow */ }
         }
       })
