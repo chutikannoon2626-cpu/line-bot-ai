@@ -582,7 +582,7 @@ export async function POST(req: NextRequest) {
                     .expire(`handoff_notified:${userId}`, 10 * 60)
                     .exec() as [number, number]
                   if (count === 1) {
-                    await fbSend(psid, 'แอดมินจะติดต่อกลับในเวลาทำการนะคะ 🙏\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์)')
+                    await fbSend(psid, 'แอดมินจะรีบติดต่อกลับในเวลาทำการนะคะ 🙏\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์)')
                     log.info('fb.handoff.already_routed_ack', { userId })
                   } else {
                     log.info('fb.handoff.already_routed_silent', { userId, count })
