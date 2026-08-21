@@ -1617,6 +1617,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 62 — กัน `findExactMatch()` ตัดผ่าน `repair_protocol` (ทุกช่องทาง)
+
+**เคสจริงที่พบ:** ลูกค้าแจ้งจอวิทยุแตก บอทถามยืนยันรุ่น+อาการตาม `<repair_protocol>` ลูกค้าตอบ "MODEL TC-11HW ครับ" — บอทกลับตอบ**ราคา/สเปค/ลิงก์สั่งซื้อของ TC-11HW ทันที** เหมือนลูกค้าถามซื้อสินค้าใหม่ ทั้งที่กำลังอยู่กลาง flow แจ้งซ่อม
+
+**สาเหตุ:** [lib/sheet.ts](lib/sheet.ts) ฟังก์ชัน `findExactMatch()` เป็นทางลัดที่ทำงาน**ก่อน** Gemini เสมอ (ทุกช่องทาง) มี `BLOCK_INTENT_RE` กันคำอย่าง "ซ่อม/พัง/เสีย" อยู่แล้ว แต่เช็คแค่**ข้อความปัจจุบัน**เดี่ยวๆ ไม่เคยเห็น conversation history เลย — "MODEL TC-11HW ครับ" ไม่มีคำต้องห้ามและตรง keyword สินค้าพอดี 1 แถว จึงหลุดผ่าน shortcut ไปตอบขายสินค้าแทนที่จะให้ Gemini (ซึ่งมี history เต็ม) จัดการต่อ `repair_protocol`
+
+**วิธีแก้:** เพิ่ม parameter `lastBotTurn?: string` ให้ `findExactMatch()` — ถ้าคำตอบล่าสุดของบอทมีคำว่า "รุ่น" และ "อาการ" ปนกัน (ลักษณะเฉพาะของคำถามยืนยันใน `repair_protocol`) ให้ข้าม shortcut นี้ทันที ปล่อยผ่านให้ Gemini ตอบต่อแทน — แก้ 3 จุดเรียกใช้ ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts), [app/api/web-chat/route.ts](app/api/web-chat/route.ts)) ส่ง bot turn ล่าสุดจาก `history` ที่โหลดไว้อยู่แล้วเข้าไปเพิ่ม ไม่ต้องปรับโครงสร้างอื่น
+
+**ทดสอบก่อน commit:** เป็นฟังก์ชัน deterministic (regex + sheet lookup) ไม่เรียก Gemini เลย จึงไม่มี non-determinism ต้องกังวล — ทดสอบผ่านสคริปต์ชั่วคราวเรียก `findExactMatch()` ตรงๆ ยืนยันว่าเมื่อ `lastBotTurn` มีคำว่า "รุ่น"+"อาการ" ปนกัน ฟังก์ชันคืนค่า `null` (ข้าม shortcut) ถูกต้องตามที่ออกแบบ — ส่วน `tsc --noEmit` และ `next build` ผ่านสมบูรณ์ทั้งคู่ (สคริปต์ทดสอบลบออกจาก repo แล้วก่อน commit)
+
+**ทำไมไม่กระทบอย่างอื่น:** เงื่อนไขใหม่ทำงานเฉพาะเมื่อ bot turn ล่าสุดมีคำว่า "รุ่น"+"อาการ" ปนกันเท่านั้น — บทสนทนาปกติที่ไม่เข้าเงื่อนไขนี้ (ส่วนใหญ่ทั้งหมด) พฤติกรรมเดิมทุกประการ ไม่มีการเปลี่ยนแปลง — ไม่แตะ `BLOCK_INTENT_RE`, การจับคู่ keyword, หรือ logic ส่วนอื่นใน `findExactMatch()` เลย — `repair_protocol` ใช้ร่วมกันทุกช่องทางอยู่แล้ว จึงแก้จุดเดียวมีผลถูกต้องเท่ากันทั้ง LINE/Facebook/Web Chat โดยไม่ต้องแยก logic ตาม channel — ความเสี่ยงที่เหลืออยู่: ข้อความยืนยันของ `repair_protocol` เป็น dynamic text จาก Gemini (ไม่ใช่ค่าคงที่) หากบางครั้งไม่มีคำว่า "รุ่น"+"อาการ" ปนกัน การเช็คนี้จะไม่จับ แต่กรณีนั้นแค่กลับไปเป็นพฤติกรรมเดิมก่อนแก้ ไม่ใช่ regression ใหม่
+
+**ขอบเขต:** แก้ 4 ไฟล์ ([lib/sheet.ts](lib/sheet.ts), [app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts), [app/api/web-chat/route.ts](app/api/web-chat/route.ts)) — มีผลทุกช่องทาง (LINE, Facebook, Web Chat)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

@@ -240,7 +240,8 @@ export async function POST(req: NextRequest) {
     } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
 
     // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
-    const exactMatch = await findExactMatch(message)
+    const lastBotTurn = [...history].reverse().find(t => t.role === 'model')?.text
+    const exactMatch = await findExactMatch(message, lastBotTurn)
     if (exactMatch) {
       try {
         await redis.set(`webchat:last_question:${sessionId}`, message, { ex: LAST_ANSWER_TTL })

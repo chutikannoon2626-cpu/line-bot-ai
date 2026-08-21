@@ -60,10 +60,18 @@ export async function fetchFAQ(): Promise<string> {
 const BLOCK_INTENT_RE = /เสีย|ซ่อม|พัง|ปัญหา|เคลม|ต่างกัน|เปรียบเทียบ|ดีกว่า|ไม่เอา|ไม่ใช่|ยกเลิก|แนะนำ|งบ|เหมาะกับ/u
 const MAX_EXTRA_CHARS = 15 // ข้อความยาวกว่า keyword ที่ match ได้ไม่เกินกี่ตัวอักษร ถึงจะถือว่า "คำถามง่าย"
 
-export async function findExactMatch(userMessage: string): Promise<string | null> {
+// เคสจริง (เรื่องที่ 62): ลูกค้าแจ้งเครื่องเสีย บอทถามยืนยันรุ่น+อาการตาม <repair_protocol>
+// (ข้อความยืนยันเป็น dynamic จาก Gemini ไม่ใช่ค่าคงที่) ลูกค้าตอบแค่ "MODEL TC-11HW ครับ" —
+// BLOCK_INTENT_RE เช็คแค่ข้อความปัจจุบัน ไม่เห็น history เลย ข้อความนี้ไม่มีคำต้องห้ามและตรง
+// keyword สินค้าพอดี 1 แถว จึงหลุดเข้า exact match ไปตอบราคา/สเปคขายสินค้าแทนที่จะไปต่อ
+// repair flow — เพิ่มเช็ค bot turn ล่าสุด ถ้าเป็นคำถามยืนยันของ repair_protocol (มีคำว่า
+// "รุ่น" และ "อาการ" ปนกัน) ให้ข้าม shortcut นี้ ปล่อยให้ Gemini ซึ่งมี history เต็มจัดการต่อ
+
+export async function findExactMatch(userMessage: string, lastBotTurn?: string): Promise<string | null> {
   const msg = userMessage.trim().toLowerCase()
   if (!msg || msg.length > 40) return null   // ยาวเกินไป ไม่ใช่คำถามง่าย
   if (BLOCK_INTENT_RE.test(msg)) return null  // มีคำที่บ่งบอกความต้องการอื่น (ซ่อม/เปรียบเทียบ/ปฏิเสธ/แนะนำ ฯลฯ)
+  if (lastBotTurn && /รุ่น/u.test(lastBotTurn) && /อาการ/u.test(lastBotTurn)) return null // บอทเพิ่งถามยืนยันรุ่น+อาการใน repair_protocol — ปล่อยให้ Gemini จัดการต่อ ไม่ตัดผ่านทางลัด
 
   try {
     const { rows, licenseMap } = await loadSheet()
