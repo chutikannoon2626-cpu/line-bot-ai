@@ -670,6 +670,33 @@ export async function POST(req: NextRequest) {
             const replyMsg = /HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
               ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
               : handoffMsg
+
+            // (เรื่องที่ 64) เดิม path นี้ส่ง replyMsg เต็มซ้ำทุกครั้งไม่จำกัดรอบ ไม่เช็ค alreadyRouted
+            // เลยต่างจาก path shouldHandoffImmediate ข้างบนที่มีระบบกันซ้ำ (routed/handoff_notified)
+            // อยู่แล้ว — ลูกค้าที่ถูก HANDOFF ซ้ำหลายรอบติดกันในหัวข้อเดียวกัน (เช่น ถามต่อเนื่องหลาย
+            // คำถามช่วงกังวลเรื่องเดียวกัน) ได้รับ handoffMsg เดิมซ้ำเป๊ะทุกรอบ — ต่อยอด mechanism เดิม
+            // (routed/handoff_notified) ให้ path นี้ใช้ด้วย ไม่สร้างกลไกใหม่
+            let alreadyRouted = false
+            try {
+              alreadyRouted = !!(await redis.get(`routed:${userId}`))
+            } catch { /* Redis ล่ม */ }
+
+            if (alreadyRouted) {
+              try {
+                const [count] = await redis.pipeline()
+                  .incr(`handoff_notified:${userId}`)
+                  .expire(`handoff_notified:${userId}`, 10 * 60)
+                  .exec() as [number, number]
+                if (count === 1) {
+                  await ans(txt('แอดมินจะติดต่อกลับในเวลาทำการนะคะ 🙏\n🕐 เวลาทำการ 08:00–17:00 น. (จันทร์–เสาร์)'))
+                  log.info('handoff.already_routed_ack', { userId })
+                } else {
+                  log.info('handoff.already_routed_silent', { userId, count })
+                }
+              } catch { /* Redis ล่ม */ }
+              return
+            }
+
             // (เรื่องที่ 37) ไม่ notifyAdmin() อีกต่อไปสำหรับ handoff ข้อความล้วน — แอดมินเช็คแชทเองเป็นปกติ
             // อยู่แล้ว เหมือนที่ตัดสินใจไว้กับ Type D fallback ฝั่งรูปภาพ (เรื่องที่ 35) — notifyAdmin() เอง
             // ยังไม่ได้แตะ ยังใช้อยู่ที่ Type E/G/F+สต็อก ฝั่งรูปภาพตามปกติ (line 313/323/362/370)

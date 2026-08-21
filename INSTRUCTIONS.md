@@ -1651,6 +1651,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 64 — กัน handoffMsg ส่งซ้ำเป๊ะไม่จำกัดรอบเมื่อ HANDOFF ซ้ำติดกัน (LINE + Facebook)
+
+**เคสจริงที่พบ:** ลูกค้าเครื่องหาย กังวลว่าจะถูกนำไปใช้ผิดกฎหมาย/กังวลชื่อตัวเอง/ถามเรื่องแจ้งความ ถามคำถามต่อเนื่องหลายรอบในหัวข้อเดียวกัน — แต่ละรอบที่ Gemini ตัดสินใจ HANDOFF (ผ่าน `repair_protocol`/`self_repair_protocol`) ลูกค้าได้รับข้อความ `handoffMsg` เดิมซ้ำเป๊ะทุกครั้งไม่มีวันเปลี่ยน รู้สึกเหมือนบอทตอบวนเวียนไม่ฟังจริง
+
+**สาเหตุ:** ระบบมีกลไกกันซ้ำ (`routed`/`handoff_notified` Redis key) อยู่แล้วสำหรับ path `shouldHandoffImmediate()` (keyword ตรงๆ เช่น "ขอแอดมิน") — ถ้าลูกค้าโดน handoff ซ้ำภายใน 5 นาที จะได้ข้อความสั้นแทน (ครั้งแรก) แล้วเงียบ (ครั้งถัดไป) กันตอบซ้ำ — แต่ path ที่ Gemini เขียน sentinel **"HANDOFF:"** เองผ่าน `repair_protocol`/`self_repair_protocol`/`imei_protocol` ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts)) **ไม่เคยเช็ค `alreadyRouted` เลย** ส่ง `replyMsg` เต็มซ้ำทุกครั้งไม่จำกัดรอบ และรีเซ็ต `handoff_notified` ทิ้งทุกครั้งด้วยซ้ำ
+
+**วิธีแก้ (ต่อยอด mechanism เดิม ไม่สร้างกลไกใหม่):** เพิ่มเช็ค `alreadyRouted` (จาก `routed:${userId}`) ก่อนตัดสินใจว่าจะส่งอะไร ในบล็อก "HANDOFF:" — ถ้า routed อยู่แล้ว: increment `handoff_notified` counter เหมือน path เดิมทุกประการ (ครั้งแรก = ข้อความสั้น "แอดมินจะติดต่อกลับในเวลาทำการนะคะ...", ครั้งถัดไป = เงียบ) ถ้ายังไม่เคย routed: ทำงานเหมือนเดิมทุกประการ (ส่ง `replyMsg` เต็ม + set `routed`/`takeover` + del `handoff_notified`) — แก้ทั้ง LINE และ Facebook (Facebook มีเงื่อนไข IMEI redirect เพิ่มเติมที่ไม่แตะเลย) — **ไม่แตะ Web Chat** เพราะ `web-chat/route.ts` ใช้ pattern คนละแบบเลย (ไม่มี `routed`/`handoff_notified` ในระบบ)
+
+**ทดสอบก่อน commit:** เป็น control-flow logic ล้วนๆ ไม่เรียก Gemini เลย ไม่มี non-determinism — โครงสร้างโค้ดคัดลอกมาจาก pattern ที่มีอยู่แล้วและพิสูจน์แล้วในโปรดักชัน (`shouldHandoffImmediate` block) แบบคำต่อคำ (Redis key เดียวกัน, TTL เดียวกัน, ข้อความเดียวกัน) — ตรวจสอบด้วย `tsc --noEmit` (ผ่าน) และ `next build` (ผ่านสมบูรณ์) — ไม่ได้ทดสอบ live กับ Redis จริงเพราะ `.env.local` ไม่มี `UPSTASH_REDIS_URL`/`TOKEN` ในเครื่อง (ข้อจำกัดเดิมของ local dev environment)
+
+**ทำไมไม่กระทบอย่างอื่น:** ไม่แตะ path `shouldHandoffImmediate()`/`isOwnerRequest()` เดิมเลยแม้แต่บรรทัดเดียว — เพิ่มแค่เงื่อนไข gate ก่อนบล็อก "HANDOFF:" เท่านั้น ถ้ายังไม่เคย routed พฤติกรรมเดิมทุกประการไม่เปลี่ยนแปลง (ลูกค้าส่วนใหญ่ที่โดน handoff ครั้งแรกจะไม่รู้สึกอะไรเปลี่ยนเลย) — ไม่แตะ `notifyAdmin()`/`notifyAdminFacebook()` เลย (ยังคงเป็นไปตามนโยบายเดิมเรื่องที่ 37/35/42 ไม่ notify แบบเร่งด่วน) — ไม่แตะ Web Chat เพราะสถาปัตยกรรมคนละแบบ ไม่มี state ที่เกี่ยวข้องให้แตะ
+
+**ขอบเขต:** แก้ 2 ไฟล์ ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts)) — LINE + Facebook เท่านั้น (Web Chat ไม่มีโครงสร้าง state เดียวกัน)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
