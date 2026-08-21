@@ -32,8 +32,13 @@ function stripLeakedReasoning(text: string): string {
 // ซ้ำมากในคำสั่งพรอมต์มีโอกาสหลุดปนเข้าคำตอบจริงได้เอง — ตัดทิ้งเป็นตาข่ายรองรับชั้นสุดท้าย
 // นอกเหนือจากกฎห้ามเขียน tag ภายในใน <guardrails> (เรื่องที่ 59, 2026-08-19)
 const LEAKED_TAG_RE = /<\/?(?:faq|guardrails|repair_protocol|self_repair_protocol|imei_protocol|recommend_protocol|use_case_map|search_tool|reasoning_protocol|out_of_scope_triggers|output_format|default_reply|product_template|license_template|role)>/gi
+// เคสจริง (เรื่องที่ 63): กฎเดิมข้างบนกันแค่รูปแบบ tag ที่มีวงเล็บมุม (เช่น "<faq>") แต่ Gemini ยัง
+// เขียนคำว่า "FAQ" เปล่าๆ (ไม่มีวงเล็บ) หลุดเข้าประโยคจริงได้ เช่น "...ไม่ได้ระบุอยู่ในคำตอบของ FAQ
+// โดยตรง" — เพิ่ม lookbehind/lookahead กัน "/" "." "ตัวอักษร" ติดกัน เพื่อไม่ไปตัดคำว่า faq ที่อาจ
+// เป็นส่วนหนึ่งของ URL (เช่น spenderclub.com/faq) ซึ่งห้ามแก้ไข/ตัดคำเด็ดขาดตาม <guardrails>
+const LEAKED_FAQ_WORD_RE = /(?<![/.\w])FAQ(?![/.\w])/gi
 function stripLeakedTags(text: string): string {
-  return text.replace(LEAKED_TAG_RE, '').replace(/ {2,}/g, ' ').trim()
+  return text.replace(LEAKED_TAG_RE, '').replace(LEAKED_FAQ_WORD_RE, 'ระบบ').replace(/ {2,}/g, ' ').trim()
 }
 
 const SEARCH_TOOL = {
