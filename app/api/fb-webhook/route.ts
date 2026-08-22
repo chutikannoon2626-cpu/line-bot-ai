@@ -538,6 +538,9 @@ export async function POST(req: NextRequest) {
             // Gemini ไม่ตอบทัน (timeout, 429, 503)
             if (reply === GEMINI_UNAVAILABLE) {
               await fbSend(psid, UNAVAILABLE_MSG)
+              // (เรื่องที่ 65) เดิมจุดนี้ไม่เรียก saveHistoryExtended() เลย ทำให้ข้อความที่ลูกค้าเพิ่ง
+              // พิมพ์ไปหายจาก history ทันทีที่ Gemini พลาด — sync กับ line-webhook.ts
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: UNAVAILABLE_MSG }])
               log.info('fb.reply.gemini_unavailable', { userId })
               logWebhookError({ userId, channel: 'facebook', type: 'gemini_text_timeout', detail: geminiFailReason ?? 'unknown' }).catch(() => {})
               return

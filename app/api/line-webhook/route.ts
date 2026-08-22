@@ -644,6 +644,12 @@ export async function POST(req: NextRequest) {
           // Gemini ไม่ตอบทัน (timeout, 429, 503) — แจ้งลูกค้าให้ถามใหม่
           if (reply === GEMINI_UNAVAILABLE) {
             await ans(txt(UNAVAILABLE_MSG))
+            // (เรื่องที่ 65) เดิมจุดนี้จุดเดียวในไฟล์ที่ไม่เรียก saveHistoryExtended() เลย — ข้อความ
+            // ที่ลูกค้าเพิ่งพิมพ์ไป (เช่น ข้อมูลลงทะเบียนก้อนใหญ่) หายไปจาก history ทันทีที่ Gemini
+            // พลาด ทำให้ถ้าลูกค้าพิมพ์ตามมาใหม่ภายใน 10 นาที ต้องพิมพ์ข้อมูลเดิมซ้ำทั้งหมดเอง เพราะ
+            // บอทไม่เหลือความจำอะไรจากความพยายามครั้งก่อนเลย — เพิ่มให้ตรงกับ pattern เดิมที่ใช้ทุกจุด
+            // อื่นในไฟล์นี้อยู่แล้ว
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: UNAVAILABLE_MSG }])
             log.info('reply.gemini_unavailable', { userId })
             logWebhookError({ userId, channel: 'line', type: 'gemini_text_timeout', detail: geminiFailReason ?? 'unknown' }).catch(() => {})
             return
