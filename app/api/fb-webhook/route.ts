@@ -16,7 +16,11 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const NOT_FOUND = '[NOT_FOUND]'
-const OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'
+// (เรื่องที่ 67) ตัดวงเล็บออก — Gemini บางครั้งเขียน "OUT_OF_DOMAIN" โดยไม่มีวงเล็บ ทำให้ reply.includes()
+// เดิมพลาด ปล่อยคำสั่งควบคุมดิบหลุดไปให้ลูกค้าเห็น — sync กับ line-webhook.ts/web-chat.ts (ดูจุดที่ 2
+// ด้านล่างด้วย: strict equality ของ postback flow ก็ต้องเปลี่ยนเป็น includes() คู่กัน ไม่งั้นจะกลาย
+// เป็นตรวจพลาดกรณีที่ Gemini ใส่วงเล็บถูกต้องแทน)
+const OUT_OF_DOMAIN = 'OUT_OF_DOMAIN'
 const OUT_OF_DOMAIN_MSG = 'น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ ต้องการสอบถามข้อมูลวิทยุสื่อสารรุ่นไหนคะ'
 const DEFAULT_REPLY = 'ขออภัยค่ะ น้องใจดีไม่พบข้อมูล ต้องการติดต่อแอดมินแจ้งได้เลยนะคะ'
 const PRE_HANDOFF_TTL = 600
@@ -910,7 +914,10 @@ export async function POST(req: NextRequest) {
               .catch(() => GEMINI_UNAVAILABLE)
             clearTimeout(geminiTimeoutId2)
 
-            const finalReply = (reply === NOT_FOUND || reply === OUT_OF_DOMAIN || reply === GEMINI_UNAVAILABLE)
+            // (เรื่องที่ 67) reply === OUT_OF_DOMAIN เปลี่ยนเป็น .includes() เพราะ OUT_OF_DOMAIN ไม่มี
+            // วงเล็บแล้ว (ตัดออกด้านบน) — ถ้ายังใช้ strict equality เดิม จะพลาดกรณี Gemini ใส่วงเล็บ
+            // ถูกต้อง ("[OUT_OF_DOMAIN]" ไม่เท่ากับ "OUT_OF_DOMAIN" เป๊ะ) กลายเป็นสร้างบั๊กใหม่แทน
+            const finalReply = (reply === NOT_FOUND || reply.includes(OUT_OF_DOMAIN) || reply === GEMINI_UNAVAILABLE)
               ? UNAVAILABLE_MSG : reply
 
             // จำคำถามล่าสุดไว้เทียบซ้ำรอบหน้า

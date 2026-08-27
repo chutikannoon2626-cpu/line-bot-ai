@@ -12,7 +12,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const NOT_FOUND          = '[NOT_FOUND]'
-const OUT_OF_DOMAIN      = '[OUT_OF_DOMAIN]'
+// (เรื่องที่ 67) ตัดวงเล็บออก — Gemini บางครั้งเขียน "OUT_OF_DOMAIN" โดยไม่มีวงเล็บ ทำให้ reply.includes()
+// เดิมพลาด ปล่อยคำสั่งควบคุมดิบหลุดไปให้ลูกค้าเห็น — sync กับ line-webhook.ts/fb-webhook.ts
+const OUT_OF_DOMAIN      = 'OUT_OF_DOMAIN'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
 
 const SESSION_TTL     = 30 * 60

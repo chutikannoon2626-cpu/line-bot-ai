@@ -1697,6 +1697,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 67 — กันคำว่า "OUT_OF_DOMAIN" เปล่าๆ (ไม่มีวงเล็บ) หลุดในคำตอบจริง (ทุกช่องทาง)
+
+**เคสจริงที่พบ:** ลูกค้าได้รับคำสั่งควบคุมภายในดิบๆ **"OUT_OF_DOMAIN"** ตรงๆ แทนที่จะได้ข้อความ "น้องใจดีเป็นผู้ช่วยด้านวิทยุสื่อสารเท่านั้นค่ะ..." เกิดซ้ำ 2 ครั้งติดกัน (06:32, 06:37)
+
+**สาเหตุ:** `reasoning_protocol` สั่ง Gemini ให้ตอบ **"[OUT_OF_DOMAIN]"** (มีวงเล็บ) เมื่อคำถามไม่เกี่ยวกับวิทยุสื่อสาร ([lib/prompts.ts:395](lib/prompts.ts#L395)) — แต่ทั้ง 3 ไฟล์ webhook เช็คด้วย `reply.includes(OUT_OF_DOMAIN)` โดย `OUT_OF_DOMAIN = '[OUT_OF_DOMAIN]'` (ต้องมีวงเล็บครบถึงจะตรง) — เมื่อ Gemini เขียนคำนี้ออกมาโดยไม่มีวงเล็บ (non-deterministic, temperature=1.0) เงื่อนไขนี้เป็น false ปล่อยคำสั่งควบคุมดิบหลุดไปให้ลูกค้าเห็นตรงๆ เป็นปัญหาตระกูลเดียวกับเรื่องที่ 36 (HANDOFF:) และเรื่องที่ 63 (FAQ)
+
+**วิธีแก้:** ตัดวงเล็บออกจากค่าคงที่ `OUT_OF_DOMAIN` เป็น `'OUT_OF_DOMAIN'` เฉยๆ ในทั้ง 3 ไฟล์ ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts), [app/api/web-chat/route.ts](app/api/web-chat/route.ts)) ทำให้ `.includes()` จับได้ทั้ง 2 รูปแบบ (มี/ไม่มีวงเล็บ) — พร้อมแก้จุดที่ 2 ใน Facebook ([fb-webhook.ts](app/api/fb-webhook/route.ts), flow ปุ่ม postback) ที่เช็คแบบ **strict equality** (`reply === OUT_OF_DOMAIN`) เปลี่ยนเป็น `.includes()` ด้วย เพื่อไม่ให้กลายเป็นตรวจพลาดกรณี Gemini ใส่วงเล็บถูกต้องแทน (`[OUT_OF_DOMAIN]` ไม่เท่ากับ `'OUT_OF_DOMAIN'` เป๊ะ) — **ไม่แตะ `NOT_FOUND`** ที่มีรูปแบบเสี่ยงแบบเดียวกันแต่ยังไม่มีรายงานว่าหลุดจริง อยู่นอกขอบเขตที่รายงานมา
+
+**ทดสอบก่อน commit:** เป็น string matching ล้วนๆ ไม่เรียก Gemini ไม่มี non-determinism — ทดสอบตรงด้วยสคริปต์ชั่วคราว 8 เคส ผ่านครบ (เคสจริงไม่มีวงเล็บ, เคสปกติมีวงเล็บไม่ regress, คำตอบปกติไม่ถูกกระทบ, `NOT_FOUND`/`GEMINI_UNAVAILABLE` ที่ postback flow ยังทำงานถูกต้องไม่ถูกแตะ) — `tsc --noEmit` และ `next build` ผ่านสมบูรณ์ทั้งคู่ (สคริปต์ทดสอบลบออกจาก repo แล้วก่อน commit)
+
+**ทำไมไม่กระทบอย่างอื่น:** กรณี Gemini ใส่วงเล็บถูกต้องตามปกติ (ส่วนใหญ่) พฤติกรรมเดิมทุกประการ เพราะ `[OUT_OF_DOMAIN]` ยังมีคำว่า "OUT_OF_DOMAIN" ปนอยู่ข้างในอยู่ดี — ไม่แตะ `NOT_FOUND`/`GEMINI_UNAVAILABLE` เลย ทั้ง 2 ตัวยังเช็คแบบเดิมทุกจุด — ไม่แตะ `reasoning_protocol`/prompt เลย แก้แค่ฝั่งตรวจจับ (code-level)
+
+**ขอบเขต:** แก้ 3 ไฟล์ ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts), [app/api/web-chat/route.ts](app/api/web-chat/route.ts)) — มีผลทุกช่องทาง (LINE, Facebook, Web Chat)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
