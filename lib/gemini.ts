@@ -363,7 +363,12 @@ ${multi ? `ตัวอย่างหลายรูปคนละเรื่
           ...base64Images.map(img => ({ inlineData: { mimeType: 'image/jpeg', data: img } })),
         ],
       }],
-      config: { maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
+      // (เรื่องที่ 69) MINIMAL เดิมเสี่ยงอ่าน S/N/IMEI ไม่แม่นยำพอ (ไม่มี temperature=0 คุมความสม่ำเสมอ
+      // แล้วใน 3.6 Flash) ขยับเป็น MEDIUM เพื่อความแม่นยำ — แต่ MEDIUM ใช้ thinking token มากขึ้นมาก
+      // (ทดสอบจริง: เคสส่งหลายรูปพร้อมกันกิน thinking ถึง ~764 token) ถ้าไม่ขยับ maxOutputTokens ตาม
+      // จะโดน MAX_TOKENS ตัดคำตอบก่อนเขียนเสร็จ (ทดสอบแล้วเจอจริงที่ 800) จึงขยับเป็น 2000 คู่กัน
+      // (ทดสอบผ่านที่ 1500 แล้ว เผื่อ margin เพิ่มสำหรับเคสซับซ้อนกว่าที่ทดสอบได้)
+      config: { maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } },
     })
 
     const raw = res.text?.trim() ?? ''
@@ -464,7 +469,12 @@ ${multi ? `ตัวอย่างหลายรูป: {"kind":"confirm","sum
           ...base64Images.map(img => ({ inlineData: { mimeType: 'image/jpeg', data: img } })),
         ],
       }],
-      config: { maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
+      // (เรื่องที่ 69) MINIMAL เดิมเสี่ยงอ่าน S/N/IMEI ไม่แม่นยำพอ (ไม่มี temperature=0 คุมความสม่ำเสมอ
+      // แล้วใน 3.6 Flash) ขยับเป็น MEDIUM เพื่อความแม่นยำ — แต่ MEDIUM ใช้ thinking token มากขึ้นมาก
+      // (ทดสอบจริง: เคสส่งหลายรูปพร้อมกันกิน thinking ถึง ~764 token) ถ้าไม่ขยับ maxOutputTokens ตาม
+      // จะโดน MAX_TOKENS ตัดคำตอบก่อนเขียนเสร็จ (ทดสอบแล้วเจอจริงที่ 800) จึงขยับเป็น 2000 คู่กัน
+      // (ทดสอบผ่านที่ 1500 แล้ว เผื่อ margin เพิ่มสำหรับเคสซับซ้อนกว่าที่ทดสอบได้)
+      config: { maxOutputTokens: 2000, thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM } },
     })
 
     const raw = res.text?.trim() ?? ''

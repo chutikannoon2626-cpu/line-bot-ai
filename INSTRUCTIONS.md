@@ -1727,6 +1727,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 69 — ขยับ thinkingLevel เป็น MEDIUM + maxOutputTokens เป็น 2000 สำหรับฟังก์ชันอ่านรูป (LINE + Facebook, image-flow)
+
+**สาเหตุ:** ต่อเนื่องจากเรื่องที่ 68 (เปลี่ยนโมเดลเป็น Gemini 3.6 Flash) — `analyzeImageIntent()`/`analyzeImageWithText()` (อ่าน S/N/IMEI จากรูป) ตั้ง `thinkingLevel: MINIMAL` ไว้ (เทียบเท่า `thinkingBudget: 300` เดิม) แต่เดิมความแม่นยำ/ความสม่ำเสมอในการอ่านตัวเลขพึ่ง `temperature: 0` เป็นหลัก ซึ่ง Gemini 3.6 Flash ไม่รองรับให้กำหนดเองแล้ว (เรื่องที่ 68) — เพื่อชดเชยความแม่นยำที่อาจลดลง จึงพิจารณาขยับ `thinkingLevel` เป็น `MEDIUM` ให้โมเดล "คิด" ก่อนตอบมากขึ้น
+
+**ปัญหาที่พบระหว่างทดสอบ (ก่อนแก้):** ทดสอบตรงพบว่า `thinkingLevel: MEDIUM` ใช้ thinking token มากขึ้นมาก (เคสรูปเดี่ยวง่ายๆ ใช้ถึง ~405 token, เคส**ส่งหลายรูปพร้อมกัน**ใช้ถึง ~764 token) — เพราะ thinking token กับคำตอบจริงใช้เพดาน `maxOutputTokens` เดียวกัน (ไม่ได้แยกงบ) ถ้าไม่ขยับ `maxOutputTokens` ตาม (ยังคงที่ 800 เดิม) **เคสส่งหลายรูปพร้อมกันจะโดน MAX_TOKENS ตัดคำตอบก่อนเขียนเสร็จจริง** (ทดสอบเจอ finishReason: MAX_TOKENS จริง คำตอบดิบไม่ครบเป็น JSON ที่ parse ไม่ได้ → ตกไปที่ `unclear` แทน ซึ่งแย่กว่าพฤติกรรมเดิม)
+
+**วิธีแก้:** ปรับ 2 พารามิเตอร์พร้อมกันใน [lib/gemini.ts](lib/gemini.ts) ทั้ง `analyzeImageIntent()` และ `analyzeImageWithText()`: `thinkingLevel` จาก `MINIMAL` เป็น `MEDIUM` และ `maxOutputTokens` จาก `800` เป็น `2000` (ทดสอบยืนยันว่า `1500` ผ่านเคสหนักสุดที่ทดสอบได้แล้ว ตั้ง `2000` เผื่อ margin เพิ่มสำหรับเคสจริงที่อาจซับซ้อนกว่า)
+
+**ทดสอบก่อน commit:** ทดสอบผ่าน Gemini API จริงหลายรอบ: (1) เทียบ `MINIMAL` vs `MEDIUM` เคสรูปเดี่ยว ยืนยัน token ที่ใช้เพิ่มขึ้นจริงแต่ยังไม่ชน MAX_TOKENS ที่ 800 (2) เคสส่ง 2 รูปพร้อมกันที่ `maxOutputTokens: 800` → **พิสูจน์ได้จริงว่าพัง (MAX_TOKENS)** (3) เคสเดียวกันที่ `1500` → ผ่าน (STOP, JSON ถูกต้องสมบูรณ์) (4) เรียกฟังก์ชันจริง (`analyzeImageIntent()`/`analyzeImageWithText()`) ที่ `maxOutputTokens: 2000` ทั้งเคสรูปเดี่ยวและหลายรูป ผ่านหมดไม่มี error — `tsc --noEmit`/`next build` ผ่านสมบูรณ์ (สคริปต์ทดสอบลบออกจาก repo แล้วก่อน commit)
+
+**ทำไมไม่กระทบอย่างอื่น:** แก้เฉพาะ config ของ 2 ฟังก์ชันนี้เท่านั้น ไม่แตะ `generateReply()`/`generateReplyWithImage()` (ซึ่งมี `maxOutputTokens`/`thinkingConfig` ของตัวเองแยกต่างหากอยู่แล้ว ไม่ได้ใช้ค่าเดียวกัน) — ไม่แตะ prompt/logic การจำแนกประเภทรูปเลย แก้แค่พารามิเตอร์เรียก API — **ต้นทุนที่เพิ่มขึ้น (ยอมรับแล้ว):** ใช้ thinking token มากขึ้น = ต้นทุนต่อครั้งสูงขึ้นและอาจใช้เวลาตอบนานขึ้นเล็กน้อย เป็นการแลกที่ตั้งใจเพื่อความแม่นยำ
+
+**ขอบเขต:** แก้ไฟล์เดียว ([lib/gemini.ts](lib/gemini.ts)) เฉพาะ 2 ฟังก์ชันอ่านรูป — มีผล LINE + Facebook เท่านั้น (Web Chat ไม่มี image-flow นี้)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
