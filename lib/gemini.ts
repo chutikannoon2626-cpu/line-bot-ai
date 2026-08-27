@@ -301,6 +301,37 @@ export type ImageIntent =
 // 1 รูป ให้ Gemini สรุปแยกรายรูป ถ้าทุกรูปเป็นสินค้าตัวเดียวกันชัดเจนถึงจะใช้ kind:"product" ได้
 // ถ้าเป็นสินค้าคนละตัว/คนละประเภทกัน ให้ตกไป kind:"other" พร้อมสรุปแยกรายรูปแทน กันเมนู 3 ปุ่ม
 // (ผูกกับสินค้าเดียว) ไปจับคู่ผิดกับรูปที่ไม่ตรงกัน
+//
+// (เรื่องที่ 70, 2026-08-27) เดิมพึ่ง temperature=0 คุมความสม่ำเสมอการอ่าน S/N/IMEI จากรูป แต่
+// Gemini 3.6 Flash ไม่รองรับให้กำหนดเองแล้ว (เรื่องที่ 68) ทดสอบจริงพบว่าอ่าน IMEI ตกหล่นไป 1 หลัก
+// ได้จริง (1/5 ครั้ง) โดยไม่รู้ตัวว่าอ่านผิด (ไม่ขอให้ยืนยัน/ถ่ายใหม่ตามที่ guardrails สั่งไว้) — IMEI
+// มีมาตรฐานสากล: ยาว 15 หลักเป๊ะ + มีเลขตรวจสอบ (checksum) ตามสูตร Luhn ใช้ตรวจจับความผิดพลาดได้
+// จริงโดยไม่ต้องพึ่งดุลพินิจของ Gemini เอง — ใช้เฉพาะกับ IMEI เท่านั้น ห้ามใช้กับ S/N เด็ดขาด (S/N
+// ไม่มีมาตรฐาน checksum แบบเดียวกัน)
+function isValidImeiChecksum(imei: string): boolean {
+  if (!/^\d{15}$/.test(imei)) return false
+  let sum = 0
+  for (let i = 0; i < 15; i++) {
+    let digit = Number(imei[14 - i])
+    if (i % 2 === 1) {
+      digit *= 2
+      if (digit > 9) digit -= 9
+    }
+    sum += digit
+  }
+  return sum % 10 === 0
+}
+
+// หาเลขที่ Gemini ระบุว่าเป็น "IMEI" ในข้อความ (ไม่แตะเลข S/N ที่อาจอยู่ใกล้กัน) แล้วตรวจสอบทุกตัวที่
+// เจอ — ไม่พบ IMEI เลยถือว่าผ่าน (ข้อความนี้ไม่เกี่ยวกับ IMEI เลย ไม่ต้องตรวจ)
+function allImeiMentionsValid(text: string): boolean {
+  const matches = [...text.matchAll(/IMEI[:\s]*?(\d{4,17})/gi)]
+  return matches.every((m) => isValidImeiChecksum(m[1]))
+}
+
+const IMEI_MISREAD_MSG =
+  'เห็นเลข IMEI ในรูปแต่ไม่แน่ใจว่าอ่านครบถูกต้องทุกหลักหรือไม่ รบกวนตรวจสอบเลข IMEI จากเครื่องอีกครั้ง หรือถ่ายรูปให้ชัดขึ้นแล้วส่งมาใหม่ได้ไหมคะ 🙏'
+
 export async function analyzeImageIntent(base64Images: string[]): Promise<ImageIntent> {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? '' })
   const multi = base64Images.length > 1
@@ -384,7 +415,12 @@ ${multi ? `ตัวอย่างหลายรูปคนละเรื่
       return { kind: 'product', product: json.product.trim() }
     }
     if (json.kind === 'other' && typeof json.confirmMessage === 'string' && json.confirmMessage.trim()) {
-      return { kind: 'other', summary: String(json.summary ?? '').trim(), confirmMessage: json.confirmMessage.trim() }
+      const confirmMessage = json.confirmMessage.trim()
+      const summary = String(json.summary ?? '').trim()
+      if (!allImeiMentionsValid(confirmMessage) || !allImeiMentionsValid(summary)) {
+        return { kind: 'other', summary, confirmMessage: IMEI_MISREAD_MSG }
+      }
+      return { kind: 'other', summary, confirmMessage }
     }
     return { kind: 'unclear' }
   } catch {
@@ -487,7 +523,12 @@ ${multi ? `ตัวอย่างหลายรูป: {"kind":"confirm","sum
       return { kind: 'ackHandoff', message: json.message.trim() }
     }
     if (json.kind === 'confirm' && typeof json.confirmMessage === 'string' && json.confirmMessage.trim()) {
-      return { kind: 'confirm', summary: String(json.summary ?? '').trim(), confirmMessage: json.confirmMessage.trim() }
+      const confirmMessage = json.confirmMessage.trim()
+      const summary = String(json.summary ?? '').trim()
+      if (!allImeiMentionsValid(confirmMessage) || !allImeiMentionsValid(summary)) {
+        return { kind: 'confirm', summary, confirmMessage: IMEI_MISREAD_MSG }
+      }
+      return { kind: 'confirm', summary, confirmMessage }
     }
     return { kind: 'unclear' }
   } catch {
