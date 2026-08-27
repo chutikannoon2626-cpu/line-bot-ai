@@ -1,9 +1,15 @@
-import { GoogleGenAI } from '@google/genai'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { buildSystemPrompt } from './prompts'
 import { searchSpenderSites, searchSpenderRecommend } from './websearch'
 import type { Turn } from './history'
 
-const MODEL = 'gemini-2.5-flash'
+// (เรื่องที่ 68, 2026-08-27) เปลี่ยนจาก gemini-2.5-flash เป็น gemini-3.6-flash — 2.5 Flash เริ่มเจอ
+// 503 "high demand" ถี่ขึ้นเรื่อยๆ (มีรายงานใน Google AI Developers Forum ว่าโมเดลเริ่มด้อยลงก่อน
+// วันเลิกใช้งานจริง 16 ต.ค. 2569) — 3.6 Flash เป็น GA แล้วตั้งแต่ 21 ก.ค. 2569
+// 3.6 Flash ไม่รองรับ temperature ที่กำหนดเอง (ใส่มาจะถูกเพิกเฉยเงียบๆ) จึงตัดออกจากทุกจุดที่เคย
+// ตั้งไว้ — และ thinkingConfig.thinkingBudget (ตัวเลข) ถูกยกเลิก ต้องใช้ thinkingLevel (string:
+// minimal/low/medium/high) แทน ใช้ทั้ง 2 พารามิเตอร์นี้พร้อมกันจะ error 400 ทันที
+const MODEL = 'gemini-3.6-flash'
 
 const RECOMMEND_RE = /รุ่นไหนดี|แนะนำ|เหมาะก[ับ]|เปรียบเทียบ|ต่างกัน|เหมือนกัน|ดีกว่า|ราคาถูกกว่า|ราคาไม่เกิน|งบ.{0,15}บาท|ซื้อรุ่นไหน|เลือกรุ่น|เหมาะสำหรับ|ใช้กับอะไร|เหมาะกับงาน/i
 
@@ -96,9 +102,8 @@ export async function generateReply(
       systemInstruction: systemPrompt,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tools: [SEARCH_TOOL] as any,
-      temperature: 1.0,
       maxOutputTokens: 3072,
-      thinkingConfig: { thinkingBudget: 1024 },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
       abortSignal,
     },
   })
@@ -148,9 +153,8 @@ export async function generateReply(
       contents: updatedContents as any,
       config: {
         systemInstruction: systemPrompt,
-        temperature: 1.0,
         maxOutputTokens: 3072,
-        thinkingConfig: { thinkingBudget: 1024 },
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
         abortSignal,
       },
     })
@@ -207,7 +211,7 @@ export async function generateReplyWithImage(
           ],
         },
       ],
-      config: { maxOutputTokens: 400, temperature: 0 },
+      config: { maxOutputTokens: 400 },
     })
 
     const raw = extractRes.text?.trim() ?? ''
@@ -265,7 +269,6 @@ export async function generateReplyWithImage(
     ],
     config: {
       systemInstruction: `${systemPrompt}${webContext}${ocrContext}`,
-      temperature: 1.0,
       maxOutputTokens: 1024,
     },
   })
@@ -360,7 +363,7 @@ ${multi ? `ตัวอย่างหลายรูปคนละเรื่
           ...base64Images.map(img => ({ inlineData: { mimeType: 'image/jpeg', data: img } })),
         ],
       }],
-      config: { maxOutputTokens: 800, temperature: 0, thinkingConfig: { thinkingBudget: 300 } },
+      config: { maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
     })
 
     const raw = res.text?.trim() ?? ''
@@ -461,7 +464,7 @@ ${multi ? `ตัวอย่างหลายรูป: {"kind":"confirm","sum
           ...base64Images.map(img => ({ inlineData: { mimeType: 'image/jpeg', data: img } })),
         ],
       }],
-      config: { maxOutputTokens: 800, temperature: 0, thinkingConfig: { thinkingBudget: 300 } },
+      config: { maxOutputTokens: 800, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
     })
 
     const raw = res.text?.trim() ?? ''

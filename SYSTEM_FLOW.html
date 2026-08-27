@@ -632,7 +632,7 @@ NOT_FOUND / OUT_OF_DOMAIN / GEMINI_UNAVAILABLE → UNAVAILABLE_MSG
 <!-- ─── GEMINI FLOW ─── -->
 <div class="section" id="gemini-flow">
   <h2>🧠 Gemini 2-Call Flow</h2>
-  <div class="tip">ไฟล์: <span class="file-badge">lib/gemini.ts</span> · Model: <code>gemini-2.5-flash</code> · Temperature: 1.0 (text) / 0 (OCR) · Max tokens: 3072 (text) · thinkingBudget: 1024 (text เท่านั้น — generateReplyWithImage ยังเป็น 1024/400 เดิม ไม่แตะ)</div>
+  <div class="tip">ไฟล์: <span class="file-badge">lib/gemini.ts</span> · Model: <code>gemini-3.6-flash</code> (เปลี่ยนจาก <code>gemini-2.5-flash</code> — เรื่องที่ 68, 2026-08-27) · Max tokens: 3072 (text) · thinkingConfig: <code>thinkingLevel: MEDIUM</code> (text) / <code>MINIMAL</code> (image classification) — 3.6 Flash ไม่รองรับ temperature ที่กำหนดเองแล้ว (ถูกเพิกเฉยเงียบๆ ถ้าใส่) จึงตัดออกทุกจุด และ thinkingBudget (ตัวเลข) ถูกยกเลิก เปลี่ยนเป็น thinkingLevel (enum) แทน</div>
   <div class="card">
     <div class="flow-box"><strong>Call 1</strong> — Gemini + SEARCH_TOOL function declaration
 <code>search_spender_specs(query: string)</code>
@@ -878,10 +878,9 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </div>
     <div class="card">
       <div class="card-title"><span class="badge badge-purple">Gemini & Search</span></div>
-      <div class="const-row"><span class="const-name">Model</span><span class="const-val">gemini-2.5-flash</span></div>
-      <div class="const-row"><span class="const-name">Temperature (text)</span><span class="const-val">1.0</span></div>
-      <div class="const-row"><span class="const-name">Temperature (OCR)</span><span class="const-val">0</span></div>
-      <div class="const-row"><span class="const-name">Max tokens (text)</span><span class="const-val">3072 · thinkingBudget 1024</span></div>
+      <div class="const-row"><span class="const-name">Model</span><span class="const-val">gemini-3.6-flash (เรื่องที่ 68)</span></div>
+      <div class="const-row"><span class="const-name">Temperature</span><span class="const-val">ไม่รองรับแล้วใน 3.6 Flash — ตัดออกทุกจุด</span></div>
+      <div class="const-row"><span class="const-name">Max tokens (text)</span><span class="const-val">3072 · thinkingLevel MEDIUM</span></div>
       <div class="const-row"><span class="const-name">Max tokens (OCR extract)</span><span class="const-val">400</span></div>
       <div class="const-row"><span class="const-name">Max tokens (OCR product name)</span><span class="const-val">50</span></div>
       <div class="const-row"><span class="const-name">Serper fetch timeout</span><span class="const-val">5s</span></div>

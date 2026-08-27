@@ -1713,6 +1713,20 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 68 — เปลี่ยนโมเดลจาก Gemini 2.5 Flash เป็น Gemini 3.6 Flash (ทุกฟังก์ชัน)
+
+**สาเหตุ:** เจอ error 503 "high demand" จาก Gemini ถี่ขึ้นเรื่อยๆ (เกิดซ้ำหลายวันติดกัน 20, 21, 25, 26 ส.ค.) — ค้นข้อมูลพบรายงานใน Google AI Developers Forum ว่า Gemini 2.5 Flash เริ่มด้อยประสิทธิภาพ/ใช้งานไม่ได้ก่อนวันเลิกใช้งานจริง (16 ต.ค. 2569) ตรงกับสมมติฐานที่ตั้งไว้ — Gemini 3.6 Flash เป็น GA (เสถียรพร้อมใช้งานจริง) แล้วตั้งแต่ 21 ก.ค. 2569 เป็นรุ่นที่ Google แนะนำให้ย้ายไป
+
+**วิธีแก้:** เปลี่ยน `const MODEL = 'gemini-2.5-flash'` เป็น `'gemini-3.6-flash'` ใน [lib/gemini.ts](lib/gemini.ts) (จุดเดียว ใช้ร่วมกันทุกฟังก์ชัน) — ค้นเพิ่มพบว่า 3.6 Flash **ไม่รองรับ `temperature` ที่กำหนดเองแล้ว** (ใส่มาจะถูกเพิกเฉยเงียบๆ ไม่ error) จึงตัดออกจากทุกจุดที่เคยตั้งไว้ (`generateReply()` 2 จุด, `generateReplyWithImage()` 2 จุด, `analyzeImageIntent()`/`analyzeImageWithText()` 2 จุด) และ **`thinkingConfig.thinkingBudget` (ตัวเลข) ถูกยกเลิกในเจน 3.x** ต้องใช้ `thinkingLevel` (enum: `ThinkingLevel.MINIMAL`/`LOW`/`MEDIUM`/`HIGH`) แทน (ใช้ทั้ง 2 พารามิเตอร์พร้อมกันจะ error 400 ทันที) — แมปตามเจตนาเดิม: budget 1024 (`generateReply()`, งานสนทนา/ใช้ tool) → `ThinkingLevel.MEDIUM` (ค่า default มาตรฐาน), budget 300 (`analyzeImageIntent()`/`analyzeImageWithText()`, งานจำแนกประเภท/สกัดข้อมูล) → `ThinkingLevel.MINIMAL` (ตรงกับคำอธิบายที่ Google ให้ไว้: "for high-volume, simple tasks like extraction, routing, or classification")
+
+**ทดสอบก่อน commit:** เป็นการเปลี่ยนโมเดล + พารามิเตอร์ที่กระทบพฤติกรรม Gemini โดยตรง จึงทดสอบผ่าน Gemini API จริงครบทุกฟังก์ชัน: `generateReply()` 4 เคส (ตอบจาก FAQ ตรง, out-of-domain ตอบ `[OUT_OF_DOMAIN]` ถูกต้อง, ทักทายทั่วไป, ค้นเว็บเมื่อไม่เจอใน FAQ) ผ่านหมด ไม่มี error, ไม่มี tag/sentinel หลุด — `analyzeImageIntent()`/`analyzeImageWithText()` สโมคเทสต์ยืนยัน API call กับ `thinkingLevel: MINIMAL` ทำงานถูกต้องไม่ error — `tsc --noEmit` และ `next build` ผ่านสมบูรณ์ทั้งคู่ (สคริปต์ทดสอบลบออกจาก repo แล้วก่อน commit)
+
+**ทำไมไม่กระทบอย่างอื่น:** แก้ไฟล์เดียว ([lib/gemini.ts](lib/gemini.ts)) เป็น shared lib ใช้ร่วมกันทุกช่องทางอยู่แล้ว — ไม่แตะ prompt (`lib/prompts.ts`), ไม่แตะ logic การตัดสินใจ/routing ใดๆ ในไฟล์ webhook เลย — **ข้อจำกัดที่ต้องยอมรับ (ไม่มีทางเลี่ยงได้):** ไม่สามารถคง temperature=0/1.0 แบบเดิมได้อีกต่อไปเพราะ API ไม่รองรับแล้ว หมายความว่าความแม่นยำแบบ deterministic ของการอ่าน S/N/IMEI จากรูป (เดิมพึ่ง temperature=0) จะขึ้นกับค่าที่ Google กำหนดภายในเองแทน — เป็นข้อจำกัดของแพลตฟอร์ม ไม่ใช่สิ่งที่แก้เพิ่มได้ในโค้ดฝั่งเรา
+
+**ขอบเขต:** แก้ 1 ไฟล์ ([lib/gemini.ts](lib/gemini.ts)) — มีผลทุกช่องทางและทุกฟังก์ชัน (text-flow, image-flow ทั้ง LINE/Facebook/Web Chat)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
