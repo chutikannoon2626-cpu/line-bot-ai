@@ -28,9 +28,12 @@ async function loadSheet(): Promise<Sheet> {
     const url = process.env.SHEET_CSV_URL
     if (!url) throw new Error('SHEET_CSV_URL not set')
 
+    // (เรื่องที่ 71) ขยับจาก 3s เป็น 8s — เจอเคสจริงที่ดึงชีตไม่ทัน 3 วิพอดี ทำให้ตอบลูกค้าผิดว่า
+    // "ไม่พบข้อมูล" ทั้งที่แค่เครือข่าย/Google Sheets ช้าชั่วคราว — งบเวลารวมยังปลอดภัย (8s + Gemini
+    // 20s + ส่งข้อความ ~5s ยังห่างจากเพดาน Vercel maxDuration=60s มาก)
     const res = await fetch(url, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) throw new Error(`sheet fetch ${res.status}`)
 

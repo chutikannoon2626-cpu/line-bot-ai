@@ -527,7 +527,19 @@ export async function POST(req: NextRequest) {
             }
 
 
-            const faqText = await fetchFAQ()
+            // (เรื่องที่ 72) sync กับ line-webhook.ts — เดิม fetchFAQ() ที่นี่ไม่มี try/catch ของตัวเอง
+            // ทำให้ error ทะลุไปถึง catch-all นอกสุดซึ่งไม่บันทึก history แยกจับเฉพาะจุดนี้ต่างหาก
+            // ให้ผลเหมือน GEMINI_UNAVAILABLE ทุกประการ (เรื่องที่ 65)
+            let faqText: string
+            try {
+              faqText = await fetchFAQ()
+            } catch (err) {
+              log.error('fb.faq.fetch_failed', { err: (err as Error).message, userId })
+              logWebhookError({ userId, channel: 'facebook', type: 'webhook_error', detail: (err as Error).message }).catch(() => {})
+              await fbSend(psid, DEFAULT_REPLY)
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: DEFAULT_REPLY }])
+              return
+            }
             const geminiController = new AbortController()
             const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
             let geminiFailReason: string | null = null

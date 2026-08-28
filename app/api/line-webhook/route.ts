@@ -633,7 +633,23 @@ export async function POST(req: NextRequest) {
             return
           }
 
-          const faqText = await fetchFAQ()
+          // (เรื่องที่ 72) เดิม fetchFAQ() ที่นี่ไม่มี try/catch ของตัวเอง — ถ้าดึงชีตไม่ทันแล้วไม่มี
+          // cache เก่าให้ fallback จะโยน error ทะลุไปถึง catch-all นอกสุดของไฟล์ ซึ่งไม่บันทึก history
+          // (ต่างจาก GEMINI_UNAVAILABLE ที่แก้ไปแล้วในเรื่องที่ 65) ทำให้ข้อความลูกค้าหายจากความจำบอท
+          // ทันที — เคสจริง: ลูกค้าส่งข้อมูลลงทะเบียนเครื่องก้อนใหญ่ (ชื่อ/เบอร์/อีเมล/IMEI) ชนจุดนี้พอดี
+          // แยกจับเฉพาะจุดนี้ต่างหาก (ไม่แก้ catch-all เหมารวม เพราะจุดนั้นดักจับ error จากหลายส่วน
+          // ของโค้ดพร้อมกัน ไม่รู้แน่ชัดว่ามีข้อมูลลูกค้าที่ถูกต้องให้บันทึกเสมอไป) ให้ผลเหมือน
+          // GEMINI_UNAVAILABLE ทุกประการ: บันทึก history + ตอบข้อความเดิม (DEFAULT_REPLY) ไม่เปลี่ยน
+          let faqText: string
+          try {
+            faqText = await fetchFAQ()
+          } catch (err) {
+            log.error('faq.fetch_failed', { err: (err as Error).message, userId })
+            logWebhookError({ userId, channel: 'line', type: 'webhook_error', detail: (err as Error).message }).catch(() => {})
+            await ans(txt(DEFAULT_REPLY))
+            await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: DEFAULT_REPLY }])
+            return
+          }
           const geminiController = new AbortController()
           const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
           let geminiFailReason: string | null = null
