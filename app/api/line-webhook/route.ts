@@ -663,7 +663,21 @@ export async function POST(req: NextRequest) {
 
           // Gemini ไม่ตอบทัน (timeout, 429, 503) — แจ้งลูกค้าให้ถามใหม่
           if (reply === GEMINI_UNAVAILABLE) {
-            await ans(txt(UNAVAILABLE_MSG))
+            // (เรื่องที่ 73) เดิมเรียก ans() ซึ่งถ้าเป็นข้อความแรกของวัน (greetFirst) จะพยายาม
+            // safeReply() (ใช้ replyToken) ส่งทักทายก่อนเสมอ — จุดนี้รู้แน่ชัดอยู่แล้วว่าผ่านการรอ
+            // Gemini เต็ม 20 วิ (หรือพลาดเร็วก็ตาม) มาก่อนถึงจะมาถึงบล็อกนี้ได้ replyToken จึงมีโอกาส
+            // หมดอายุสูงมาก (พบจริง 3/3 เคส "400 Bad Request" จาก log จริง) เป็นปัญหาเดียวกับที่เคย
+            // แก้ไปแล้วสำหรับฝั่งวิเคราะห์รูปภาพด้วย pushOnly() (2026-08-04 คอมเมนต์ด้านบน) แต่ยังไม่
+            // เคยแก้ฝั่งข้อความทั่วไป — ข้าม safeReply() ไปเลย ใช้ safePush() ตรงๆ ทั้งทักทาย (ถ้ามี)
+            // และคำตอบรวมเป็นชุดเดียวกัน ไม่เสียเวลาลอง reply ที่รู้อยู่แล้วว่าจะพัง — จำกัดเฉพาะจุดนี้
+            // จุดเดียว ไม่แตะ ans() ที่ใช้ร่วมกับจุดตอบสำเร็จอื่นๆ ทั้งหมด
+            const unavailMsgs: messagingApi.Message[] = []
+            if (greetFirst && !greetReplied) {
+              unavailMsgs.push({ type: 'text', text: getWelcomeMessage() })
+              greetReplied = true
+            }
+            unavailMsgs.push(...txt(UNAVAILABLE_MSG))
+            await safePush(unavailMsgs)
             // (เรื่องที่ 65) เดิมจุดนี้จุดเดียวในไฟล์ที่ไม่เรียก saveHistoryExtended() เลย — ข้อความ
             // ที่ลูกค้าเพิ่งพิมพ์ไป (เช่น ข้อมูลลงทะเบียนก้อนใหญ่) หายไปจาก history ทันทีที่ Gemini
             // พลาด ทำให้ถ้าลูกค้าพิมพ์ตามมาใหม่ภายใน 10 นาที ต้องพิมพ์ข้อมูลเดิมซ้ำทั้งหมดเอง เพราะ
