@@ -67,7 +67,9 @@ function getHandoffMessage(): string {
 // คำขอเข้า/ลบกลุ่มที่ตรวจจับได้ทันที (isSpendernetworkRequest), และ guardrail กำกวมใน lib/prompts.ts (2026-08-01)
 function getSpendernetworkRedirectMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
-  const base = 'เกี่ยวกับการเข้า/ลบกลุ่มสาธารณะ หรือการใช้งาน/ปัญหาระบบ Spendernetwork รบกวนลูกค้าแอดไลน์ @spenderclub ได้เลยนะคะ 😊 มีทีมซัพพอร์ตพร้อมดูแลลูกค้าโดยตรง ให้บริการตั้งแต่เวลา 08:00–17:00 น. ค่ะ'
+  // (เรื่องที่ 75) จัดบรรทัดใหม่ให้อ่านง่ายขึ้นบน Messenger + แก้ "Spendernetwork" เป็น "Spender Network"
+  // (มีเว้นวรรค) ให้ตรงกับชื่อที่ใช้ในข้อความต้อนรับจริง (lib/greeting.ts) ซึ่งเดิมเขียนไม่ตรงกัน
+  const base = 'เกี่ยวกับ Spender Network ไม่ว่าจะเป็นเรื่องการเข้ากลุ่ม การลบกลุ่มสาธารณะ หรือปัญหาการใช้งานระบบ\n\nเพื่อให้ทีมงานสามารถดูแลและติดตามปัญหาได้อย่างครบถ้วน สามารถแอดไลน์ @spenderclub ได้เลยนะคะ 😊\n\nมีทีมซัพพอร์ตพร้อมให้คำแนะนำและดูแลลูกค้าโดยตรง\n🕗 ให้บริการตั้งแต่เวลา 08:00–17:00 น. ค่ะ'
   return thaiHour >= 18 || thaiHour < 8
     ? `ขณะนี้อยู่นอกเวลาทำการค่ะ 🙏 ${base}`
     : base

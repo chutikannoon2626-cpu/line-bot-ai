@@ -1813,6 +1813,20 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 75 — ปรับข้อความชี้ทาง Spender Network/กลุ่ม ให้อ่านง่ายขึ้น (Facebook เท่านั้น)
+
+**สาเหตุ:** ตรวจสอบข้อความชี้ทางไปแอดไลน์ @spenderclub ที่ใช้เมื่อลูกค้าถามเรื่องเข้า/ลบกลุ่มสาธารณะหรือปัญหาระบบ Spender Network (เฉพาะ Facebook) พบว่าเป็นพารากราฟยาวก้อนเดียว อ่านยากบนหน้าจอมือถือ และใช้ชื่อ "Spendernetwork" (คำเดียวติดกัน) ไม่ตรงกับชื่อ "Spender Network" (มีเว้นวรรค) ที่ใช้ในข้อความต้อนรับลูกค้าจริงอยู่แล้ว ([lib/greeting.ts:20](lib/greeting.ts#L20))
+
+**วิธีแก้:** จัดข้อความใหม่เป็นหลายบรรทัด (หัวข้อ / เหตุผล+วิธีติดต่อ / ทีมซัพพอร์ต+เวลาทำการ) แก้ชื่อเป็น "Spender Network" ให้ตรงกับข้อความต้อนรับ เพิ่มประโยคอธิบายเหตุผลที่ให้แอดไลน์ ("เพื่อให้ทีมงานสามารถดูแลและติดตามปัญหาได้อย่างครบถ้วน") — แก้ 2 จุดที่ใช้ข้อความนี้ (`getSpendernetworkRedirectMessage()` ใน [fb-webhook.ts:70](app/api/fb-webhook/route.ts#L70) และ `groupIntentFallback` ฝั่ง Facebook ใน [lib/prompts.ts:140](lib/prompts.ts#L140)) ให้เหมือนกันเป๊ะตามที่ตั้งใจไว้เดิม
+
+**ทดสอบก่อน commit:** `tsc --noEmit` ผ่านสมบูรณ์ — จุดที่ 1 (`getSpendernetworkRedirectMessage()`) เป็น string constant ส่งตรงผ่าน `fbSend()` ไม่ผ่าน Gemini ไม่ต้องทดสอบเพิ่ม — จุดที่ 2 (`groupIntentFallback`) ฝังอยู่ในคำสั่งให้ Gemini ตอบคำนี้ตรงๆ เมื่อ guardrail กำกวมเรื่องกลุ่มทำงาน จึงทดสอบยิง Gemini จริงจำลองเคสเดิม ("Nong Suea chang rescue (179557)" channel facebook) — Gemini เขียนข้อความออกมาตรงกับที่กำหนดไว้ทุกตัวอักษรรวมทั้งการขึ้นบรรทัดใหม่ (`\n\n`)
+
+**ทำไมไม่กระทบอย่างอื่น:** แก้แค่เนื้อหาข้อความ ไม่แตะเงื่อนไข `isSpendernetworkRequest()`/guardrail ที่ตัดสินใจว่าจะใช้ข้อความนี้เมื่อไหร่เลย — เฉพาะ Facebook เท่านั้น (LINE/Web Chat ใช้ข้อความคนละชุดอยู่แล้ว ไม่ถูกแตะ)
+
+**ขอบเขต:** แก้ 2 ไฟล์ ([app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts), [lib/prompts.ts](lib/prompts.ts)) จุดเดียวต่อไฟล์ — Facebook เท่านั้น
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
