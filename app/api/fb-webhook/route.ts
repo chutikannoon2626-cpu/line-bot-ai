@@ -584,11 +584,15 @@ export async function POST(req: NextRequest) {
               const summary = reply.replace(/^[\s\S]*?HANDOFF:?\s*/i, '').trim() || 'ลูกค้าต้องการติดต่อแอดมิน'
               // self_repair_protocol ส่ง "...HANDOFF: ขอวิธีทำเอง | ..." มาเฉพาะกรณีถามวิธีทำเอง (ไม่ใช่แจ้งเครื่องเสีย)
               // imei_protocol ส่ง "...| IMEI: ... | ..." — เรื่อง Spendernetwork ให้ชี้ทางไป LINE แทนรอแอดมินทาง Facebook (2026-07-31)
+              // repair_protocol ส่ง "...HANDOFF: ซ่อม/เคลม | รุ่น: ... | อาการ: ..." — ตกมาที่ else นี้เท่านั้น
+              // (เรื่องที่ 76) ต่อท้าย handoffMsg เดิมด้วยทางเลือกแอดไลน์ (ไม่แทนที่ handoffMsg เอง)
+              // เผื่อลูกค้าอยากให้ช่างเทคนิคทาง LINE ดูแลต่อเนื่องเร็วกว่ารอแอดมิน Facebook — เฉพาะ
+              // Facebook เท่านั้น ไม่แตะ line-webhook.ts เพราะ LINE อยู่ในระบบที่ทีมซ่อมดูแลอยู่แล้ว
               const replyMsg = /HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
                 ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
                 : summary.includes('IMEI:')
                 ? getSpendernetworkRedirectMessage()
-                : handoffMsg
+                : `${handoffMsg}\n\nเพื่อให้ช่างเทคนิคสามารถดูแลและติดตามปัญหาได้อย่างครบถ้วน สามารถแอดไลน์ @spenderclub ได้เลยนะคะ 😊`
 
               // (เรื่องที่ 64) เดิม path นี้ส่ง replyMsg เต็มซ้ำทุกครั้งไม่จำกัดรอบ ไม่เช็ค alreadyRouted
               // เลยต่างจาก path shouldHandoffImmediate ข้างบนที่มีระบบกันซ้ำ (routed/handoff_notified)
