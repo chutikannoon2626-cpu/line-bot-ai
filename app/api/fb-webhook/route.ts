@@ -56,9 +56,10 @@ async function logWebhookError(entry: { userId: string; channel: 'line' | 'faceb
 
 function getHandoffMessage(): string {
   const thaiHour = (new Date().getUTCHours() + 7) % 24
+  // (เรื่องที่ 77) sync กับ line-webhook.ts — ดูเหตุผลเต็มที่นั่น
   return thaiHour >= 18 || thaiHour < 8
     ? 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
-    : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
+    : 'รับเรื่องไว้แล้วนะคะ 🙏 ทีมงานจะรีบติดต่อกลับให้เร็วที่สุดค่ะ'
 }
 
 // เรื่อง Spendernetwork (เข้า/ลบ/ย้ายกลุ่ม, ปัญหาการใช้งาน) — เฉพาะ Facebook ให้ชี้ทางไป LINE

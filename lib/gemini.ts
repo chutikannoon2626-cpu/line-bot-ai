@@ -235,10 +235,11 @@ export async function generateReplyWithImage(
 
   // ขั้น 3: ตอบลูกค้า
   const thaiHour = (new Date().getUTCHours() + 7) % 24
+  // (เรื่องที่ 77) sync กับ getHandoffMessage() ใน line-webhook.ts/fb-webhook.ts — ดูเหตุผลเต็มที่นั่น
   const imgHandoffMsg =
     thaiHour >= 18 || thaiHour < 8
       ? 'ขณะนี้อยู่นอกเวลาทำการ รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานให้บริการในเวลาทำการ 08:00–17:00 น. ค่ะ'
-      : 'รอแอดมินติดต่อกลับนะคะ 🙏 ทีมงานกำลังดูแลท่านอยู่ค่ะ'
+      : 'รับเรื่องไว้แล้วนะคะ 🙏 ทีมงานจะรีบติดต่อกลับให้เร็วที่สุดค่ะ'
 
   const systemPrompt = buildSystemPrompt(
     'น้องใจดี',
