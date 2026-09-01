@@ -588,6 +588,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: ตัวเลข timeout ล้วนๆ ไม่แตะ logic อื่น ไม่ผ่าน Gemini เพิ่ม — <code>tsc --noEmit</code> ผ่านสมบูรณ์ — <strong>ไม่ช่วยกรณี 503 "high demand" เลย</strong> (ปฏิเสธทันที ไม่เกี่ยวกับเวลารอ) ช่วยได้เฉพาะเคสที่ช้าแต่ยังจบได้ในเวลาไม่เกิน 30 วิเท่านั้น</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้แค่ตัวเลขบรรทัดเดียวต่อไฟล์ ไม่แตะเงื่อนไข/logic การเลือกใช้ Gemini เลย — มีกลไกกันข้อความซ้ำอยู่แล้ว (<code>msgid:{messageId}</code>) รองรับกรณี LINE ส่ง webhook ซ้ำถ้ารอนานขึ้น — จุดที่ยังไม่แน่ใจ 100%: พฤติกรรม LINE เวลารอ webhook นานผิดปกติ (ไม่มีข้อมูลยืนยันเวลาที่ LINE จะเริ่ม retry เอง)</div>
 
+<h2>9.46 กัน MALFORMED_FUNCTION_CALL ให้ตอบ NOT_FOUND แทน (เพิ่ม 2026-09-01 — เรื่องที่ 81, ทุกช่องทาง)</h2>
+<p>เจอเพิ่มระหว่างทดสอบเรื่องที่ 80 โดยบังเอิญ: คำถาม "มีแท่นชาร์จ SP-IX5 Plus ไหมครับ" จบด้วย <code>finishReason: MALFORMED_FUNCTION_CALL</code> (Gemini เขียนคำสั่งเรียก <code>search_spender_specs</code> ผิดรูปแบบ) — ความไม่เสถียรอีกแบบที่ต่างจาก timeout/503 — โค้ดเดิมมีแค่เช็ค <code>MAX_TOKENS</code> ยังไม่รองรับกรณีนี้ ไม่รู้แน่ชัดว่า <code>response.text</code> ตอนนั้นปลอดภัยหรือมีข้อความไม่สมบูรณ์หลุดมาด้วย</p>
+<div class="ok">เพิ่ม <code>finishReason === 'MALFORMED_FUNCTION_CALL'</code> เข้ากับเงื่อนไขเดียวกับ <code>MAX_TOKENS</code> ที่มีอยู่แล้ว — ตอบ DEFAULT_REPLY (=[NOT_FOUND]) เสมอเมื่อเจอ ไม่เสี่ยงส่งข้อความไม่สมบูรณ์ให้ลูกค้า ไหลเข้าเส้นทาง NOT_FOUND เดิมที่ปลอดภัยอยู่แล้ว — เกิดได้แค่ Call 1 เท่านั้น (Call 2 ตอนสรุปผลค้นเว็บไม่เปิด function-calling เลย)</div>
+<div class="tip">ทดสอบก่อน commit: เช็คค่า <code>finishReason</code> ที่ Gemini ส่งกลับมาเอง ไม่ใช่ขอให้ Gemini เขียนข้อความใหม่ — ไม่แตะพรอมต์เลย เป็น control-flow ล้วนๆ เหมือน MAX_TOKENS check เดิม — <code>tsc --noEmit</code> ผ่านสมบูรณ์ เพียงพอ ไม่ต้องทดสอบ Gemini ซ้ำ</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้แค่เงื่อนไข 1 บรรทัดในฟังก์ชัน <code>generateReply()</code> ไม่แตะ Call 2, ไม่แตะฟังก์ชันวิเคราะห์รูปภาพ — <strong>จุดนี้ใช้ร่วมกันทั้ง LINE, Facebook, Web Chat</strong> เพราะ <code>generateReply()</code> เป็นฟังก์ชันร่วม (ต่างจากการแก้ส่วนใหญ่วันนี้ที่จำกัดแค่บางช่องทาง)</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

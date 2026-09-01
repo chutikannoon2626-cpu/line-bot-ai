@@ -181,7 +181,12 @@ export async function generateReply(
     totalTokenCount: usage?.totalTokenCount ?? 0,
   }))
 
-  if (finishReason === 'MAX_TOKENS') return DEFAULT_REPLY
+  // (เรื่องที่ 81) เจอเคสจริงจากการทดสอบ: Gemini เขียนคำสั่งเรียก search_spender_specs ผิดรูปแบบ
+  // (finishReason: MALFORMED_FUNCTION_CALL) — ไม่รู้แน่ชัดว่า response.text ตอนนั้นจะว่างเปล่าปลอดภัย
+  // หรือมีข้อความไม่สมบูรณ์หลุดมาด้วย จึงกันไว้ก่อนเหมือน MAX_TOKENS ใช้เส้นทาง NOT_FOUND เดิมที่
+  // ปลอดภัยอยู่แล้วแทนเสมอ ไม่เสี่ยงส่งข้อความที่เขียนไม่จบให้ลูกค้าเห็น — เกิดได้แค่ Call 1 นี้เท่านั้น
+  // (Call 2 ตอนสรุปผลค้นเว็บไม่ได้เปิด function-calling เลย จึงไม่ต้องเพิ่มเงื่อนไขเดียวกันที่นั่น)
+  if (finishReason === 'MAX_TOKENS' || finishReason === 'MALFORMED_FUNCTION_CALL') return DEFAULT_REPLY
   return stripLeakedTags(stripLeakedReasoning(response.text?.trim() || DEFAULT_REPLY)) || DEFAULT_REPLY
 }
 
