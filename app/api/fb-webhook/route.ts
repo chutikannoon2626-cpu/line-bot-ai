@@ -80,9 +80,18 @@ function getSpendernetworkRedirectMessage(): string {
 // แยกจาก lib/handoff.ts โดยตั้งใจ เพราะ shouldHandoffDeferred/Immediate ใช้ร่วมกับ LINE ด้วย
 // ถ้าไปเพิ่มคำพวกนี้ในนั้นจะกระทบ LINE โดยไม่ตั้งใจ ทั้งที่ LINE มีทีมดูแลเรื่องนี้แยกอยู่แล้ว (2026-08-01)
 const SPENDERNETWORK_TRIGGERS = ['เข้ากลุ่ม', 'ลบกลุ่ม', 'เพิ่มกลุ่ม', 'กลุ่มสาธารณะ', 'กลุ่มปิด', 'spendernetwork']
+// (เรื่องที่ 79) เจอเคสจริง: ลูกค้าถามแค่ "เข้ากลุ่มยังไง" (แค่ถามข้อมูล ไม่ได้ขอทำรายการ) ก็โดน bypass
+// ไปชี้ทาง LINE ทันทีแบบไม่มีเนื้อหาเหมือนกับคนที่ให้ IMEI+ชื่อกลุ่มครบพร้อมทำรายการจริง — ทั้งที่คำถาม
+// แบบนี้อาจมีคำตอบอยู่ในชีต FAQ (spender-network-XX) อยู่แล้ว — เพิ่มคำที่บ่งบอกว่าลูกค้าแค่ถามข้อมูล
+// ถ้าเจอปนกับ SPENDERNETWORK_TRIGGERS ให้ปล่อยเข้า Gemini ตอบจริงแทน ไม่ bypass — คำขอทำรายการตรงๆ
+// (ไม่มีคำถามเหล่านี้ปน) ยัง bypass เหมือนเดิมทุกประการ ไม่เสี่ยง Gemini ล่มเพิ่ม
+const SPENDERNETWORK_QUESTION_MARKERS = ['ยังไง', 'อย่างไร', 'คืออะไร', 'ทำไง', '?']
 function isSpendernetworkRequest(message: string): boolean {
   const lower = message.toLowerCase()
-  return SPENDERNETWORK_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
+  const hasTrigger = SPENDERNETWORK_TRIGGERS.some((trigger) => lower.includes(trigger.toLowerCase()))
+  if (!hasTrigger) return false
+  const isQuestion = SPENDERNETWORK_QUESTION_MARKERS.some((marker) => lower.includes(marker.toLowerCase()))
+  return !isQuestion
 }
 
 // ส่งข้อความ text ผ่าน Facebook Send API — เช็ค response.ok จริง (เดิม fetch() ไม่ throw ตอนเจอ
