@@ -555,7 +555,8 @@ export async function POST(req: NextRequest) {
               return
             }
             const geminiController = new AbortController()
-            const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
+            // (เรื่องที่ 80) sync กับ line-webhook.ts — ดูเหตุผลเต็มที่นั่น
+            const geminiTimeoutId = setTimeout(() => geminiController.abort(), 30000)
             let geminiFailReason: string | null = null
             const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'facebook', geminiController.signal)
               .catch((err) => {

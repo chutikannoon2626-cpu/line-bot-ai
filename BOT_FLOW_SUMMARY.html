@@ -582,6 +582,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: logic โค้ดล้วนๆ ไม่ผ่าน Gemini เลย ไม่มี non-determinism — ทดสอบตรงด้วยการจำลองฟังก์ชันแล้วรัน 8 เคส ผ่านครบ 8/8 (เคสจริง + คำขอทำรายการตรงๆ ต้อง bypass เหมือนเดิม) — <code>tsc --noEmit</code> ผ่านสมบูรณ์</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้แค่เงื่อนไขในฟังก์ชัน <code>isSpendernetworkRequest()</code> จุดเดียว ไม่แตะ <code>SPENDERNETWORK_TRIGGERS</code> เดิม ไม่แตะ <code>getSpendernetworkRedirectMessage()</code>/<code>imei_protocol</code>/<code>groupIntentFallback</code> — คำขอทำรายการจริงยังปลอดภัย 100% เหมือนเดิม มีแค่คำถามรูปแบบคำถามเท่านั้นที่เปลี่ยนพฤติกรรม (ตอนนี้ผ่าน Gemini แทน จึงมีความเสี่ยงเจอ Gemini ล่ม/ช้าได้เหมือนคำถามทั่วไปอื่น) — เฉพาะ Facebook เท่านั้น</div>
 
+<h2>9.45 ทดลองขยับ Gemini timeout จาก 20s เป็น 30s (เพิ่ม 2026-09-01 — เรื่องที่ 80, LINE + Facebook)</h2>
+<p>ช่วง 31 ส.ค. – 1 ก.ย. 2569 Gemini มีปัญหาต่อเนื่องยาวนาน (~23 ชม.) — ทดสอบยิง Gemini จริงสดๆ 3 ครั้งพบว่า<strong>สำเร็จทุกครั้งแต่ใช้เวลา 23.5-31 วิ</strong> (ยังไม่ถึงจุดค้างถาวร แค่ช้ากว่าปกติมาก) — timeout เดิม 20 วิตัดสายก่อนที่ Gemini จะตอบสำเร็จพอดี ทำให้เคสเหล่านี้กลายเป็น <code>GEMINI_UNAVAILABLE</code> ทั้งที่จริงๆ Gemini ตอบได้</p>
+<div class="ok">ขยับ timeout จาก 20,000ms เป็น <strong>30,000ms</strong> ทั้ง LINE และ Facebook (main text-flow เท่านั้น ไม่แตะ postback 7s/image-analysis ที่มีเหตุผลแยกของตัวเอง) — เป็นการ<strong>ทดลอง</strong> ถ้าใช้ไปแล้วยังไม่ช่วยจะปรับกลับเป็น 20000 — เลือก 30s ไม่มากกว่านี้เพื่อรักษาระยะกันชนกับเพดาน Vercel <code>maxDuration=60s</code> (fetchFAQ สูงสุด 8s + Gemini 30s + ส่งข้อความ ~2-3s รวมสูงสุด ~40s)</div>
+<div class="tip">ทดสอบก่อน commit: ตัวเลข timeout ล้วนๆ ไม่แตะ logic อื่น ไม่ผ่าน Gemini เพิ่ม — <code>tsc --noEmit</code> ผ่านสมบูรณ์ — <strong>ไม่ช่วยกรณี 503 "high demand" เลย</strong> (ปฏิเสธทันที ไม่เกี่ยวกับเวลารอ) ช่วยได้เฉพาะเคสที่ช้าแต่ยังจบได้ในเวลาไม่เกิน 30 วิเท่านั้น</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้แค่ตัวเลขบรรทัดเดียวต่อไฟล์ ไม่แตะเงื่อนไข/logic การเลือกใช้ Gemini เลย — มีกลไกกันข้อความซ้ำอยู่แล้ว (<code>msgid:{messageId}</code>) รองรับกรณี LINE ส่ง webhook ซ้ำถ้ารอนานขึ้น — จุดที่ยังไม่แน่ใจ 100%: พฤติกรรม LINE เวลารอ webhook นานผิดปกติ (ไม่มีข้อมูลยืนยันเวลาที่ LINE จะเริ่ม retry เอง)</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

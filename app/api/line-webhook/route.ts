@@ -660,7 +660,11 @@ export async function POST(req: NextRequest) {
             return
           }
           const geminiController = new AbortController()
-          const geminiTimeoutId = setTimeout(() => geminiController.abort(), 20000)
+          // (เรื่องที่ 80) ขยับจาก 20s เป็น 30s ทดลอง — เคสจริงวัดสดพบ Gemini ตอบสำเร็จที่ 23.5-31 วิ
+          // (ยังไม่ถึงจุดค้างถาวร แค่ช้ากว่าปกติมาก) 20 วิเดิมตัดสายก่อนสำเร็จพอดี — ยังมีระยะกันชนกับ
+          // เพดาน Vercel maxDuration=60s พอสมควร (fetchFAQ สูงสุด 8s + Gemini 30s + ส่งข้อความ ~2-3s
+          // รวม ~40s) — ถ้าลองแล้วยังไม่ช่วยให้ปรับกลับเป็น 20000 ตามเดิม (sync กับ fb-webhook.ts)
+          const geminiTimeoutId = setTimeout(() => geminiController.abort(), 30000)
           let geminiFailReason: string | null = null
           const reply = await generateReply(userMessage, faqText, history, handoffMsg, 'line', geminiController.signal)
             .catch((err) => {
