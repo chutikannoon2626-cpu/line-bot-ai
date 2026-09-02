@@ -314,7 +314,7 @@
       <div class="step-num">6</div>
       <div class="step-content">
         <div class="step-title">Special Command: <code>สอบถามสเปก</code></div>
-        <div class="step-desc">LRANGE <code>img_list:{userId}</code> เอารายการสุดท้าย (รูปล่าสุด)+DEL ทั้ง list · ถ้ามี imageId: ดึงรูป → generateReplyWithImage(b64, faq, 'สอบถามสเปกและฟังก์ชันการใช้งาน') timeout 15s → return <span class="warn" style="display:inline">(เปลี่ยนจาก key เดี่ยว <code>img:</code> เป็น list เรื่องที่ 32 — ฟังก์ชันนี้ยังรูปเดียวเดิม ไม่แตะ)</span></div>
+        <div class="step-desc">GET <code>img_product:{userId}</code> (ชื่อรุ่นที่เก็บไว้ตอนจำแนก Type F) + DEL ทั้ง key นี้และ <code>img_list:{userId}</code> · ถ้ามีชื่อรุ่น: <code>generateReply('สอบถามสเปกและฟังก์ชันการใช้งาน {รุ่น}', faq, history, handoffMsg, 'line')</code> timeout 15s → return <span class="warn" style="display:inline">(เรื่องที่ 87, 2026-09-02 — เดิมโหลด/OCR รูปซ้ำผ่าน <code>generateReplyWithImage()</code> เปลี่ยนมาใช้ชื่อรุ่นที่รู้อยู่แล้วส่งเข้า flow ข้อความปกติแทน ไม่ต้องแตะรูปอีก)</span></div>
       </div>
     </div>
     <div class="step">
@@ -517,7 +517,7 @@
       <div class="warn">(เพิ่ม 2026-08-08, เรื่องที่ 39 — <s>ยกเลิกบางส่วน 2026-08-10</s>) เหมือน LINE ทุกประการ — <code>saveHistory()</code> ก่อน return เงียบ ด้วย TTL ไดนามิกจาก <code>computeOffHoursHistoryTtl()</code> (ดูรายละเอียด+เหตุผลยกเลิกที่หัวข้อ LINE ขั้น 3)</div>
       <div class="warn">(เพิ่ม 2026-08-08, เรื่องที่ 40) เหมือน LINE ทุกประการ — <code>logChat({'{'}role:'user',message:'[ลูกค้าส่งรูปภาพ]'{'}'})</code> ก่อน <code>isScheduledOff()</code> check เสมอ (ดูรายละเอียดที่หัวข้อ LINE ขั้น 3)</div>
     </div></div>
-    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">LRANGE <code>fb_img_list:fb:{psid}</code> เอารายการแรก+DEL ทั้ง list · ถ้ามี: ดาวน์โหลดรูปจาก URL → generateReplyWithImage timeout 20s → fbSendReply → return <span class="warn" style="display:inline">(เปลี่ยนจาก key เดี่ยว <code>fb_img_url:</code> เป็น list — เรื่องที่ 32, ฟังก์ชันนี้ยังรูปเดียวเดิม)</span></div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Special: <code>สเปค/ฟังก์ชัน</code></div><div class="step-desc">GET <code>fb_img_product:fb:{psid}</code> (ชื่อรุ่นที่เก็บไว้ตอนจำแนก Type F) + DEL key นี้และ <code>fb_img_list:</code> · ถ้ามีชื่อรุ่น: <code>generateReply('สอบถามสเปกและฟังก์ชันการใช้งาน {รุ่น}', faq, history, handoffMsg, 'facebook')</code> timeout 20s → fbSendReply → return <span class="warn" style="display:inline">(เรื่องที่ 87, 2026-09-02 — เดิมโหลด/OCR รูปซ้ำผ่าน generateReplyWithImage เปลี่ยนมาใช้ชื่อรุ่นที่รู้อยู่แล้วส่งเข้า flow ข้อความปกติแทน)</span></div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Holiday + Greeting ส่งก่อน reply</div><div class="step-desc">holidayNotice → fbSend(holidayNotice) · greetFirst=true → fbSend(getWelcomeMessage())</div>
     <div class="ok">(เพิ่ม 2026-08-01, เรื่องที่ 23) เหมือน LINE — <code>getWelcomeMessage()</code> ใหม่ ดูรายละเอียดที่หัวข้อ LINE ขั้น 12</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Pre-Handoff State + Stale Key Check</div><div class="step-desc">GETDEL <code>pre_handoff:fb:{psid}</code> · ถ้ามี: ตรวจ history ว่า bot เคยถาม "กรุณาแจ้งรายละเอียด" ไหม (กัน stale) → ผ่าน: SET <code>routed:fb:{psid}</code> EX 300 + DEL notified <s>→ notifyAdminFacebook(psid, ...)</s> (ปิดแล้ว เรื่องที่ 42) → fbSend(handoffMsg) → return</div>
@@ -691,7 +691,8 @@ systemInstruction = systemPrompt + webContext + ocrContext
 content = [{role:'user', parts:[{text:question}, {inlineData:base64}]}]
 → return response.text.trim()</div>
   </div>
-  <div class="tip">(อัปเดต 2026-08-01, เรื่องที่ 29) เดิมใช้ทั้งตอน LINE ข้อความตามมาภายใน 5 นาที และ Facebook มี caption — ตอนนี้ใช้เฉพาะปุ่ม "สอบถามสเปก" (LINE) / "สเปค/ฟังก์ชัน" (Facebook) เท่านั้น เพราะ 2 branch แรกเปลี่ยนไปใช้ <code>analyzeImageWithText()</code> (สรุป+ถามยืนยันก่อน) แทนแล้ว — ไม่ถูกแตะโดยเรื่องที่ 26</div>
+  <div class="tip">(อัปเดต 2026-08-01, เรื่องที่ 29) เดิมใช้ทั้งตอน LINE ข้อความตามมาภายใน 5 นาที และ Facebook มี caption — ต่อมาใช้เฉพาะปุ่ม "สอบถามสเปก" (LINE) / "สเปค/ฟังก์ชัน" (Facebook) เท่านั้น เพราะ 2 branch แรกเปลี่ยนไปใช้ <code>analyzeImageWithText()</code> (สรุป+ถามยืนยันก่อน) แทนแล้ว</div>
+  <div class="warn">(เพิ่ม 2026-09-02, เรื่องที่ 87) ปุ่ม "สอบถามสเปก"/"สเปค/ฟังก์ชัน" เลิกเรียกฟังก์ชันนี้แล้ว — เปลี่ยนไปใช้ชื่อรุ่นที่รู้อยู่แล้วจากตอนจำแนก Type F ส่งเข้า <code>generateReply()</code> ปกติแทน (ไม่ต้องโหลด/OCR รูปซ้ำ) ดูรายละเอียดที่หัวข้อ Special Command ด้านบน — <code>generateReplyWithImage()</code> ไม่มีจุดเรียกใช้เหลือแล้วในทั้ง 2 ไฟล์ webhook (ยังไม่ถูกลบออกจาก lib/gemini.ts)</div>
 
   <h3 style="margin-top:16px"><code>analyzeImageIntent()</code> — ใหม่ 2026-08-01, เรื่องที่ 26</h3>
   <div class="card">
@@ -716,7 +717,7 @@ JSON 2 แบบ:
 <code>{"kind":"unclear"}</code> — ทั้งรูปและข้อความไม่ให้ข้อมูลอะไรเลยจริงๆ</div>
     <div class="ok">แทนที่การเรียก <code>generateReplyWithImage()</code> ตอบทันที (เดิมค้นเว็บ Serper แบบไม่มีเงื่อนไขทุกครั้งก่อนเสมอ แม้คำถามไม่เกี่ยวกับสเปกสินค้าเลย เช่น "ขอเข้าห้อง DOPA BBT" เสียเวลาเปล่า) — บันทึก <code>confirmMessage</code> เข้า <code>saveHistory()</code> เป็น model turn (พร้อม <code>summary</code> เป็น user turn placeholder) เพื่อให้ข้อความตอบกลับของลูกค้ารอบถัดไปเดินเข้า <code>generateReply()</code> flow ข้อความปกติ (ค้นชีตก่อน ไม่เจอค่อยค้นเว็บ) ต่อยอด repair_protocol/imei_protocol/FAQ/HANDOFF ได้เอง</div>
     <div class="warn">Trade-off ที่ยอมรับแล้ว: ทุกเคสรูป+ข้อความ (รวมเคสถามราคาชัดเจนที่เคยตอบรอบเดียว) จะมีขั้นถามยืนยันเพิ่ม 1 รอบเสมอ ไม่มีการจำแนก "ชัดเจนพอข้ามยืนยันได้ไหม" — เลือกความเรียบง่าย/แน่นอนของระบบ แลกกับความเร็วในเคสที่พบบ่อยที่สุด (ขั้นยืนยันยังช่วยกันบอทตอบผิดจากอ่านรูปพลาดด้วย)</div>
-    <div class="tip">ไม่แตะ: ปุ่ม "สอบถามสเปก"/"สเปค/ฟังก์ชัน" ยังเรียก <code>generateReplyWithImage()</code> ตรงๆ เหมือนเดิม (เจตนาชัดเจนจากปุ่มแล้ว) · รูปเดี่ยวๆ ไม่มีข้อความ (<code>analyzeImageIntent()</code>) · <code>generateReply()</code>/<code>generateReplyWithImage()</code> ตัวฟังก์ชันเอง — ไม่ถูกแก้ไขเลยแม้แต่บรรทัดเดียว</div>
+    <div class="tip">ไม่แตะ: รูปเดี่ยวๆ ไม่มีข้อความ (<code>analyzeImageIntent()</code>) · <code>generateReply()</code>/<code>generateReplyWithImage()</code> ตัวฟังก์ชันเอง — ไม่ถูกแก้ไขเลยแม้แต่บรรทัดเดียว (ปุ่ม "สอบถามสเปก"/"สเปค/ฟังก์ชัน" เคยเรียก <code>generateReplyWithImage()</code> ตรงๆ ที่นี่ — เปลี่ยนไปใช้ <code>generateReply()</code> แทนแล้วตั้งแต่เรื่องที่ 87, 2026-09-02 ดูหัวข้อ generateReplyWithImage ด้านบน)</div>
     <div class="ok">(เพิ่ม 2026-08-19, เรื่องที่ 58) เว้นบรรทัด <code>confirmMessage</code> กรณีหลายรูป — รายละเอียดเดียวกับที่แก้ใน <code>analyzeImageIntent()</code> ด้านบน (กฎ+ตัวอย่างเหมือนกัน) ดูรายละเอียดหัวข้อด้านบน</div>
   </div>
 </div>

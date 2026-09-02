@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { fetchFAQ, findExactMatch } from '@/lib/sheet'
-import { generateReply, generateReplyWithImage, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
+import { generateReply, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
 import { shouldHandoff, shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdminFacebook } from '@/lib/handoff'
 import { redis } from '@/lib/redis'
 import { getHistory, saveHistoryExtended } from '@/lib/history'
@@ -365,28 +365,31 @@ export async function POST(req: NextRequest) {
               return
             }
 
-            // ลูกค้ากด [สเปค/ฟังก์ชัน] จาก image quick reply → โหลดรูปที่บันทึกไว้ (อ่านจาก
-            // fb_img_list: เอารูปแรกพอ เพราะ generateReplyWithImage() ยังเป็นฟังก์ชันรูปเดียว) (2026-08-05)
+            // ลูกค้ากด [สเปค/ฟังก์ชัน] จาก image quick reply — เดิมโหลดรูปที่เก็บไว้มา OCR+ค้นเว็บซ้ำ
+            // ทั้งที่ชื่อรุ่นถูกอ่านไปแล้วตอนจำแนก Type F ครั้งแรก (เรื่องที่ 87, 2026-09-02) — เปลี่ยนมา
+            // อ่านชื่อรุ่นที่เก็บไว้ (fb_img_product:) แล้วส่งเข้า flow ข้อความปกติแทน ไม่ต้องโหลด/OCR รูปซ้ำ
             if (userMessage === 'สเปค/ฟังก์ชัน') {
-              let fbImgUrl: string | null = null
+              let ocrProduct: string | null = null
               try {
-                const raw = await redis.lrange<string>(`fb_img_list:${userId}`, 0, 0)
-                fbImgUrl = raw[0] ?? null
+                ocrProduct = await redis.get<string>(`fb_img_product:${userId}`)
+                await redis.del(`fb_img_product:${userId}`)
                 await redis.del(`fb_img_list:${userId}`)
               } catch { /* Redis ล่ม */ }
 
-              if (fbImgUrl) {
+              if (ocrProduct) {
                 if (holidayNotice) await fbSend(psid, holidayNotice)
+                const queryText = `สอบถามสเปกและฟังก์ชันการใช้งาน ${ocrProduct}`
                 try {
-                  const imgRes = await fetch(fbImgUrl, { signal: AbortSignal.timeout(8000) })
-                  const b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64')
                   const faqText = await fetchFAQ()
-                  const reply = await Promise.race([
-                    generateReplyWithImage(b64, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน', 'facebook'),
-                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
-                  ]).catch(() => UNAVAILABLE_MSG)
-                  await fbSendReply(psid, reply)
-                  await saveHistoryExtended(userId, [...history, { role: 'user', text: 'สเปค/ฟังก์ชัน' }, { role: 'model', text: reply }])
+                  const geminiControllerSpec = new AbortController()
+                  const geminiTimeoutIdSpec = setTimeout(() => geminiControllerSpec.abort(), 20000)
+                  const reply = await generateReply(queryText, faqText, history, handoffMsg, 'facebook', geminiControllerSpec.signal)
+                    .catch(() => GEMINI_UNAVAILABLE)
+                  clearTimeout(geminiTimeoutIdSpec)
+                  const finalReply = (reply === NOT_FOUND || reply.includes(OUT_OF_DOMAIN) || reply === GEMINI_UNAVAILABLE)
+                    ? UNAVAILABLE_MSG : reply
+                  await fbSendReply(psid, finalReply)
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
                   log.info('fb.image_spec.sent', { userId, latencyMs: Date.now() - startTime })
                 } catch (err) {
                   log.error('fb.image_spec.failed', { userId, err: (err as Error).message })
@@ -394,7 +397,7 @@ export async function POST(req: NextRequest) {
                 }
                 return
               }
-              // ไม่มีรูปเก็บไว้ → ตกลงไป FAQ flow ปกติ
+              // ไม่มีชื่อรุ่นเก็บไว้ (TTL หมด/Redis ล่ม) → ตกลงไป FAQ flow ปกติ
             }
 
             // Holiday notice (ส่งก่อน reply)
@@ -913,14 +916,16 @@ export async function POST(req: NextRequest) {
 
             // 5.3: เจอรุ่นสินค้า → บันทึก URL + quick reply ผูก model (พฤติกรรมเดิม)
             // เก็บเป็น list แทน key เดี่ยว (fb_img_list: แทน fb_img_url:) — เผื่อรองรับหลายรูปในอนาคต
-            // ตอนนี้ปุ่ม "สเปค/ฟังก์ชัน" ยังใช้ generateReplyWithImage() แบบรูปเดียวเดิม จึงอ่านแค่
-            // รูปแรก (product เดียวกันทุกรูปอยู่แล้วตามเงื่อนไขใหม่ของ analyzeImageIntent) (2026-08-05)
+            // (2026-08-05) ปุ่ม "สเปค/ฟังก์ชัน" ไม่โหลด/OCR รูปซ้ำแล้ว อ่านชื่อรุ่นจาก fb_img_product:
+            // แทน (เรื่องที่ 87)
             const ocrProduct = intent.product
             await saveHistoryExtended(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${ocrProduct}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
             try {
               await redis.del(`fb_img_list:${userId}`)
               await redis.rpush(`fb_img_list:${userId}`, ...imageUrls)
               await redis.expire(`fb_img_list:${userId}`, FB_IMG_TTL)
+              // (เรื่องที่ 87) เก็บชื่อรุ่นไว้ด้วย ให้ปุ่ม "สเปค/ฟังก์ชัน" ใช้ต่อได้โดยไม่ต้องโหลด/OCR รูปซ้ำ
+              await redis.set(`fb_img_product:${userId}`, ocrProduct, { ex: FB_IMG_TTL })
             } catch { /* Redis ล่ม */ }
 
             const priceBtn = (`ราคา ${ocrProduct}`).slice(0, 20)

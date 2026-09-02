@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateSignature, messagingApi } from '@line/bot-sdk'
 import { fetchFAQ, findExactMatch } from '@/lib/sheet'
-import { generateReply, generateReplyWithImage, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
+import { generateReply, analyzeImageIntent, analyzeImageWithText } from '@/lib/gemini'
 import { shouldHandoffImmediate, shouldHandoffDeferred, isOwnerRequest, OWNER_REQUEST_OFF_HOURS_MSG, notifyAdmin } from '@/lib/handoff'
 import { log } from '@/lib/log'
 import { redis } from '@/lib/redis'
@@ -466,48 +466,40 @@ export async function POST(req: NextRequest) {
               }
 
               await saveHistoryExtended(userId, [...history, { role: 'user', text: `[ลูกค้าส่งรูปภาพสินค้า: ${intent.product}]` }, { role: 'model', text: '[แสดงเมนูตัวเลือก]' }])
+              // (เรื่องที่ 87) เก็บชื่อรุ่นไว้ ให้ปุ่ม "สเปค/ฟังก์ชัน" ใช้ต่อได้โดยไม่ต้องโหลด/OCR รูปซ้ำ
+              try {
+                await redis.set(`img_product:${userId}`, intent.product ?? '', { ex: 600 })
+              } catch { /* Redis ล่ม */ }
               await ans([imageIntentCard(intent.product) as messagingApi.Message])
               log.info('image.intent_card_sent_delayed', { userId, elapsedMs: elapsed })
               return
             }
           }
 
-          // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard — อ่านจาก img_list: เอารูปล่าสุด
-          // (ตัวเดียวพอ เพราะ generateReplyWithImage() ยังเป็นฟังก์ชันรูปเดี่ยวเดิม ไม่แตะ) (2026-08-05)
+          // ลูกค้ากด "สอบถามสเปก" จาก imageIntentCard — เดิมโหลดรูปที่เก็บไว้มา OCR+ค้นเว็บซ้ำทั้งที่
+          // ชื่อรุ่นถูกอ่านไปแล้วตอนจำแนก Type F ครั้งแรก (เรื่องที่ 87, 2026-09-02) — เปลี่ยนมาอ่าน
+          // ชื่อรุ่นที่เก็บไว้ (img_product:) แล้วส่งเข้า flow ข้อความปกติแทน ไม่ต้องโหลด/OCR รูปซ้ำ
           if (userMessage === 'สอบถามสเปก') {
-            let imageId: string | null = null
+            let ocrProduct: string | null = null
             try {
-              const raw = await redis.lrange<string>(`img_list:${userId}`, -1, -1)
-              if (raw.length) {
-                const last = (typeof raw[0] === 'string' ? JSON.parse(raw[0]) : raw[0]) as { id: string; ts: number }
-                imageId = last.id
-              }
+              ocrProduct = await redis.get<string>(`img_product:${userId}`)
+              await redis.del(`img_product:${userId}`)
               await redis.del(`img_list:${userId}`)
             } catch { /* Redis ล่ม — ตกลงไป FAQ flow ปกติ */ }
 
-            if (imageId) {
-              const blobClient = new messagingApi.MessagingApiBlobClient({
-                channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
-              })
-              const stream = await blobClient.getMessageContent(imageId)
-              const chunks: Buffer[] = []
-              for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-              const imageBuffer = Buffer.concat(chunks)
-              const base64Image = imageBuffer.toString('base64')
-              log.info('image_spec.downloaded', { userId, sizeBytes: imageBuffer.length })
-
+            if (ocrProduct) {
+              const queryText = `สอบถามสเปกและฟังก์ชันการใช้งาน ${ocrProduct}`
               const faqText = await fetchFAQ()
-              const reply = await Promise.race([
-                generateReplyWithImage(base64Image, faqText, 'สอบถามสเปกและฟังก์ชันการใช้งาน', 'line'),
-                new Promise<string>((_, reject) =>
-                  setTimeout(() => reject(new Error('gemini_timeout')), 15000)
-                ),
-              ]).catch((err) => {
-                log.error('gemini.image_spec_failed', { err: (err as Error).message, userId })
-                return UNAVAILABLE_MSG
-              })
+              const geminiControllerSpec = new AbortController()
+              const geminiTimeoutIdSpec = setTimeout(() => geminiControllerSpec.abort(), 15000)
+              const reply = await generateReply(queryText, faqText, history, handoffMsg, 'line', geminiControllerSpec.signal)
+                .catch(() => GEMINI_UNAVAILABLE)
+              clearTimeout(geminiTimeoutIdSpec)
+              const finalReply = (reply === NOT_FOUND || reply.includes(OUT_OF_DOMAIN) || reply === GEMINI_UNAVAILABLE)
+                ? UNAVAILABLE_MSG : reply
 
-              await ans(txt(reply))
+              await ans(txt(finalReply))
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: queryText }, { role: 'model', text: finalReply }])
               log.info('image_spec_reply.sent', { userId, latencyMs: Date.now() - startTime })
               return
             }
