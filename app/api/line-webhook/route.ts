@@ -39,6 +39,18 @@ const NONSENSE_TTL = 10 * 60
 // ลูกค้ายืนยันสั่งซื้อ (เช่น "สั่งเลยค่ะ" หลังบอทเสนอราคา) — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
 const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
 const ORDER_CONFIRM_RE = /สั่งเลย|อยากสั่ง|ต้องการซื้อ|จะซื้อ|สั่งได้ไหม|ซื้อยังไง|โอนเงิน|ชำระเงิน|จ่ายเงิน/u
+// (เรื่องที่ 84) เจอเคสจริง: "ถ้าจะซื้อวิทยุ...ตัวไหนเป็นรุ่นล่าสุด หรือตัวไหนดีที่สุดครับ" — เป็นคำถาม
+// ขอคำแนะนำสินค้า ไม่ใช่ยืนยันสั่งซื้อจริง แต่มีคำว่า "จะซื้อ" ปนอยู่ ทำให้ ORDER_CONFIRM_RE.test()
+// (เช็คแบบ "มีคำนี้อยู่ตรงไหนก็ได้") จับผิดว่าเป็นการยืนยันสั่งซื้อ ตอบแค่ "รอนอกเวลาทำการ" แทนที่จะ
+// ปล่อยให้ Gemini ตอบคำถามจริงผ่าน <recommend_protocol> — แก้ด้วยการจำกัดความยาวข้อความ (แนวคิดเดียว
+// กับ MAX_EXTRA_CHARS ใน findExactMatch() lib/sheet.ts) ยอมให้ยาวเกินคำที่ match ได้ไม่เกิน 15 ตัวอักษร
+// ถึงจะถือว่าเป็นการยืนยันสั่งซื้อจริง — ข้อความยาว/ซับซ้อนกว่านั้นปล่อยผ่านไป Gemini แทน
+const ORDER_CONFIRM_MAX_EXTRA_CHARS = 15
+function isOrderConfirmMessage(message: string): boolean {
+  const match = ORDER_CONFIRM_RE.exec(message)
+  if (!match) return false
+  return message.trim().length <= match[0].length + ORDER_CONFIRM_MAX_EXTRA_CHARS
+}
 const ORDER_CONFIRM_WAIT_MSG = 'กรุณารอสักครู่นะคะ'
 // (เรื่องที่ 74) เดิมระบุ "วันทำการถัดไป" ขัดแย้งกับประโยคแรกที่บอกว่า 08:00 น. — เคสจริง: ลูกค้ายืนยัน
 // สั่งซื้อตอน 06:56 น. (ใกล้เวลาเปิด 08:00 อีกแค่ ~1 ชม.) แต่ข้อความบอกว่าต้องรอ "วันทำการถัดไป" ทำให้
@@ -614,7 +626,7 @@ export async function POST(req: NextRequest) {
           }
 
           // ลูกค้ายืนยันสั่งซื้อ — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
-          if (ORDER_CONFIRM_RE.test(userMessage)) {
+          if (isOrderConfirmMessage(userMessage)) {
             const isOffHours = thaiHour >= 18 || thaiHour < 8
             if (isOffHours) {
               await ans(txt(ORDER_CONFIRM_OFF_HOURS_MSG))

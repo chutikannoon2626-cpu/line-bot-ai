@@ -40,6 +40,13 @@ const IMAGE_HANDOFF_MSG = 'รบกวนรอแอดมินตรวจ�
 // ลูกค้ายืนยันสั่งซื้อ (เช่น "สั่งเลยค่ะ" หลังบอทเสนอราคา) — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
 const ORDER_CONFIRM_TTL = 20 * 60 // 20 นาที กันตอบซ้ำ (เฉพาะในเวลาทำการ)
 const ORDER_CONFIRM_RE = /สั่งเลย|อยากสั่ง|ต้องการซื้อ|จะซื้อ|สั่งได้ไหม|ซื้อยังไง|โอนเงิน|ชำระเงิน|จ่ายเงิน/u
+// (เรื่องที่ 84) sync กับ line-webhook.ts — ดูเหตุผลเต็มที่นั่น
+const ORDER_CONFIRM_MAX_EXTRA_CHARS = 15
+function isOrderConfirmMessage(message: string): boolean {
+  const match = ORDER_CONFIRM_RE.exec(message)
+  if (!match) return false
+  return message.trim().length <= match[0].length + ORDER_CONFIRM_MAX_EXTRA_CHARS
+}
 const ORDER_CONFIRM_WAIT_MSG = 'กรุณารอสักครู่นะคะ'
 // (เรื่องที่ 74) เดิมระบุ "วันทำการถัดไป" ขัดแย้งกับประโยคแรกที่บอกว่า 08:00 น. — sync กับ line-webhook/
 // route.ts (ดูเหตุผลเต็มที่นั่น)
@@ -512,7 +519,7 @@ export async function POST(req: NextRequest) {
             }
 
             // ลูกค้ายืนยันสั่งซื้อ — ตอบตามเวลาทำการ ไม่ผ่าน Gemini
-            if (ORDER_CONFIRM_RE.test(userMessage)) {
+            if (isOrderConfirmMessage(userMessage)) {
               const isOffHours = thaiHour >= 18 || thaiHour < 8
               if (isOffHours) {
                 await fbSend(psid, ORDER_CONFIRM_OFF_HOURS_MSG)
