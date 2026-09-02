@@ -101,6 +101,20 @@ function isSpendernetworkRequest(message: string): boolean {
   return !isQuestion
 }
 
+// (เรื่องที่ 85) เจอเคสจริง: ลูกค้าส่ง Facebook "Like" sticker (ปุ่มยกนิ้วโป้งสีน้ำเงิน) ระหว่างคุยอยู่
+// — Facebook ส่งสติกเกอร์มาเป็น attachment type:"image" เหมือนรูปจริงทุกประการ ทำให้ไหลเข้า
+// analyzeImageIntent() ที่ออกแบบมาสำหรับตีความรูปสินค้า/เอกสารจริง ไม่ใช่สติกเกอร์แสดงอารมณ์/ตอบรับ —
+// Gemini จำแนกถูกว่าเป็นรูปยกนิ้วโป้งแล้วถามยืนยันกลับ ("เห็นว่าเป็นรูปสัญลักษณ์ยกนิ้วโป้ง ใช่ไหมคะ")
+// ทั้งที่ลูกค้าแค่ตอบรับ/รู้สึกพอใจเฉยๆ ไม่มีคำถามอะไรแฝงอยู่เลย — คล้ายกับกฎที่มีอยู่แล้วใน
+// <reasoning_protocol> ขั้นที่ 1 ที่ให้ "👍" (พิมพ์เป็นตัวอักษร) ตอบแค่ "ยินดีให้บริการค่ะ" แต่กฎนั้นใช้ได้
+// เฉพาะข้อความตัวอักษร ไม่ครอบคลุมสติกเกอร์ (มาเป็น attachment คนละเส้นทาง) — ตรวจสอบแล้วไม่มีอยู่ใน
+// เอกสาร/ไม่เคยเห็น log จริงมาก่อนว่า sticker_id คือฟิลด์ที่ถูกต้อง 100% (อิงจากเอกสาร Facebook
+// Messenger Platform ทั่วไป) — ถ้าสมมติฐานผิด ฟังก์ชันนี้จะคืนค่า false เสมอ (พฤติกรรมเหมือนเดิมก่อน
+// แก้ ไม่ใช่การพังแบบใหม่) — log ผลตรวจไว้ถาวรทุกครั้งเพื่อยืนยัน/แก้ไขต่อได้ในอนาคตหากจำเป็น
+function isStickerAttachment(attachments?: Array<{ type: string; payload: { url?: string; sticker_id?: number } }>): boolean {
+  return (attachments ?? []).some((a) => a.type === 'image' && a.payload?.sticker_id != null)
+}
+
 // ส่งข้อความ text ผ่าน Facebook Send API — เช็ค response.ok จริง (เดิม fetch() ไม่ throw ตอนเจอ
 // HTTP error status เช่น 429 ทำให้โค้ดคิดว่าส่งสำเร็จทั้งที่จริงไม่ถึงลูกค้าเลย) ถ้าเจอ 429 (rate limit
 // ชั่วคราว) รอแล้วลองใหม่ สูงสุด 2 ครั้งเพิ่ม (backoff เพิ่มขึ้นเรื่อยๆ 800ms → 1500ms) รวมสูงสุด
@@ -252,7 +266,11 @@ type FbEvent = {
   message?: {
     mid?: string
     text?: string
-    attachments?: Array<{ type: string; payload: { url?: string } }>
+    // (เรื่องที่ 85) เพิ่ม sticker_id (optional) — Facebook ส่งสติกเกอร์มาเป็น type:"image" เหมือนรูปจริง
+    // ทุกประการ แต่แนบ sticker_id มาด้วยเสมอ (รูปจริงที่ลูกค้าถ่าย/อัปโหลดเองไม่มีฟิลด์นี้) ใช้แยก
+    // สติกเกอร์ออกจากรูปภาพจริงก่อนเข้าสู่การวิเคราะห์รูป — ยังไม่เคยยืนยันด้วย log จริงจากระบบนี้เอง
+    // อิงจากเอกสาร Facebook Messenger Platform ทั่วไป (ดูเหตุผลเต็มที่จุดตรวจ isStickerAttachment())
+    attachments?: Array<{ type: string; payload: { url?: string; sticker_id?: number } }>
   }
   postback?: { payload: string; title: string }
 }
@@ -763,6 +781,16 @@ export async function POST(req: NextRequest) {
 
             if (holidayNotice) await fbSend(psid, holidayNotice)
             if (greetFirst) await fbSend(psid, getWelcomeMessage())
+
+            // (เรื่องที่ 85) เป็นสติกเกอร์ (ไม่ใช่รูปจริง) — ทักทายไปแล้วถ้าเป็นข้อความแรกของวัน (บรรทัด
+            // ด้านบน) แต่ไม่วิเคราะห์/ถามยืนยันต่อ ปล่อยเงียบเฉพาะระหว่างบทสนทนา — ดูเหตุผลเต็มที่
+            // isStickerAttachment()
+            const isSticker = isStickerAttachment(event.message?.attachments)
+            log.info('fb.image.sticker_check', { userId, isSticker })
+            if (isSticker) {
+              log.info('fb.image.sticker_ignored', { userId })
+              return
+            }
 
             if (imageUrls.length === 0) {
               await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
