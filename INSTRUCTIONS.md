@@ -1913,6 +1913,20 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 82 — แยก type ของ "ดึงชีตไม่ทัน" ออกจาก webhook_error ทั่วไป (แก้หน้าแอดมิน)
+
+**สาเหตุ:** ระหว่างวิเคราะห์ log ปัญหา Gemini กับผู้ใช้ พบว่าบางแถวในหน้า `/admin/image-failures` ขึ้นเป็น **"Error ทั่วไป (ไม่ทราบสาเหตุ)"** พร้อม detail *"The operation was aborted due to timeout"* — ตรวจโค้ดพบว่าข้อความนี้มาจาก `AbortSignal.timeout(8000)` ใน [lib/sheet.ts:36](lib/sheet.ts#L36) (ดึง Google Sheet ไม่ทันใน 8 วิ) ที่ถูกจับโดย catch เฉพาะของเรื่องที่ 72 แต่ log ด้วย `type: 'webhook_error'` เดียวกับ catch-all ตัวจริง ทำให้ดูเหมือนเป็น error ปริศนา ทั้งที่รู้สาเหตุชัดเจนแล้ว (ดึงชีตไม่ทัน ไม่เกี่ยวกับ Gemini เลย)
+
+**วิธีแก้:** เปลี่ยน `type` จาก `'webhook_error'` เป็น **`'faq_fetch_timeout'`** เฉพาะที่จุด catch ของเรื่องที่ 72 ในทั้ง 2 ไฟล์ ([line-webhook.ts:657](app/api/line-webhook/route.ts#L657), [fb-webhook.ts:552](app/api/fb-webhook/route.ts#L552)) — ไม่แตะ catch-all ตัวจริงท้ายไฟล์ (ยังใช้ `'webhook_error'` เหมือนเดิมสำหรับ error ที่ไม่รู้สาเหตุจริงๆ) — เพิ่ม label ใหม่ใน `typeLabel()` ที่ [app/admin/image-failures/page.tsx](app/admin/image-failures/page.tsx) ให้ขึ้นเป็น **"หมดเวลา (ดึงชีตไม่ทัน)"** แทน
+
+**ทดสอบก่อน commit:** `type` field เป็นแค่ string ใช้แสดงผลในหน้าแอดมินเท่านั้น — ตรวจสอบแล้วไม่มีโค้ดจุดอื่นอ่านค่านี้ไปตัดสินใจอะไรเลย (grep ยืนยัน 4 จุดที่ใช้ `'webhook_error'` ทั้งหมด เป็นแค่ log บันทึก) — `tsc --noEmit` ผ่านสมบูรณ์
+
+**ทำไมไม่กระทบอย่างอื่น:** ไม่แตะพฤติกรรมตอบลูกค้าเลยแม้แต่นิดเดียว (ยังคง `ans(txt(DEFAULT_REPLY))`/`fbSend(psid, DEFAULT_REPLY)` + บันทึกประวัติเหมือนเดิมทุกประการ) — แก้แค่ string ที่ใช้แปะป้ายให้แอดมินอ่านง่ายขึ้น — ไม่แตะ `gemini_text_timeout`/`reply_push_failed` label เดิม
+
+**ขอบเขต:** แก้ 3 ไฟล์ ([app/api/line-webhook/route.ts](app/api/line-webhook/route.ts), [app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts), [app/admin/image-failures/page.tsx](app/admin/image-failures/page.tsx)) — เป็นการแก้เพื่อการแสดงผลในแอดมินพาเนลเท่านั้น
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox

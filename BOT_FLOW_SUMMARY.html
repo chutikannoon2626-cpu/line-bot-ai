@@ -594,6 +594,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: เช็คค่า <code>finishReason</code> ที่ Gemini ส่งกลับมาเอง ไม่ใช่ขอให้ Gemini เขียนข้อความใหม่ — ไม่แตะพรอมต์เลย เป็น control-flow ล้วนๆ เหมือน MAX_TOKENS check เดิม — <code>tsc --noEmit</code> ผ่านสมบูรณ์ เพียงพอ ไม่ต้องทดสอบ Gemini ซ้ำ</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้แค่เงื่อนไข 1 บรรทัดในฟังก์ชัน <code>generateReply()</code> ไม่แตะ Call 2, ไม่แตะฟังก์ชันวิเคราะห์รูปภาพ — <strong>จุดนี้ใช้ร่วมกันทั้ง LINE, Facebook, Web Chat</strong> เพราะ <code>generateReply()</code> เป็นฟังก์ชันร่วม (ต่างจากการแก้ส่วนใหญ่วันนี้ที่จำกัดแค่บางช่องทาง)</div>
 
+<h2>9.47 แยก type ของ "ดึงชีตไม่ทัน" ออกจาก webhook_error ทั่วไป (เพิ่ม 2026-09-01 — เรื่องที่ 82, หน้าแอดมินเท่านั้น)</h2>
+<p>ระหว่างวิเคราะห์ log ปัญหา Gemini พบว่าบางแถวในหน้า <code>/admin/image-failures</code> ขึ้นเป็น "Error ทั่วไป (ไม่ทราบสาเหตุ)" พร้อม detail "The operation was aborted due to timeout" — ตรวจโค้ดพบว่ามาจาก <code>AbortSignal.timeout(8000)</code> ใน lib/sheet.ts (ดึง Google Sheet ไม่ทันใน 8 วิ) ที่ถูกจับโดย catch เฉพาะของเรื่องที่ 72 แต่ log ด้วย <code>type: 'webhook_error'</code> เดียวกับ catch-all ตัวจริง ทำให้ดูเหมือน error ปริศนาทั้งที่รู้สาเหตุชัดเจนแล้ว</p>
+<div class="ok">เปลี่ยน <code>type</code> จาก <code>'webhook_error'</code> เป็น <code>'faq_fetch_timeout'</code> เฉพาะจุด catch ของเรื่องที่ 72 (ไม่แตะ catch-all ตัวจริงท้ายไฟล์) — เพิ่ม label ใหม่ในหน้าแอดมินให้ขึ้นเป็น "หมดเวลา (ดึงชีตไม่ทัน)" แทน</div>
+<div class="tip">ทดสอบก่อน commit: <code>type</code> เป็นแค่ string แสดงผลในหน้าแอดมิน ตรวจสอบแล้วไม่มีโค้ดจุดอื่นอ่านค่านี้ไปตัดสินใจอะไร — <code>tsc --noEmit</code> ผ่านสมบูรณ์</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: ไม่แตะพฤติกรรมตอบลูกค้าเลย (ยังคง DEFAULT_REPLY + บันทึกประวัติเหมือนเดิมทุกประการ) — แก้แค่ label ให้แอดมินอ่านง่ายขึ้น ไม่แตะ label เดิมอื่นๆ</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

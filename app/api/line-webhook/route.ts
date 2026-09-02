@@ -654,7 +654,10 @@ export async function POST(req: NextRequest) {
             faqText = await fetchFAQ()
           } catch (err) {
             log.error('faq.fetch_failed', { err: (err as Error).message, userId })
-            logWebhookError({ userId, channel: 'line', type: 'webhook_error', detail: (err as Error).message }).catch(() => {})
+            // (เรื่องที่ 82) แยก type จาก 'webhook_error' ทั่วไป — เดิมไปรวมกับ catch-all ตัวจริงท้ายไฟล์
+            // ทำให้หน้าแอดมิน /admin/image-failures โชว์เป็น "Error ทั่วไป (ไม่ทราบสาเหตุ)" ทั้งที่รู้
+            // สาเหตุชัดเจนแล้ว (ดึงชีตไม่ทันใน 8s) — แก้แค่ label ไม่กระทบพฤติกรรมตอบลูกค้าเลย
+            logWebhookError({ userId, channel: 'line', type: 'faq_fetch_timeout', detail: (err as Error).message }).catch(() => {})
             await ans(txt(DEFAULT_REPLY))
             await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: DEFAULT_REPLY }])
             return

@@ -549,7 +549,8 @@ export async function POST(req: NextRequest) {
               faqText = await fetchFAQ()
             } catch (err) {
               log.error('fb.faq.fetch_failed', { err: (err as Error).message, userId })
-              logWebhookError({ userId, channel: 'facebook', type: 'webhook_error', detail: (err as Error).message }).catch(() => {})
+              // (เรื่องที่ 82) sync กับ line-webhook.ts — ดูเหตุผลเต็มที่นั่น
+              logWebhookError({ userId, channel: 'facebook', type: 'faq_fetch_timeout', detail: (err as Error).message }).catch(() => {})
               await fbSend(psid, DEFAULT_REPLY)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: DEFAULT_REPLY }])
               return

@@ -38,6 +38,7 @@ function reasonLabel(reason: string): string {
 function typeLabel(type: string): string {
   if (type === 'gemini_text_timeout') return 'หมดเวลา (ข้อความทั่วไป, 20 วิ)'
   if (type === 'reply_push_failed')   return 'ส่งข้อความไม่สำเร็จ (reply+push ล้มเหลว)'
+  if (type === 'faq_fetch_timeout')   return 'หมดเวลา (ดึงชีตไม่ทัน)'
   if (type === 'webhook_error')       return 'Error ทั่วไป (ไม่ทราบสาเหตุ)'
   return type
 }
