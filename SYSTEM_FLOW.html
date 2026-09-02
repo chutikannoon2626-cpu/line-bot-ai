@@ -192,6 +192,9 @@
     <br><span class="endpoint-method method-delete">DEL</span> — ล้างข้อมูลทั้งหมด
   </div>
   <div class="endpoint channel-admin">
+    <span class="endpoint-method method-get">GET</span><code>/api/admin/refresh-sheet?key=</code> — บังคับดึงชีตใหม่ทันที ไม่ต้องรอแคช 60s หมดอายุเอง <span style="opacity:.7">(เพิ่ม 2026-09-01, เรื่องที่ 83)</span> — คืน <code>{'{'}ok, rowCount{'}'}</code> หรือ <code>{'{'}ok:false, error{'}'}</code>
+  </div>
+  <div class="endpoint channel-admin">
     <span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=</code> — 100 conversations ล่าสุด (ZSet score order)
     <br><span class="endpoint-method method-get">GET</span><code>/api/admin/chatlog?key=&amp;userId=</code> — messages ของ user คนนั้น
   </div>

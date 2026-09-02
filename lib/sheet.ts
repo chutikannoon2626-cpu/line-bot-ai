@@ -1,3 +1,5 @@
+import { redis } from './redis'
+
 // --- Types ---
 type Row = {
   id: string
@@ -19,6 +21,15 @@ type Sheet = { text: string; rows: Row[]; licenseMap: Map<string, LicenseInfo>; 
 
 let cache: Sheet | null = null
 const CACHE_TTL_MS = 60_000
+
+// (เรื่องที่ 83) แคชในหน่วยความจำ (`cache`) หายทุกครั้งที่ Vercel สร้าง serverless instance ใหม่
+// (cold start) — ตาข่ายรองรับเดิม ("ถ้าดึงไม่ทันให้ใช้ของเก่าแทน") เลยใช้ไม่ได้จริงตอนเจอ instance
+// ใหม่พอดี เพิ่มชั้นสำรองที่ 2 เก็บลง Redis (อยู่นอกฟังก์ชัน ไม่หายตอน cold start) — เก็บแค่ text/rows
+// ไม่เก็บ licenseMap (เป็น Map เก็บลง Redis ตรงๆ ไม่ได้) แล้วคำนวณ licenseMap ใหม่จาก rows ตอนอ่านคืน
+// TTL 24 ชม. กันไม่ให้ใช้ข้อมูลเก่าเกินไปถ้า Google Sheets มีปัญหานานผิดปกติ — ไม่แตะกฎแคชสด 60 วิ
+// ของเส้นทางปกติเลย (ยังคงเดิมทุกประการ) เป็นแค่ตัวสำรองฉุกเฉินตอนดึงสดไม่ทันจริงๆ เท่านั้น
+const REDIS_FALLBACK_KEY = 'faq:sheet_fallback'
+const REDIS_FALLBACK_TTL_S = 24 * 60 * 60
 
 async function loadSheet(): Promise<Sheet> {
   const now = Date.now()
@@ -43,12 +54,25 @@ async function loadSheet(): Promise<Sheet> {
     const text = rowsToFaqText(rows, licenseMap)
 
     cache = { text, rows, licenseMap, expiresAt: now + CACHE_TTL_MS }
+    try {
+      await redis.set(REDIS_FALLBACK_KEY, JSON.stringify({ text, rows }), { ex: REDIS_FALLBACK_TTL_S })
+    } catch { /* Redis ล่ม — ไม่กระทบเส้นทางปกติ ข้ามการบันทึกสำรองไปเฉยๆ */ }
     return cache
   } catch (err) {
     if (cache) {
-      console.warn('[sheet] fetch failed · serving stale cache', err)
+      console.warn('[sheet] fetch failed · serving stale in-memory cache', err)
       return cache
     }
+    try {
+      const raw = await redis.get<string>(REDIS_FALLBACK_KEY)
+      if (raw) {
+        const { text, rows } = typeof raw === 'string' ? JSON.parse(raw) : raw as { text: string; rows: Row[] }
+        const licenseMap = buildLicenseMap(rows)
+        console.warn('[sheet] fetch failed · serving Redis fallback', err)
+        cache = { text, rows, licenseMap, expiresAt: now } // expiresAt=now กันดันไปใช้ต่อเกิน request นี้ ครั้งถัดไปจะลองดึงสดใหม่ก่อนเสมอ
+        return cache
+      }
+    } catch { /* Redis เองก็ล่ม — ตกไป throw err เดิมด้านล่าง */ }
     throw err
   }
 }
@@ -56,6 +80,18 @@ async function loadSheet(): Promise<Sheet> {
 export async function fetchFAQ(): Promise<string> {
   const sheet = await loadSheet()
   return sheet.text
+}
+
+// (เรื่องที่ 83) ให้แอดมินบังคับดึงชีตใหม่ทันทีหลังแก้ไขเสร็จ แทนรอแคช 60 วิหมดอายุเอง —
+// เคลียร์แคชในหน่วยความจำก่อนแล้วเรียก loadSheet() ทันทีเพื่อยืนยันว่าดึงสำเร็จจริง
+export async function refreshSheetNow(): Promise<{ ok: boolean; rowCount?: number; error?: string }> {
+  cache = null
+  try {
+    const sheet = await loadSheet()
+    return { ok: true, rowCount: sheet.rows.length }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
 }
 
 // --- Exact keyword match — ทางลัดก่อน Gemini เฉพาะคำถามง่ายและชัดเจนจริงๆ เท่านั้น ---
