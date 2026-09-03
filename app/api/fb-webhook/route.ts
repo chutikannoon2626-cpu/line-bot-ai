@@ -482,11 +482,14 @@ export async function POST(req: NextRequest) {
             }
 
             // ลูกค้ากดปุ่ม [เข้ากลุ่ม]/[ลบกลุ่ม] จาก group-intent fallback quick reply (เรื่องที่ 89,
-            // 2026-09-02) — ต่างจาก isSpendernetworkRequest() ด้านล่างตรงที่รู้แน่ชัดว่าลูกค้ามีเจตนา
-            // จริง (ไม่ใช่แค่ข้อความกำกวมที่ยังไม่รู้ว่าต้องการอะไร) จึง notifyAdminFacebook() ล่วงหน้า
-            // กันลูกค้าหลุดหายเงียบๆ ถ้าไม่กดแอดไลน์เอง — เช็คจาก quick_reply payload เท่านั้น (ไม่ใช่
-            // ข้อความ) เพื่อไม่กระทบลูกค้าที่พิมพ์คำเดียวกันมาเอง (ยังไหลเข้า isSpendernetworkRequest()
-            // ตามพฤติกรรมเดิมทุกประการ ไม่ notifyAdminFacebook เหมือนเดิม)
+            // 2026-09-02 — ปรับข้อความคำถามที่แนบปุ่มมาใน เรื่องที่ 90 ให้ถามกลางๆ ก่อนแทนฟันธงทันที
+            // แต่ handler นี้ไม่เปลี่ยน) — ต่างจาก isSpendernetworkRequest() ด้านล่างตรงที่รู้แน่ชัดว่า
+            // ลูกค้ามีเจตนาจริง (ไม่ใช่แค่ข้อความกำกวมที่ยังไม่รู้ว่าต้องการอะไร) จึง notifyAdminFacebook()
+            // ล่วงหน้า กันลูกค้าหลุดหายเงียบๆ ถ้าไม่กดแอดไลน์เอง — ตอนนี้เป็นจุดแรกที่ลูกค้าเห็นข้อความ
+            // ชี้ทาง LINE เต็มรูปแบบ (getSpendernetworkRedirectMessage()) เพราะข้อความก่อนหน้าเปลี่ยนเป็น
+            // ถามกลางๆ แล้ว — เช็คจาก quick_reply payload เท่านั้น (ไม่ใช่ข้อความ) เพื่อไม่กระทบลูกค้าที่
+            // พิมพ์คำเดียวกันมาเอง (ยังไหลเข้า isSpendernetworkRequest() ตามพฤติกรรมเดิมทุกประการ ไม่
+            // notifyAdminFacebook เหมือนเดิม)
             const groupIntentPayload = event.message.quick_reply?.payload
             if (groupIntentPayload === 'GROUP_JOIN' || groupIntentPayload === 'GROUP_REMOVE') {
               const action = groupIntentPayload === 'GROUP_JOIN' ? 'เข้ากลุ่ม' : 'ลบกลุ่ม'
@@ -770,14 +773,16 @@ export async function POST(req: NextRequest) {
               if (lastBotReply && lastBotReply === reply) finalReply = 'รับทราบค่ะ 🙏'
             } catch { /* Redis ล่ม — ส่งปกติ */ }
 
-            // (เรื่องที่ 89) ข้อความ group-intent fallback (ข้อความกำกวมเรื่องกลุ่ม ไม่มีคำขอชัดเจน จาก
-            // guardrail ใน lib/prompts.ts) — แนบปุ่มให้เลือกแทนข้อความเปล่าๆ กันลูกค้าไม่รู้จะตอบอะไรต่อ
-            // ตรวจจากข้อความเฉพาะที่ใช้จุดเดียวในระบบ (ยืนยันด้วย grep แล้วว่าไม่ซ้ำกับคำตอบอื่นเลย)
-            if (finalReply.includes('แอดไลน์ @spenderclub') && finalReply.includes('เกี่ยวกับ Spender Network')) {
+            // (เรื่องที่ 89, ปรับข้อความ+เงื่อนไขตรวจจับใน เรื่องที่ 90) ข้อความ group-intent fallback
+            // (ข้อความกำกวมเรื่องกลุ่ม ไม่มีคำขอชัดเจน จาก guardrail ใน lib/prompts.ts) — เดิมฟันธงว่า
+            // เป็นเรื่อง Spender Network ทันที ทำให้ลูกค้างงว่าทำไมถูกชี้ไป LINE ทั้งที่ยังไม่ได้ถามอะไร
+            // เปลี่ยนเป็นถามกลางๆ ก่อน + แนบปุ่มให้เลือก ตรวจจากข้อความเฉพาะที่ใช้จุดเดียวในระบบ
+            // (ยืนยันด้วย grep แล้วว่าไม่ซ้ำกับคำตอบอื่นเลย)
+            if (finalReply.includes('ลูกค้าต้องการสอบถามข้อมูลเรื่องไหนคะ')) {
               await fbSendQuickReplies(psid, finalReply, [
                 { title: 'เข้ากลุ่ม', payload: 'GROUP_JOIN' },
                 { title: 'ลบกลุ่ม', payload: 'GROUP_REMOVE' },
-                { title: 'เรื่องอื่น', payload: 'GROUP_OTHER' },
+                { title: 'สอบเรื่องอื่นๆ', payload: 'GROUP_OTHER' },
               ])
             } else {
               await fbSendReply(psid, finalReply)
