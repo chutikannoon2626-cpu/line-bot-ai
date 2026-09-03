@@ -833,7 +833,7 @@ export async function POST(req: NextRequest) {
             }
 
             if (imageUrls.length === 0) {
-              await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
+              await fbSend(psid, 'รบกวนลูกค้าพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ น้องใจดีจะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               log.info('fb.image.no_url', { userId })
               return
             }
@@ -847,7 +847,7 @@ export async function POST(req: NextRequest) {
               }
             } catch (err) {
               log.error('fb.image.download_failed', { userId, err: (err as Error).message })
-              await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
+              await fbSend(psid, 'รบกวนลูกค้าพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ น้องใจดีจะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               return
             }
 
@@ -922,7 +922,7 @@ export async function POST(req: NextRequest) {
 
             // 5.2: อ่านไม่ออก → ถามชื่อรุ่น (พฤติกรรมเดิม)
             if (intent.kind === 'unclear') {
-              await fbSend(psid, 'รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
+              await fbSend(psid, 'รบกวนลูกค้าพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ น้องใจดีจะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ')
               log.info('fb.image.ocr_not_found', { userId })
               return
             }

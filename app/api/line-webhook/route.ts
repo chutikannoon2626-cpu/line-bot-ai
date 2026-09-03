@@ -437,7 +437,7 @@ export async function POST(req: NextRequest) {
               } catch { /* วิเคราะห์ล้มเหลว — ข้ามได้ */ }
 
               if (intent.kind === 'unclear') {
-                await ans(txt('รบกวนพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ จะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ'))
+                await ans(txt('รบกวนลูกค้าพิมพ์ชื่อรุ่นที่สนใจได้ไหมคะ น้องใจดีจะได้ช่วยหาข้อมูลให้ถูกต้องค่ะ'))
                 log.info('image.ocr_not_found', { userId, elapsedMs: elapsed })
                 return
               }
