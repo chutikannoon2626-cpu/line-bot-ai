@@ -273,6 +273,8 @@ type FbEvent = {
     // สติกเกอร์ออกจากรูปภาพจริงก่อนเข้าสู่การวิเคราะห์รูป — ยังไม่เคยยืนยันด้วย log จริงจากระบบนี้เอง
     // อิงจากเอกสาร Facebook Messenger Platform ทั่วไป (ดูเหตุผลเต็มที่จุดตรวจ isStickerAttachment())
     attachments?: Array<{ type: string; payload: { url?: string; sticker_id?: number } }>
+    // (เรื่องที่ 89) payload ของปุ่ม quick reply ที่ลูกค้ากด — ใช้แยก "กดปุ่ม" ออกจาก "พิมพ์คำเดียวกันเอง"
+    quick_reply?: { payload: string }
   }
   postback?: { payload: string; title: string }
 }
@@ -476,6 +478,23 @@ export async function POST(req: NextRequest) {
               await fbSend(psid, preHandoffQ)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: preHandoffQ }])
               log.info('fb.handoff.pre_handoff_question', { userId, latencyMs: Date.now() - startTime })
+              return
+            }
+
+            // ลูกค้ากดปุ่ม [เข้ากลุ่ม]/[ลบกลุ่ม] จาก group-intent fallback quick reply (เรื่องที่ 89,
+            // 2026-09-02) — ต่างจาก isSpendernetworkRequest() ด้านล่างตรงที่รู้แน่ชัดว่าลูกค้ามีเจตนา
+            // จริง (ไม่ใช่แค่ข้อความกำกวมที่ยังไม่รู้ว่าต้องการอะไร) จึง notifyAdminFacebook() ล่วงหน้า
+            // กันลูกค้าหลุดหายเงียบๆ ถ้าไม่กดแอดไลน์เอง — เช็คจาก quick_reply payload เท่านั้น (ไม่ใช่
+            // ข้อความ) เพื่อไม่กระทบลูกค้าที่พิมพ์คำเดียวกันมาเอง (ยังไหลเข้า isSpendernetworkRequest()
+            // ตามพฤติกรรมเดิมทุกประการ ไม่ notifyAdminFacebook เหมือนเดิม)
+            const groupIntentPayload = event.message.quick_reply?.payload
+            if (groupIntentPayload === 'GROUP_JOIN' || groupIntentPayload === 'GROUP_REMOVE') {
+              const action = groupIntentPayload === 'GROUP_JOIN' ? 'เข้ากลุ่ม' : 'ลบกลุ่ม'
+              notifyAdminFacebook(psid, `⚠️ ลูกค้าต้องการ${action} (กดปุ่มยืนยันแล้ว) รบกวนติดตามทาง LINE ด้วยค่ะ`).catch(() => {})
+              const redirectMsg = getSpendernetworkRedirectMessage()
+              await fbSend(psid, redirectMsg)
+              await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
+              log.info('fb.group_intent.button_tapped', { userId, action })
               return
             }
 
@@ -751,7 +770,18 @@ export async function POST(req: NextRequest) {
               if (lastBotReply && lastBotReply === reply) finalReply = 'รับทราบค่ะ 🙏'
             } catch { /* Redis ล่ม — ส่งปกติ */ }
 
-            await fbSendReply(psid, finalReply)
+            // (เรื่องที่ 89) ข้อความ group-intent fallback (ข้อความกำกวมเรื่องกลุ่ม ไม่มีคำขอชัดเจน จาก
+            // guardrail ใน lib/prompts.ts) — แนบปุ่มให้เลือกแทนข้อความเปล่าๆ กันลูกค้าไม่รู้จะตอบอะไรต่อ
+            // ตรวจจากข้อความเฉพาะที่ใช้จุดเดียวในระบบ (ยืนยันด้วย grep แล้วว่าไม่ซ้ำกับคำตอบอื่นเลย)
+            if (finalReply.includes('แอดไลน์ @spenderclub') && finalReply.includes('เกี่ยวกับ Spender Network')) {
+              await fbSendQuickReplies(psid, finalReply, [
+                { title: 'เข้ากลุ่ม', payload: 'GROUP_JOIN' },
+                { title: 'ลบกลุ่ม', payload: 'GROUP_REMOVE' },
+                { title: 'เรื่องอื่น', payload: 'GROUP_OTHER' },
+              ])
+            } else {
+              await fbSendReply(psid, finalReply)
+            }
             await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
             log.info('fb.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
             try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }

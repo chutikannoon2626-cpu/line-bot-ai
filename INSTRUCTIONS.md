@@ -2023,6 +2023,22 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 89 — แนบปุ่มเลือก + แจ้งแอดมินล่วงหน้าตอนบอทชี้ทางเรื่องกลุ่ม (group-intent fallback, Facebook เท่านั้น)
+
+**สาเหตุ:** เจอเคสจริงจากภาพแอดมิน: ลูกค้าส่ง "1.2วิภาวดี V3" (ชื่อ+เลขกลุ่มเปล่าๆ ไม่มีคำขอชัดเจน) โดน guardrail ใน `lib/prompts.ts` (`groupIntentFallback`, บรรทัด 233) ตอบข้อความชี้ทางไป LINE ทันที — ตรวจโค้ดพบว่าเคสนี้**ไม่มีการแจ้งแอดมินเลย** (คอมเมนต์เดิมระบุว่า "ยังไม่มีข้อมูลอะไรให้แอดมินดำเนินการ") ถ้าลูกค้าไม่กดแอดไลน์ต่อเอง ความต้องการจะหายไปเงียบๆ ไม่มีใครในทีมรู้เลย
+
+**วิธีแก้:** 2 จุดใน [fb-webhook.ts](app/api/fb-webhook/route.ts):
+1. หลังคำนวณ `finalReply` เสร็จ (จุดที่เรียก `fbSendReply()` เดิม) — เช็คว่า `finalReply` ตรงกับข้อความ group-intent fallback ไหม (`.includes('แอดไลน์ @spenderclub')` + `.includes('เกี่ยวกับ Spender Network')` — ยืนยันด้วย grep แล้วว่าใช้จุดเดียวในระบบ ไม่ซ้ำกับคำตอบอื่น) ถ้าใช่ ส่งเป็น quick reply แนบปุ่ม `[เข้ากลุ่ม] [ลบกลุ่ม] [เรื่องอื่น]` แทนข้อความเปล่าๆ
+2. เพิ่ม field `quick_reply?: { payload: string }` ใน `FbEvent.message` type + handler ใหม่ก่อน `isSpendernetworkRequest()` — เช็คจาก **quick_reply payload เท่านั้น** (ไม่ใช่ข้อความ) ว่าลูกค้ากด `GROUP_JOIN`/`GROUP_REMOVE` ไหม ถ้าใช่ `notifyAdminFacebook()` ทันทีก่อนส่งข้อความชี้ทางไป LINE เหมือนเดิม — ตั้งใจแยกจาก `isSpendernetworkRequest()` เพราะรู้แน่ชัดแล้วว่าลูกค้ามีเจตนาจริง (ต่างจากข้อความกำกวมทั่วไปที่ยังไม่ notify ตามเดิม) — ปุ่ม "เรื่องอื่น" ไม่มี handler พิเศษ ปล่อยไหลเข้า flow ปกติ
+
+**ทดสอบก่อน commit:** `tsc --noEmit` ผ่านสมบูรณ์ — ทดสอบ Gemini API จริง 2 ชุด: (1) ข้อความเดี่ยว "1.2วิภาวดี V3"/"0923966678"/"DOPA BBT" ไม่มี history — เคสแรกตรงเงื่อนไข groupIntentFallback ตรวจจับสำเร็จ 100% เคสอื่นไม่เข้าเงื่อนไข (ไหลเข้า flow ปกติ ถูกต้อง) (2) จำลอง history ต่อจากเคสจริงในภาพ (ส่ง "1.2วิภาวดี V3" แล้วบอทชี้ทาง แล้วส่ง "0923966678" ตามมา) รัน 3 รอบ — ตรวจจับสำเร็จ 2/3 รอบ อีก 1 รอบ Gemini ตัดสินใจค้นเว็บแทน (ความไม่แน่นอนปกติของ Gemini) — **รอบที่ตรวจจับไม่สำเร็จยังคงส่งข้อความปกติผ่าน `fbSendReply()` (else branch) ได้ตามปกติ ไม่ error ไม่ใช่ broken state** แค่ไม่ได้ปุ่มในรอบนั้น
+
+**ทำไมไม่กระทบอย่างอื่น:** เช็คด้วย `.includes()` บน substring ที่ยืนยันแล้วว่าไม่ซ้ำกับคำตอบอื่นในระบบ (FAQ/repair_protocol/imei_protocol/HANDOFF ฯลฯ ไม่มีทางตรงเงื่อนไขนี้) — คำตอบอื่นทั้งหมดยังไหลผ่าน `else` (`fbSendReply()`) เหมือนเดิมทุกประการ · การเช็คปุ่มกดใช้ `quick_reply.payload` ไม่ใช่ข้อความ จึง**ไม่กระทบลูกค้าที่พิมพ์คำว่า "เข้ากลุ่ม"/"ลบกลุ่ม" เองตรงๆ** (ยังไหลเข้า `isSpendernetworkRequest()` พฤติกรรมเดิมทุกประการ ไม่ notifyAdminFacebook เหมือนเดิม) — ไม่แตะ LINE เลย ไม่แตะ `getSpendernetworkRedirectMessage()`/`isSpendernetworkRequest()`/prompt ใดๆ
+
+**ขอบเขต:** แก้ไฟล์เดียว ([app/api/fb-webhook/route.ts](app/api/fb-webhook/route.ts)) 3 จุด (type definition, handler ใหม่ก่อน isSpendernetworkRequest, จุดส่ง finalReply) — Facebook เท่านั้น
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
