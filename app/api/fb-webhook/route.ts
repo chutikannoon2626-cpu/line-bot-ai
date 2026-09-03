@@ -200,11 +200,13 @@ async function fbSendProductCard(psid: string, reply: string, url: string) {
   })
 }
 
-// ส่ง reply อัตโนมัติ — ถ้ามี URL สินค้า → Generic Template card, ไม่มี → plain text
+// ส่ง reply — ส่งเป็นข้อความธรรมดาเสมอ (เรื่องที่ 88, 2026-09-02) — เดิมถ้ามี URL สินค้าจะเปลี่ยนเป็น
+// Generic Template card แทน แต่ Facebook บังคับ title/subtitle ห้ามเกิน 80 ตัวอักษร (ขีดจำกัดของแพลตฟอร์ม
+// เอง ไม่ใช่ที่โค้ดตั้งเอง) ทำให้คำตอบยาวๆ ของ Gemini ถูกตัดทิ้งไปเงียบๆ โดยลูกค้าไม่รู้ตัว (เจอเคสจริง:
+// คำตอบเปรียบเทียบย่านความถี่ที่มีข้อมูลสำคัญตรงส่วนที่ถูกตัด) — เปลี่ยนมาส่งข้อความธรรมดาเสมอ ไม่มีขีดจำกัด
+// ความยาวแบบนี้อีก
 async function fbSendReply(psid: string, reply: string) {
-  const url = extractProductUrl(reply)
-  if (url) await fbSendProductCard(psid, reply, url)
-  else await fbSend(psid, reply)
+  await fbSend(psid, reply)
 }
 
 // ส่ง Quick Replies — ห่อด้วย withUserSendLock เหมือน fbSend (2026-08-05)
