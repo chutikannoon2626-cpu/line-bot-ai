@@ -790,7 +790,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>last_question:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>ป้องกัน duplicate reply (เทียบคำถาม เช็คก่อนเรียก Gemini)</td></tr>
     <tr><td><code>last_bot_question:{userId}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>(เรื่องที่ 93) คำถามบอทก่อนหน้า คู่กับ <code>last_question</code> — ต้องตรงทั้งคู่ถึงจะนับว่าถามซ้ำจริง</td></tr>
     <tr><td><code>repeat_count:{userId}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Duplicate counter: 1=reminder 2+=เงียบ</td></tr>
-    <tr><td><code>history:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">1800s (เดิม 600s, เรื่องที่ 94)</span></td><td>Conversation turns max 6 (lib/history.ts)</td></tr>
+    <tr><td><code>history:{userId}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s (เคยเป็น 1800s ช่วงสั้นๆ ที่เรื่องที่ 94, ย้อนกลับที่เรื่องที่ 96)</span></td><td>Conversation turns max 6 (lib/history.ts)</td></tr>
   </table>
 
   <h3 style="margin-top:18px">Facebook Channel (ทุก key ใช้ userId = fb:{psid} นำหน้า)</h3>
@@ -810,7 +810,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     <tr><td><code>last_question:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>Duplicate suppress FB (text + postback ใช้ key เดียวกัน)</td></tr>
     <tr><td><code>last_bot_question:fb:{psid}</code></td><td><span class="tag tag-string">string</span></td><td><span class="ttl">120s</span></td><td>(เรื่องที่ 93) คำถามบอทก่อนหน้า — เฉพาะ text flow ไม่ใช้กับ postback</td></tr>
     <tr><td><code>repeat_count:fb:{psid}</code></td><td><span class="tag tag-string">counter</span></td><td><span class="ttl">120s</span></td><td>Repeat counter FB</td></tr>
-    <tr><td><code>history:fb:{psid}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">1800s (เดิม 600s, เรื่องที่ 94)</span></td><td>Conversation history FB (lib/history.ts)</td></tr>
+    <tr><td><code>history:fb:{psid}</code></td><td><span class="tag tag-string">JSON</span></td><td><span class="ttl">600s (เคยเป็น 1800s ช่วงสั้นๆ ที่เรื่องที่ 94, ย้อนกลับที่เรื่องที่ 96)</span></td><td>Conversation history FB (lib/history.ts)</td></tr>
   </table>
 
   <h3 style="margin-top:18px">Web Chat Channel (ใช้ sessionId โดยตรง)</h3>
@@ -949,7 +949,7 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
     </tr>
     <tr>
       <td><span class="file-badge">history.ts</span></td>
-      <td>LINE + FB conversation history · key <code>history:{userId}</code> TTL <s>600s</s> <strong>1800s (เรื่องที่ 94, 2026-09-02)</strong> ตายตัวเสมอ · (เพิ่ม 2026-08-08 เรื่องที่ 39, ยกเลิก 2026-08-10) เคยรับ <code>ttlSeconds</code> optional เพื่อยืด TTL ตอนปิดบอทตามตารางเวลา — ยกเลิกแล้วเพราะบอทดึง history เก่าที่แอดมินคุยจบนอกระบบไปแล้วกลับมาใช้ กลับไปใช้ TTL ตายตัวเหมือนเดิมทุกกรณี · (เรื่องที่ 94) เจอเคสจริงลูกค้าหายไป 11-20 นาทีระหว่างคุย history หมดอายุก่อนข้อความถัดมาทำให้บอทลืมบริบทที่เคยรับทราบไปแล้ว ขยายจาก 600s เป็น 1800s ครอบคลุมช่วงเงียบที่เจอจริง · <strong>max turns: Web Chat 6 เทิร์น (เดิม, <code>saveHistory()</code>) · LINE/FB 12 เทิร์น (เพิ่ม 2026-08-11 เรื่องที่ 43, <code>saveHistoryExtended()</code> ฟังก์ชันแยกต่างหาก) — ลูกค้าพิมพ์ถี่หลายข้อความสั้นๆ ติดกันทำให้โควตา 6 เทิร์นเดิมหมดเร็วเกินไป บริบทช่วงต้น (เช่น ชื่อรุ่น) หลุดหายทั้งที่ยังอยู่ในบทสนทนาเดียวกัน — ไม่ผูกกับ TTL เพดานต้นทุนสูงสุดต่อครั้งไม่เปลี่ยนตาม TTL</strong></td>
+      <td>LINE + FB conversation history · key <code>history:{userId}</code> TTL 600s ตายตัวเสมอ · (เพิ่ม 2026-08-08 เรื่องที่ 39, ยกเลิก 2026-08-10) เคยรับ <code>ttlSeconds</code> optional เพื่อยืด TTL ตอนปิดบอทตามตารางเวลา — ยกเลิกแล้วเพราะบอทดึง history เก่าที่แอดมินคุยจบนอกระบบไปแล้วกลับมาใช้ กลับไปใช้ TTL ตายตัวเหมือนเดิมทุกกรณี · <s>(เรื่องที่ 94, 2026-09-04) ขยายจาก 600s เป็น 1800s เพราะเจอเคสจริงลูกค้าหายไป 11-20 นาทีทำให้บอทลืมบริบท</s> **(เรื่องที่ 96, 2026-09-04) ย้อนกลับเป็น 600s ตามเดิม** — ตรวจ git log ย้อนหลังพบว่าเคยเป็น 1800s มาก่อนแล้วครั้งหนึ่งตอนสร้างฟีเจอร์นี้ ก่อนถูกลดเหลือ 600s โดยตั้งใจเมื่อ 25 มิ.ย. 2569 แต่ไม่มีบันทึกเหตุผลไว้ที่ไหนเลย (เบาะแสจาก commit ใกล้เคียง: เพิ่ม repair_protocol + เอา history check ออกจาก pre_handoff ในช่วงเวลาไล่เลี่ยกัน ชวนสงสัยว่า TTL ยาวเคยรบกวน protocol อื่น) — เพื่อความปลอดภัยจึงย้อนกลับค่าเดิม ยอมรับความเสี่ยงที่ปัญหาของเรื่องที่ 94 อาจเกิดซ้ำได้ · <strong>max turns: Web Chat 6 เทิร์น (เดิม, <code>saveHistory()</code>) · LINE/FB 12 เทิร์น (เพิ่ม 2026-08-11 เรื่องที่ 43, <code>saveHistoryExtended()</code> ฟังก์ชันแยกต่างหาก) — ลูกค้าพิมพ์ถี่หลายข้อความสั้นๆ ติดกันทำให้โควตา 6 เทิร์นเดิมหมดเร็วเกินไป บริบทช่วงต้น (เช่น ชื่อรุ่น) หลุดหายทั้งที่ยังอยู่ในบทสนทนาเดียวกัน — ไม่ผูกกับ TTL เพดานต้นทุนสูงสุดต่อครั้งไม่เปลี่ยนตาม TTL</strong></td>
       <td><code>getHistory()</code> <code>saveHistory()</code></td>
     </tr>
     <tr>
