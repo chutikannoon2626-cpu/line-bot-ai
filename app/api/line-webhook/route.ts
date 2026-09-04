@@ -584,9 +584,15 @@ export async function POST(req: NextRequest) {
           // ชั้น 1: กันถามซ้ำเป๊ะ — เทียบ "คำถามลูกค้า" ไม่ใช่ "คำตอบบอท" เช็คก่อน findExactMatch()
           // ด้วย (ไม่ใช่แค่ก่อน Gemini) เพราะ findExactMatch() เองก็ไม่มีระบบกันซ้ำเลย — คำถามที่ตรง
           // keyword ในชีต (เช่น "สอบถามเพิ่มเติม") จะตอบซ้ำเป๊ะไปเรื่อยๆ ไม่มีวันเงียบถ้าไม่กันตรงนี้ก่อน
+          // (เรื่องที่ 93) เจอเคสจริง: ลูกค้าตอบ "ใช่ครับ" ยืนยัน 2 คำถามที่ต่างกัน (ยืนยันรูปกลุ่ม แล้ว
+          // ยืนยันธุรกรรม IMEI+กลุ่มเต็ม) ข้อความลูกค้าตรงกันเป๊ะทั้ง 2 ครั้ง แต่เป็นคนละคำถามของบอทเลย —
+          // กลไกเดิมเทียบแค่ข้อความลูกค้าอย่างเดียว เข้าใจผิดว่าถามซ้ำ ตัดจบด้วย reminder แทนที่จะ
+          // ประมวลผลการยืนยันจริง — เพิ่มเช็ค "คำถามบอทก่อนหน้า" ควบคู่ไปด้วย ต้องตรงทั้งคู่ถึงจะนับว่าซ้ำจริง
+          const lastBotTurn = [...history].reverse().find(t => t.role === 'model')?.text
           try {
             const lastQuestion = await redis.get<string>(`last_question:${userId}`)
-            if (lastQuestion && lastQuestion === userMessage) {
+            const lastBotQuestion = await redis.get<string>(`last_bot_question:${userId}`)
+            if (lastQuestion && lastQuestion === userMessage && lastBotQuestion === (lastBotTurn ?? '')) {
               const [repeatCount] = await redis.pipeline()
                 .incr(`repeat_count:${userId}`)
                 .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
@@ -604,11 +610,11 @@ export async function POST(req: NextRequest) {
           } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
 
           // Exact keyword match — คำถามง่าย/ชัดเจนตรงกับชีต ตอบทันทีไม่ผ่าน Gemini
-          const lastBotTurn = [...history].reverse().find(t => t.role === 'model')?.text
           const exactMatch = await findExactMatch(userMessage, lastBotTurn)
           if (exactMatch) {
             try {
               await redis.set(`last_question:${userId}`, userMessage, { ex: LAST_ANSWER_TTL })
+              await redis.set(`last_bot_question:${userId}`, lastBotTurn ?? '', { ex: LAST_ANSWER_TTL })
               await redis.del(`repeat_count:${userId}`)
             } catch { /* Redis ล่ม */ }
             await ans(txt(exactMatch))
@@ -843,6 +849,7 @@ export async function POST(req: NextRequest) {
           // จำคำถามล่าสุดไว้เทียบซ้ำรอบหน้า (เฉพาะตอบสำเร็จ — HANDOFF/NOT_FOUND ฯลฯ ไม่นับ)
           try {
             await redis.set(`last_question:${userId}`, userMessage, { ex: LAST_ANSWER_TTL })
+            await redis.set(`last_bot_question:${userId}`, lastBotTurn ?? '', { ex: LAST_ANSWER_TTL })
             await redis.del(`repeat_count:${userId}`)
           } catch { /* Redis ล่ม — ส่งปกติ */ }
 
