@@ -70,6 +70,14 @@ function getHandoffMessage(): string {
     : 'รับเรื่องไว้แล้วนะคะ 🙏 ทีมงานจะรีบติดต่อกลับให้เร็วที่สุดค่ะ'
 }
 
+// (เรื่องที่ 99, เฉพาะ Facebook) ลิงก์แอดเพื่อน LINE OA ทางการ (จาก LINE OA Manager) — ส่งเป็น
+// ข้อความแยกต่างหาก "มีแค่ลิงก์อย่างเดียว ไม่ปนข้อความอื่น" เสมอ เพราะทดสอบจริงแล้วว่า Facebook
+// Messenger จะ unfurl เป็นการ์ดพรีวิว (รูป+ชื่อบัญชี+QR) ก็ต่อเมื่อข้อความมีแค่ลิงก์ล้วนๆ เท่านั้น —
+// ถ้าฝังลิงก์ปนกลางข้อความอื่น (แบบที่ลองมาก่อน) จะได้แค่ลิงก์ตัวหนังสือธรรมดา ไม่มีการ์ด — ไม่แก้ไข
+// ข้อความเดิมที่มีคำว่า "@spenderclub" เลย (ของเดิมตั้งใจให้ลูกค้าอ่านแล้วพิมพ์ค้นหาเอง) แค่แถม
+// ข้อความนี้ต่อท้ายเป็นทางเลือกเสริมให้กดได้เลย
+const LINE_ADD_FRIEND_URL = 'https://lin.ee/ogHb2tW'
+
 // เรื่อง Spendernetwork (เข้า/ลบ/ย้ายกลุ่ม, ปัญหาการใช้งาน) — เฉพาะ Facebook ให้ชี้ทางไป LINE
 // แทน handoffMsg ทั่วไป เพราะงานดูแลระบบ Spendernetwork ทำผ่านทีมที่ดูแลทาง LINE เป็นหลัก
 // ใช้ข้อความเดียวกันทุกจุดที่เกี่ยวกับ Spendernetwork บน Facebook: HANDOFF ที่มี IMEI,
@@ -504,6 +512,7 @@ export async function POST(req: NextRequest) {
               notifyAdminFacebook(psid, `⚠️ ลูกค้าต้องการ${action} (กดปุ่มยืนยันแล้ว) รบกวนติดตามทาง LINE ด้วยค่ะ`).catch(() => {})
               const redirectMsg = getSpendernetworkRedirectMessage()
               await fbSend(psid, redirectMsg)
+              await fbSend(psid, LINE_ADD_FRIEND_URL)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
               log.info('fb.group_intent.button_tapped', { userId, action })
               return
@@ -523,6 +532,7 @@ export async function POST(req: NextRequest) {
                 if (count === 1) {
                   const redirectMsg = getSpendernetworkRedirectMessage()
                   await fbSend(psid, redirectMsg)
+                  await fbSend(psid, LINE_ADD_FRIEND_URL)
                   await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
                   log.info('fb.spendernetwork.redirected', { userId })
                 } else {
@@ -531,6 +541,7 @@ export async function POST(req: NextRequest) {
               } catch {
                 const redirectMsg = getSpendernetworkRedirectMessage()
                 await fbSend(psid, redirectMsg)
+                await fbSend(psid, LINE_ADD_FRIEND_URL)
               }
               return
             }
@@ -666,7 +677,8 @@ export async function POST(req: NextRequest) {
               // (เรื่องที่ 76) ต่อท้าย handoffMsg เดิมด้วยทางเลือกแอดไลน์ (ไม่แทนที่ handoffMsg เอง)
               // เผื่อลูกค้าอยากให้ช่างเทคนิคทาง LINE ดูแลต่อเนื่องเร็วกว่ารอแอดมิน Facebook — เฉพาะ
               // Facebook เท่านั้น ไม่แตะ line-webhook.ts เพราะ LINE อยู่ในระบบที่ทีมซ่อมดูแลอยู่แล้ว
-              const replyMsg = /HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
+              const isDiy = /HANDOFF:\s*ขอวิธีทำเอง/i.test(reply)
+              const replyMsg = isDiy
                 ? 'กรุณารอเจ้าหน้าที่เพื่อทำการตรวจสอบและแนะนำวิธีให้อีกครั้งนะคะ'
                 : summary.includes('IMEI:')
                 ? getSpendernetworkRedirectMessage()
@@ -708,6 +720,7 @@ export async function POST(req: NextRequest) {
                 log.error('fb.handoff.state_failed', { err: (stateErr as Error).message, userId })
               }
               await fbSend(psid, replyMsg)
+              if (!isDiy) await fbSend(psid, LINE_ADD_FRIEND_URL)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
               log.info('fb.handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
               return
