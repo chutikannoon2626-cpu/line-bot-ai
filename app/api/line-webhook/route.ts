@@ -12,6 +12,7 @@ import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 import { withUserSendLock } from '@/lib/sendLock'
+import { withUserProcessingLock } from '@/lib/processingLock'
 
 const NOT_FOUND = '[NOT_FOUND]'
 const GEMINI_UNAVAILABLE = '[GEMINI_UNAVAILABLE]'
@@ -247,6 +248,12 @@ export async function POST(req: NextRequest) {
           const userMessage = (event.message as { text: string }).text
           log.info('webhook.message_received', { userId })
           logChat({ userId, channel: 'LINE', role: 'user', message: userMessage, ts: Date.now() })
+          // (เรื่องที่ 98) ห่อทั้งขั้นตอนตั้งแต่อ่าน history จนถึงบันทึก history เสร็จด้วย lock ต่อ user
+          // กันข้อความ 2 ข้อความที่พิมพ์ติดกันเร็วมาก (เช่น "ตรง Name" แล้ว "ใช่ครับ" ห่างกันแค่ 1-2 วิ)
+          // ประมวลผลพร้อมกันจนข้อความที่ 2 อ่าน history ก่อนข้อความแรกบันทึกเสร็จ มองไม่เห็น
+          // คำตอบ/context ของข้อความแรกเลย (บั๊กจริง: ตอบซ้ำเรื่องเดิม, ตอบผิดเรื่องเพราะ context
+          // หลุดกลางคัน) — ดูรายละเอียดที่ lib/processingLock.ts
+          await withUserProcessingLock(userId, async () => {
           const history = await getHistory(userId)
           const handoffMsg = getHandoffMessage()
 
@@ -867,6 +874,7 @@ export async function POST(req: NextRequest) {
           await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
           log.info('reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
           try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
+          })
         }
 
         // --- IMAGE ---

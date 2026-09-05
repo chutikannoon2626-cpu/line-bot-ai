@@ -11,6 +11,7 @@ import { getActiveHolidayNotice } from '@/lib/holidays'
 import { shouldGreet, getWelcomeMessage } from '@/lib/greeting'
 import { logChat } from '@/lib/chatlog'
 import { withUserSendLock } from '@/lib/sendLock'
+import { withUserProcessingLock } from '@/lib/processingLock'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -339,6 +340,13 @@ export async function POST(req: NextRequest) {
             const userMessage = event.message.text
             log.info('webhook.message_received', { userId })
             logChat({ userId, channel: 'Facebook', role: 'user', message: userMessage, ts: Date.now() })
+            // (เรื่องที่ 98) ห่อทั้งขั้นตอนตั้งแต่อ่าน history จนถึงบันทึก history เสร็จด้วย lock ต่อ
+            // user กันข้อความ 2 ข้อความที่พิมพ์ติดกันเร็วมาก (เช่น "ตรง Name" แล้ว "ใช่ครับ" ห่างกัน
+            // แค่ 1-2 วิ) ประมวลผลพร้อมกันจนข้อความที่ 2 อ่าน history ก่อนข้อความแรกบันทึกเสร็จ
+            // มองไม่เห็นคำตอบ/context ของข้อความแรกเลย — sync กับ line-webhook.ts ดูรายละเอียดที่
+            // lib/processingLock.ts (ยังไม่ครอบคลุม POSTBACK handler ด้านล่าง — เห็นชอบแยกต่างหาก
+            // เฉพาะ TEXT ตามเคสจริงที่เจอ)
+            await withUserProcessingLock(userId, async () => {
             const history = await getHistory(userId)
             const handoffMsg = getHandoffMessage()
 
@@ -490,7 +498,7 @@ export async function POST(req: NextRequest) {
             // ถามกลางๆ แล้ว — เช็คจาก quick_reply payload เท่านั้น (ไม่ใช่ข้อความ) เพื่อไม่กระทบลูกค้าที่
             // พิมพ์คำเดียวกันมาเอง (ยังไหลเข้า isSpendernetworkRequest() ตามพฤติกรรมเดิมทุกประการ ไม่
             // notifyAdminFacebook เหมือนเดิม)
-            const groupIntentPayload = event.message.quick_reply?.payload
+            const groupIntentPayload = event.message?.quick_reply?.payload
             if (groupIntentPayload === 'GROUP_JOIN' || groupIntentPayload === 'GROUP_REMOVE') {
               const action = groupIntentPayload === 'GROUP_JOIN' ? 'เข้ากลุ่ม' : 'ลบกลุ่ม'
               notifyAdminFacebook(psid, `⚠️ ลูกค้าต้องการ${action} (กดปุ่มยืนยันแล้ว) รบกวนติดตามทาง LINE ด้วยค่ะ`).catch(() => {})
@@ -797,6 +805,7 @@ export async function POST(req: NextRequest) {
             await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
             log.info('fb.reply.sent', { userId, latencyMs: Date.now() - startTime, replyLength: finalReply.length })
             try { await redis.zincrby('question_freq', 1, userMessage.slice(0, 100)) } catch { /* Redis ล่ม */ }
+            })
           }
 
           // --- IMAGE (รวมกรณีรูป + caption ในข้อความเดียว) ---
