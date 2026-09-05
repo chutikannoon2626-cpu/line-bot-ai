@@ -111,6 +111,10 @@ export async function findExactMatch(userMessage: string, lastBotTurn?: string):
   if (!msg || msg.length > 40) return null   // ยาวเกินไป ไม่ใช่คำถามง่าย
   if (BLOCK_INTENT_RE.test(msg)) return null  // มีคำที่บ่งบอกความต้องการอื่น (ซ่อม/เปรียบเทียบ/ปฏิเสธ/แนะนำ ฯลฯ)
   if (lastBotTurn && /รุ่น/u.test(lastBotTurn) && /อาการ/u.test(lastBotTurn)) return null // บอทเพิ่งถามยืนยันรุ่น+อาการใน repair_protocol — ปล่อยให้ Gemini จัดการต่อ ไม่ตัดผ่านทางลัด
+  // เคสจริง (เรื่องที่ 97): บอทถาม "ใช้วิทยุรุ่นไหน" เพื่อแนะนำอุปกรณ์เสริม (ไมโครโฟน/ไมค์) ที่เข้ากันได้
+  // ลูกค้าตอบแค่ชื่อรุ่นตรง keyword สินค้าพอดี หลุดเข้า exact match ไปตอบราคา/สเปคตัววิทยุเองแทนที่จะ
+  // แนะนำอุปกรณ์เสริมตามที่ถามจริง — เพิ่มเช็คแบบเดียวกับ repair_protocol
+  if (lastBotTurn && /รุ่นไหน/u.test(lastBotTurn) && /(ไมโครโฟน|ไมค์|อุปกรณ์เสริม|อะไหล่)/u.test(lastBotTurn)) return null
 
   try {
     const { rows, licenseMap } = await loadSheet()

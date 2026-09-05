@@ -1032,7 +1032,8 @@ fallback: searchSpenderSites() ถ้าไม่มี SERPER_API_KEY</div>
 เจอคำกลุ่มนี้ → return null ทันที (ยกให้ Gemini ตัดสินใจเต็มรูปแบบ ไม่เสี่ยงตอบผิดบริบท)</div>
     <div class="flow-arrow">↓ ผ่านทั้ง 2 ชั้น</div>
     <div class="flow-box"><strong>ชั้นที่ 3 (เพิ่ม 2026-08-21 — เรื่องที่ 62) — ต้องไม่ใช่คำตอบยืนยันของ repair_protocol</strong>
-เช็ค bot turn ล่าสุดจาก history — ถ้ามีคำว่า "รุ่น" และ "อาการ" ปนกัน (ลักษณะเฉพาะของคำถามยืนยันใน <code>&lt;repair_protocol&gt;</code>) → return null ทันที (ปล่อยให้ Gemini ซึ่งมี history เต็มจัดการต่อ ไม่ตัดผ่านทางลัด)</div>
+เช็ค bot turn ล่าสุดจาก history — ถ้ามีคำว่า "รุ่น" และ "อาการ" ปนกัน (ลักษณะเฉพาะของคำถามยืนยันใน <code>&lt;repair_protocol&gt;</code>) → return null ทันที (ปล่อยให้ Gemini ซึ่งมี history เต็มจัดการต่อ ไม่ตัดผ่านทางลัด)
+<span class="badge badge-red">(เพิ่ม 2026-09-04 — เรื่องที่ 97)</span> ชั้นที่ 3b — ถ้า bot turn ล่าสุดมีคำว่า "รุ่นไหน" ร่วมกับ "ไมโครโฟน"/"ไมค์"/"อุปกรณ์เสริม"/"อะไหล่" (บอทถามรุ่นเพื่อแนะนำอุปกรณ์เสริม ไม่ใช่ถามราคาตัวสินค้าตรงๆ) → return null เช่นกัน — เคสจริง: ลูกค้าตอบแค่ชื่อรุ่นตรง keyword พอดี เคยหลุดไปตอบราคาตัววิทยุแทนที่จะแนะนำไมค์ที่เข้ากันได้ตามที่ถามจริง</div>
     <div class="flow-arrow">↓ ผ่านทั้ง 3 ชั้น</div>
     <div class="flow-box"><strong>เช็คจำนวน row ที่ match</strong>
 match = 0 แถว → null (ไม่เจอ ปล่อย Gemini)
