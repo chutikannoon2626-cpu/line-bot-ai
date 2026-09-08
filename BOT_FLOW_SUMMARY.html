@@ -717,6 +717,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: control flow ล้วนๆ <code>tsc --noEmit</code> ผ่านสมบูรณ์ — จำลอง logic ด้วย fake Redis ยืนยันพฤติกรรมกันซ้ำ 24 ชม. ถูกต้อง ยังไม่ได้ทดสอบกับ Redis จริง อ้างอิงความถูกต้องจาก shouldGreet() ที่ใช้งานจริงมานาน</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: ไม่แตะ LINE/Web Chat/lib/prompts.ts/lib/handoff.ts/lib/greeting.ts เลย — ไม่แตะ 4 จุดเดิมเรื่องที่ 99 — Redis ล่ม fail-safe เป็น "ไม่ส่งลิงก์" ไม่กระทบข้อความหลัก</div>
 
+<h2>9.67 เพิ่ม log ดักจับ referral (ad_id จากโฆษณา) — ยังไม่ตอบลูกค้าอะไรเพิ่ม (เพิ่ม 2026-09-08 — เรื่องที่ 102, เฉพาะ Facebook)</h2>
+<p>อยากให้บอทรู้ว่าลูกค้ามาจากโฆษณาตัวไหนเพื่อตอบเจาะจงสินค้าได้เลยไม่ต้องถามซ้ำ — ข้อความทักทายอัตโนมัติของโฆษณาเองยืนยันแล้วว่าไม่เคยเข้า webhook — แต่ Facebook มี <code>referral</code> object แนบ <code>ad_id</code> มาให้แยกต่างหากได้ (ต้องเปิด webhook field <code>messaging_referrals</code> ที่ Meta for Developers ก่อน — เปิดสำเร็จแล้วไม่ต้องผ่าน App Review)</p>
+<div class="ok">เพิ่ม <code>referral</code> optional field ใน type <code>FbEvent</code> + เพิ่ม log ดักจับ <code>event.referral</code> ตอนต้นของทุก event — <strong>ยังไม่นำไปตอบลูกค้าหรือเปลี่ยนพฤติกรรมใดๆ</strong> เป็นแค่ log ดูก่อนว่าข้อมูลนี้มาถึงจริงไหม</div>
+<div class="tip">ทดสอบก่อน commit: เพิ่ม type field + log call ล้วนๆ <code>tsc --noEmit</code> ผ่านสมบูรณ์ (ต้องแตก field ย่อยแยกแทนส่ง nested object เพราะ LogContext รับแค่ string/number/boolean) — ยังไม่ยืนยันด้วยข้อมูลจริงว่า referral จะมาถึง event นี้หรือเป็น event แยกต่างหาก ต้องรอทดสอบกับโฆษณาจริง</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: field ใหม่แบบ optional event ที่ไม่มี referral ข้ามไปเฉยๆ — ไม่แตะ LINE/Web Chat — ไม่เพิ่มการเรียก Gemini — อยู่นอก logic การตอบทั้งหมด</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

@@ -498,6 +498,7 @@
         <div class="step-title">Dedupe by Message ID</div>
         <div class="step-desc"><code>event.message.mid</code> → <code>redis.set('msgid:{mid}', '1', {ex:120, nx:true})</code> · ไม่ใช่ค่าใหม่ → log <code>webhook.duplicate_event_skipped</code> → return ทันที · Redis ล่ม → fail-open ประมวลผลต่อตามปกติ</div>
         <div class="ok">(เพิ่ม 2026-08-04, เรื่องที่ 30) เหมือน LINE ขั้น A2 — กัน Facebook ส่ง webhook event ซ้ำตอนเซิร์ฟเวอร์ตอบช้าจนตอบลูกค้าซ้ำ 2 รอบ ดูรายละเอียดที่ INSTRUCTIONS.md</div>
+        <div class="warn">(เพิ่ม 2026-09-08, เรื่องที่ 102) ตรวจ <code>event.referral</code> (มาจากลูกค้ากดโฆษณา Click-to-Messenger) ถ้ามีค่า → log <code>fb.referral_detected</code> พร้อม <code>ad_id</code>/<code>ref</code> — เป็นแค่ log ดักจับดูก่อน ยังไม่นำไปตอบลูกค้าหรือเปลี่ยนพฤติกรรมใดๆ ต้องเปิด webhook field <code>messaging_referrals</code> ที่ Meta for Developers ก่อนถึงจะได้รับ field นี้ (เปิดแล้ว) — ยังไม่ยืนยันด้วย log จริงว่ามาถึง event นี้หรือมาเป็น event แยกต่างหาก</div>
       </div>
     </div>
     <div class="step">

@@ -313,6 +313,12 @@ type FbEvent = {
     quick_reply?: { payload: string }
   }
   postback?: { payload: string; title: string }
+  // (เรื่องที่ 102) ข้อมูลอ้างอิงที่มากับข้อความแรกของบทสนทนา ถ้าลูกค้ากดโฆษณา (Click-to-Messenger)
+  // เข้ามา — Facebook จะแนบ ad_id ของโฆษณาที่กดมาด้วย (ต้องเปิด webhook field "messaging_referrals"
+  // ที่ Meta for Developers ก่อนถึงจะได้รับ field นี้ — เปิดแล้วเมื่อ 2026-09-08) ยังไม่เคยยืนยันด้วย
+  // log จริงว่ามาถึง event นี้จริงหรือมาเป็น event แยกต่างหาก (messaging_referrals event) — เพิ่ม
+  // แค่ log ดักจับไว้ดูก่อน ยังไม่มีการนำไปใช้ตอบลูกค้าใดๆ ทั้งสิ้น
+  referral?: { ref?: string; ad_id?: string; source?: string; type?: string }
 }
 
 // POST — Incoming messages
@@ -352,6 +358,18 @@ export async function POST(req: NextRequest) {
         }
 
         try {
+          // (เรื่องที่ 102) แค่ดักจับ+บันทึก log ว่า referral (มาจากโฆษณา/ลิงก์ ref) มาถึง event นี้
+          // จริงไหม — ยังไม่ตอบ/เปลี่ยนพฤติกรรมบอทเลยแม้แต่นิดเดียว รอดูผล log จริงก่อนตัดสินใจขั้นต่อไป
+          if (event.referral) {
+            log.info('fb.referral_detected', {
+              userId,
+              ref: event.referral.ref,
+              ad_id: event.referral.ad_id,
+              source: event.referral.source,
+              type: event.referral.type,
+            })
+          }
+
           // --- SESSION GREETING ---
           const thaiHour = (new Date().getUTCHours() + 7) % 24
 

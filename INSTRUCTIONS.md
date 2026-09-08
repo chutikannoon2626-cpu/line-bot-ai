@@ -2227,6 +2227,20 @@ SPENDER TC-15HW
 
 ---
 
+## เรื่องที่ 102 — เพิ่ม log ดักจับ referral (ad_id จากโฆษณา) — ยังไม่ตอบลูกค้าอะไรเพิ่ม (เฉพาะ Facebook)
+
+**สาเหตุ:** เจ้าของร้านอยากรู้ว่าลูกค้าที่ทักมาแต่ละครั้งมาจากโฆษณา (Ads) ตัวไหน เพื่อให้บอทตอบเจาะจงสินค้าได้โดยไม่ต้องถามซ้ำ — ตรวจสอบแล้วว่าข้อความทักทายอัตโนมัติของโฆษณาเอง**ไม่เคยส่งเข้า webhook ของบอทเลย** (ยืนยันจากการทดสอบจริง) แต่ Facebook Messenger Platform มีกลไกแยกต่างหากเรียกว่า `referral` object ที่แนบ `ad_id` มาให้ตอนลูกค้ากดโฆษณาแบบ Click-to-Messenger เข้ามา (ต้องเปิด webhook field `messaging_referrals` ที่ Meta for Developers ก่อน — เปิดสำเร็จแล้วโดยไม่ต้องผ่าน App Review เพิ่ม) — ก่อนจะสร้างฟีเจอร์เต็มรูปแบบ ต้องยืนยันก่อนว่าข้อมูลนี้มาถึง webhook จริงหรือไม่
+
+**วิธีแก้:** [fb-webhook/route.ts](app/api/fb-webhook/route.ts) — เพิ่ม `referral` เป็น optional field ใหม่ใน type `FbEvent` (`{ ref?, ad_id?, source?, type? }`) และเพิ่ม log ดักจับ (`log.info('fb.referral_detected', ...)`) ตอนต้นของการประมวลผลแต่ละ event ถ้ามีค่า `event.referral` — **ยังไม่มีการนำข้อมูลนี้ไปตอบลูกค้าหรือเปลี่ยนพฤติกรรมบอทใดๆ ทั้งสิ้น** เป็นแค่ log ไว้ดูก่อนเท่านั้น
+
+**ทดสอบก่อน commit:** เพิ่ม type field + log call ล้วนๆ ไม่แตะ Gemini/logic การตอบใดๆ เลย `tsc --noEmit` ผ่านสมบูรณ์ (ต้องแก้จาก `log.info(..., { referral: event.referral })` เป็นแตก field ย่อยออกมาแยกกัน เพราะ `LogContext` ของ `lib/log.ts` รับแค่ `string|number|boolean|undefined` ไม่รับ nested object) — **ยังไม่ยืนยันด้วยข้อมูลจริงว่า `event.referral` จะมาถึง event นี้จริงหรือมาเป็น event แยกต่างหาก** ต้องรอลูกค้ากดโฆษณาจริงแล้วดู log ถึงจะรู้
+
+**ทำไมไม่กระทบอย่างอื่น:** เพิ่ม field ใหม่แบบ optional ไม่กระทบ field เดิม — event ที่ไม่มี `referral` (ส่วนใหญ่) จะข้ามเงื่อนไขนี้ไปเฉยๆ ไม่มีอะไรเปลี่ยน — ไม่แตะ LINE/Web Chat/ไฟล์อื่นเลย — ไม่เพิ่มการเรียก Gemini — ไม่กระทบ flow การตอบลูกค้าใดๆ เพราะเป็นแค่ log อยู่นอก logic การตอบทั้งหมด
+
+**ขอบเขต:** แก้ไฟล์เดียว ([fb-webhook/route.ts](app/api/fb-webhook/route.ts)) — เฉพาะ Facebook เท่านั้น — ต้องเปิด webhook field `messaging_referrals` ที่ Meta for Developers ควบคู่ด้วย (ทำแล้ว)
+
+---
+
 ## 📖 คู่มือน้องใจดี — พฤติกรรมบอท
 
 > ใช้ร่วมกันทั้ง LINE OA และ Facebook Inbox
