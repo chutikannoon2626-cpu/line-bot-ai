@@ -711,6 +711,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: เปลี่ยนค่า string ล้วนๆ <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ยังไม่ยืนยัน 100% ว่าแก้ถาวร เพราะพฤติกรรมเดิมไม่คงเส้นคงวาตั้งแต่แรก อาจมีปัจจัยอื่นจากฝั่ง Facebook/LINE ปนอยู่ด้วย ต้องรอดูผลจริงหลัง deploy</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้แค่ค่า URL ไม่แตะจุดเรียกใช้/isDiy/ข้อความเดิมเลย</div>
 
+<h2>9.66 แนบลิงก์แอดเพื่อน LINE ให้ทุกคำตอบที่มีคำว่า @spenderclub กันซ้ำ 24 ชม. (เพิ่ม 2026-09-08 — เรื่องที่ 101, เฉพาะ Facebook)</h2>
+<p>เรื่องที่ 99 แนบลิงก์ไว้แค่ 4 จุดที่รู้ข้อความคงที่แน่ชัด — เจอเคสจริงว่า "@spenderclub" ยังโผล่จากอีก 2 แหล่งที่ไม่ใช่ string คงที่: (1) คำตอบสำเร็จรูปจาก FAQ Sheet (เช่น row spender-network-15) (2) คำตอบที่ Gemini แต่งเองตามคำสั่งใน lib/prompts.ts — ทั้ง 2 แหล่งไหลผ่าน <code>fbSendReply()</code> เดียวกันก่อนถึงลูกค้าเสมอ</p>
+<div class="ok">เพิ่มเช็คใน <code>fbSendReply()</code>: ถ้าข้อความมีคำว่า @spenderclub และยังไม่เคยส่งลิงก์ให้ psid นี้ใน 24 ชม. (<code>shouldSendLineLink()</code> ใหม่ — pattern เดียวกับ <code>shouldGreet()</code> ใน lib/greeting.ts เป๊ะ) ให้แนบ <code>LINE_ADD_FRIEND_URL</code> ตามหลังเป็นข้อความที่สอง — ไม่แตะ 4 จุดเดิมของเรื่องที่ 99 เลย (ยังส่งทุกครั้งไม่กันซ้ำเหมือนเดิม)</div>
+<div class="tip">ทดสอบก่อน commit: control flow ล้วนๆ <code>tsc --noEmit</code> ผ่านสมบูรณ์ — จำลอง logic ด้วย fake Redis ยืนยันพฤติกรรมกันซ้ำ 24 ชม. ถูกต้อง ยังไม่ได้ทดสอบกับ Redis จริง อ้างอิงความถูกต้องจาก shouldGreet() ที่ใช้งานจริงมานาน</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: ไม่แตะ LINE/Web Chat/lib/prompts.ts/lib/handoff.ts/lib/greeting.ts เลย — ไม่แตะ 4 จุดเดิมเรื่องที่ 99 — Redis ล่ม fail-safe เป็น "ไม่ส่งลิงก์" ไม่กระทบข้อความหลัก</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

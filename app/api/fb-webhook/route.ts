@@ -83,6 +83,24 @@ function getHandoffMessage(): string {
 // อาจมีปัจจัยอื่นจากฝั่ง Facebook/LINE ปนอยู่ด้วยที่ควบคุมไม่ได้จากโค้ดฝั่งเรา
 const LINE_ADD_FRIEND_URL = 'https://page.line.me/esm0427a?oat__id=7122368&openQrModal=true'
 
+// (เรื่องที่ 101, เฉพาะ Facebook) คำตอบที่ Gemini แต่งเอง หรือคำตอบสำเร็จรูปจาก FAQ Sheet (เช่น
+// row spender-network-15) บางแถวมีคำว่า "@spenderclub" ปนอยู่เพื่อชี้ทางให้ลูกค้าติดต่อทาง LINE —
+// จุดพวกนี้ไม่ใช่ข้อความคงที่ 4 จุดที่แนบลิงก์ไว้แล้วในเรื่องที่ 99 (เช็คไม่ครอบคลุมเพราะมาจาก Gemini/
+// FAQ Sheet ไม่ใช่ string คงที่ในไฟล์นี้) — เช็คข้อความขาออกทุกข้อความที่ fbSendReply() แทน ถ้าเจอ
+// "@spenderclub" ให้แนบลิงก์ตามหลังเป็นข้อความที่สองแบบเดียวกับเรื่องที่ 99 — กันส่งซ้ำถี่เกินไปด้วย
+// pattern เดียวกับ shouldGreet() (lib/greeting.ts): SET NX EX 24 ชม. ต่อ 1 psid ส่งได้แค่ 1 ครั้ง
+// ต่อวัน ไม่ว่าจะเจอคำนี้กี่ครั้งก็ตามในช่วงเวลานั้น — ไม่แตะ 4 จุดเดิมของเรื่องที่ 99 เลย (ยังคง
+// ส่งทุกครั้งไม่มีการกันซ้ำเหมือนเดิม เพราะยังไม่ได้สั่งให้เปลี่ยนพฤติกรรมจุดนั้น)
+const LINE_LINK_DEDUP_TTL = 24 * 3600
+async function shouldSendLineLink(psid: string): Promise<boolean> {
+  try {
+    const result = await redis.set(`line_link_sent:fb:${psid}`, '1', { ex: LINE_LINK_DEDUP_TTL, nx: true })
+    return result !== null
+  } catch {
+    return false
+  }
+}
+
 // เรื่อง Spendernetwork (เข้า/ลบ/ย้ายกลุ่ม, ปัญหาการใช้งาน) — เฉพาะ Facebook ให้ชี้ทางไป LINE
 // แทน handoffMsg ทั่วไป เพราะงานดูแลระบบ Spendernetwork ทำผ่านทีมที่ดูแลทาง LINE เป็นหลัก
 // ใช้ข้อความเดียวกันทุกจุดที่เกี่ยวกับ Spendernetwork บน Facebook: HANDOFF ที่มี IMEI,
@@ -221,6 +239,10 @@ async function fbSendProductCard(psid: string, reply: string, url: string) {
 // ความยาวแบบนี้อีก
 async function fbSendReply(psid: string, reply: string) {
   await fbSend(psid, reply)
+  // (เรื่องที่ 101) ดูรายละเอียดที่คอมเมนต์ของ shouldSendLineLink() ด้านบน
+  if (reply.includes('@spenderclub') && await shouldSendLineLink(psid)) {
+    await fbSend(psid, LINE_ADD_FRIEND_URL)
+  }
 }
 
 // ส่ง Quick Replies — ห่อด้วย withUserSendLock เหมือน fbSend (2026-08-05)
