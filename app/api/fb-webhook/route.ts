@@ -101,6 +101,18 @@ async function shouldSendLineLink(psid: string): Promise<boolean> {
   }
 }
 
+// (เรื่องที่ 103, เฉพาะ Facebook, ต่อยอดเรื่องที่ 102) ตารางจับคู่ ad_id (จาก event.referral ตอน
+// ลูกค้ากดโฆษณา Click-to-Messenger เข้ามา) → ชื่อสินค้า — ต้องเพิ่มเองทุกครั้งที่มีโฆษณาใหม่
+// (ดูเลข ad_id จากหน้า Ads Manager ตอนสร้าง/แก้ไขโฆษณา) 2 รายการแรกใส่ไว้จากตัวอย่างจริงที่เจอ
+// ระหว่างคุยกัน — แนวทางที่ใช้คือ "จำบริบทเงียบๆ" ไม่ใช่ทักทายทันที: ถ้าลูกค้าใหม่ (history ว่าง)
+// มาจาก ad_id ที่รู้จัก จะแทรกบันทึกบริบทเข้า history ก่อนเท่านั้น ไม่ส่งข้อความทักทายเพิ่มเอง —
+// ปล่อยให้ Gemini ใช้บริบทนี้ตอบคำถามกำกวมที่ตามมาเอง (เช่น "ราคาเท่าไหร่") ตาม logic ติดตาม
+// บริบทจาก history ที่มีอยู่แล้วในระบบ ไม่ต้องแก้ lib/gemini.ts/lib/prompts.ts เลย
+const AD_ID_PRODUCT_MAP: Record<string, string> = {
+  '120252507799580589': 'TC-5M',
+  '120249363754100589': 'TC-15HW',
+}
+
 // เรื่อง Spendernetwork (เข้า/ลบ/ย้ายกลุ่ม, ปัญหาการใช้งาน) — เฉพาะ Facebook ให้ชี้ทางไป LINE
 // แทน handoffMsg ทั่วไป เพราะงานดูแลระบบ Spendernetwork ทำผ่านทีมที่ดูแลทาง LINE เป็นหลัก
 // ใช้ข้อความเดียวกันทุกจุดที่เกี่ยวกับ Spendernetwork บน Facebook: HANDOFF ที่มี IMEI,
@@ -400,8 +412,19 @@ export async function POST(req: NextRequest) {
             // lib/processingLock.ts (ยังไม่ครอบคลุม POSTBACK handler ด้านล่าง — เห็นชอบแยกต่างหาก
             // เฉพาะ TEXT ตามเคสจริงที่เจอ)
             await withUserProcessingLock(userId, async () => {
-            const history = await getHistory(userId)
+            let history = await getHistory(userId)
             const handoffMsg = getHandoffMessage()
+
+            // (เรื่องที่ 103) ลูกค้าใหม่ (ยังไม่มี history เลย) ที่มาจากโฆษณาที่รู้จัก (ad_id ตรงกับ
+            // AD_ID_PRODUCT_MAP) — แทรกบันทึกบริบทเงียบๆ เข้า history ก่อนเท่านั้น ไม่ทักทายลูกค้า
+            // เพิ่มเอง ปล่อยให้ Gemini ใช้บริบทนี้ตอบคำถามกำกวมที่ตามมาเอง (เช่น "ราคาเท่าไหร่")
+            // เช็ค history.length === 0 กันแทรกซ้ำถ้าลูกค้าคุยไปแล้วก่อนหน้า
+            const adProduct = event.referral?.ad_id ? AD_ID_PRODUCT_MAP[event.referral.ad_id] : undefined
+            if (adProduct && history.length === 0) {
+              history = [{ role: 'model', text: `[ลูกค้ามาจากโฆษณาสินค้า ${adProduct}]` }]
+              await saveHistoryExtended(userId, history)
+              log.info('fb.ad_context_injected', { userId, adProduct })
+            }
 
             // ชั้น 2: rate limit — กัน spam ยิงรัว
             try {
