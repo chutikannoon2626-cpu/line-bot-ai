@@ -244,6 +244,17 @@ async function fbSendProductCard(psid: string, reply: string, url: string) {
   })
 }
 
+// (เรื่องที่ 104, เฉพาะ Facebook) รวมการส่ง "ประโยคอธิบาย + ลิงก์" ไว้ในฟังก์ชันเดียว — ให้ทุกจุดที่
+// เคยส่ง LINE_ADD_FRIEND_URL ตรงๆ (5 จุด: เรื่องที่ 99 x4 + เรื่องที่ 101 x1) เรียกใช้แทน — เดิมส่งแค่
+// ลิงก์เดี่ยวๆ ลูกค้าอาจไม่แน่ใจว่าลิงก์นี้คืออะไร — เพิ่มข้อความอธิบายสั้นๆ ก่อน แต่แยกเป็น "ข้อความ
+// ต่างหาก" ไม่รวมกับตัวลิงก์ในข้อความเดียวกัน เพื่อไม่ให้กระทบโอกาสได้การ์ดพรีวิวของลิงก์ (ต้องมีแค่
+// ลิงก์อย่างเดียวในข้อความถึงจะมีโอกาสได้การ์ด ตามที่ทดสอบไว้ในเรื่องที่ 99) — รวมเป็นฟังก์ชันเดียว
+// แทนเขียนซ้ำ 5 จุด กันแก้ข้อความอธิบายแล้วตกหล่นบางจุดในอนาคต
+async function sendLineAddFriendLink(psid: string) {
+  await fbSend(psid, 'ลูกค้าสามารถแอดไลน์ @spenderclub ได้จากลิงก์ด้านล่างนี้ได้เลยค่ะ')
+  await fbSend(psid, LINE_ADD_FRIEND_URL)
+}
+
 // ส่ง reply — ส่งเป็นข้อความธรรมดาเสมอ (เรื่องที่ 88, 2026-09-02) — เดิมถ้ามี URL สินค้าจะเปลี่ยนเป็น
 // Generic Template card แทน แต่ Facebook บังคับ title/subtitle ห้ามเกิน 80 ตัวอักษร (ขีดจำกัดของแพลตฟอร์ม
 // เอง ไม่ใช่ที่โค้ดตั้งเอง) ทำให้คำตอบยาวๆ ของ Gemini ถูกตัดทิ้งไปเงียบๆ โดยลูกค้าไม่รู้ตัว (เจอเคสจริง:
@@ -253,7 +264,7 @@ async function fbSendReply(psid: string, reply: string) {
   await fbSend(psid, reply)
   // (เรื่องที่ 101) ดูรายละเอียดที่คอมเมนต์ของ shouldSendLineLink() ด้านบน
   if (reply.includes('@spenderclub') && await shouldSendLineLink(psid)) {
-    await fbSend(psid, LINE_ADD_FRIEND_URL)
+    await sendLineAddFriendLink(psid)
   }
 }
 
@@ -580,7 +591,7 @@ export async function POST(req: NextRequest) {
               notifyAdminFacebook(psid, `⚠️ ลูกค้าต้องการ${action} (กดปุ่มยืนยันแล้ว) รบกวนติดตามทาง LINE ด้วยค่ะ`).catch(() => {})
               const redirectMsg = getSpendernetworkRedirectMessage()
               await fbSend(psid, redirectMsg)
-              await fbSend(psid, LINE_ADD_FRIEND_URL)
+              await sendLineAddFriendLink(psid)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
               log.info('fb.group_intent.button_tapped', { userId, action })
               return
@@ -600,7 +611,7 @@ export async function POST(req: NextRequest) {
                 if (count === 1) {
                   const redirectMsg = getSpendernetworkRedirectMessage()
                   await fbSend(psid, redirectMsg)
-                  await fbSend(psid, LINE_ADD_FRIEND_URL)
+                  await sendLineAddFriendLink(psid)
                   await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: redirectMsg }])
                   log.info('fb.spendernetwork.redirected', { userId })
                 } else {
@@ -609,7 +620,7 @@ export async function POST(req: NextRequest) {
               } catch {
                 const redirectMsg = getSpendernetworkRedirectMessage()
                 await fbSend(psid, redirectMsg)
-                await fbSend(psid, LINE_ADD_FRIEND_URL)
+                await sendLineAddFriendLink(psid)
               }
               return
             }
@@ -788,7 +799,7 @@ export async function POST(req: NextRequest) {
                 log.error('fb.handoff.state_failed', { err: (stateErr as Error).message, userId })
               }
               await fbSend(psid, replyMsg)
-              if (!isDiy) await fbSend(psid, LINE_ADD_FRIEND_URL)
+              if (!isDiy) await sendLineAddFriendLink(psid)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: replyMsg }])
               log.info('fb.handoff.imei_confirmed', { userId, latencyMs: Date.now() - startTime, summary })
               return
