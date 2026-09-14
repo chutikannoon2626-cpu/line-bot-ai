@@ -4,6 +4,10 @@ import * as XLSX from 'xlsx'
 import type { ChatLogEntry } from '@/lib/chatlog'
 
 export const runtime = 'nodejs'
+// เจอเคสจริง: "ดาวน์โหลดทั้งหมด" (all=1) ต้องไล่ดึงทุก userId ที่เคยมีมาตั้งแต่เปิดใช้งาน (ไม่กรอง
+// เวลาเหมือนโหมดรายวัน) เมื่อ chatlog:convs สะสมมานาน อาจใช้เวลาเกิน default maxDuration ของ Vercel
+// จนหมดเวลาก่อนดาวน์โหลดเสร็จ — เพิ่มเวลาให้เหมือนหน้า webhook อื่นๆ ในระบบ (2026-09-14)
+export const maxDuration = 60
 
 function auth(req: NextRequest): boolean {
   return req.nextUrl.searchParams.get('key') === process.env.ADMIN_SCHEDULE_PASSWORD

@@ -24,6 +24,13 @@ export function logChat(entry: ChatLogEntry): void {
     .expire(userKey, TTL_SECS)
     .zadd(CONV_INDEX, { score: ts, member: entry.userId })
     .hset(CHAN_MAP, { [entry.userId]: entry.channel })
+    // เจอเคสจริง: CONV_INDEX (chatlog:convs) ไม่เคยมี TTL เลยตั้งแต่สร้างฟีเจอร์นี้มา ต่างจาก
+    // userKey แต่ละคนที่หมดอายุ 30 วันตามปกติ — ทำให้รายชื่อ userId สะสมค้างอยู่ตลอดไปแม้ข้อความ
+    // จริงจะหมดอายุไปแล้ว พอหน้าแอดมิน "ดาวน์โหลดทั้งหมด" (chatlog/export?all=1) ต้องไล่ดึงทุก userId
+    // ที่เคยมีมาทั้งหมด ยิ่งสะสมนานยิ่งช้าจนเกิน timeout ของ Vercel — ลบ member ที่เก่าเกิน 30 วัน
+    // (ตรงกับ TTL_SECS เดิม) ออกจาก CONV_INDEX ทุกครั้งที่มีข้อความใหม่เข้ามา ให้ index นี้ไม่มีวัน
+    // บวมสะสมไม่มีที่สิ้นสุดอีกต่อไป (2026-09-14)
+    .zremrangebyscore(CONV_INDEX, 0, ts - TTL_SECS * 1000)
     .exec()
     .catch(() => {})                     // ไม่กระทบถ้า Redis ล่ม
 }
