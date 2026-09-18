@@ -891,6 +891,22 @@ export async function POST(req: NextRequest) {
                 { title: 'ลบกลุ่ม', payload: 'GROUP_REMOVE' },
                 { title: 'สอบเรื่องอื่นๆ', payload: 'GROUP_OTHER' },
               ])
+            } else if (finalReply.includes('ลูกค้าสนใจเป็นวิทยุรุ่นไหนคะ')) {
+              // (เรื่องที่ 106, เฉพาะ Facebook) ข้อความนี้เป็นคำตอบตายตัวจาก FAQ Sheet (แถว price-01/
+              // product-list-01 — ยืนยันแล้วจากการอ่านชีตจริง) เกิดตอนลูกค้าถามราคา/ดูสินค้าแบบกำกวม
+              // ไม่ระบุรุ่น แทนที่จะให้พิมพ์ชื่อรุ่นเอง แนบปุ่มเลือกรุ่นที่กำลังโฆษณาอยู่แทน (แก้ปัญหา
+              // เดียวกับที่พยายามแก้ด้วยการดักจับ ad_id ในเรื่องที่ 102/103 แต่ไม่ต้องพึ่งความแม่นยำ
+              // ของ referral/ad_id จาก Facebook เลย — ใช้ได้กับลูกค้าทุกคนไม่ว่าจะมาจากโฆษณาหรือไม่)
+              // รายชื่อรุ่นต้องอัปเดตเองเวลามีโฆษณาใหม่/เก่าหมดอายุ (ปัจจุบัน 4 รุ่น 2026-09-18) —
+              // ปุ่มกดแล้วส่งชื่อรุ่นเข้า queryText ตรงๆ ผ่าน postback handler เดิม (title = ชื่อรุ่น
+              // ใช้ default queryText = title ที่มีอยู่แล้ว ไม่ต้องเพิ่ม payload mapping พิเศษ)
+              await fbSendQuickReplies(psid, finalReply, [
+                { title: 'TC-15HW', payload: 'MODEL_TC15HW' },
+                { title: 'TC-5M', payload: 'MODEL_TC5M' },
+                { title: 'TC-3M', payload: 'MODEL_TC3M' },
+                { title: 'TCM-400L', payload: 'MODEL_TCM400L' },
+                { title: 'รุ่นอื่นๆ', payload: 'MODEL_OTHER' },
+              ])
             } else {
               await fbSendReply(psid, finalReply)
             }
