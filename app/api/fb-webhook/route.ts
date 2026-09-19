@@ -297,6 +297,22 @@ async function fbSendQuickReplies(
   })
 }
 
+// (เรื่องที่ 107, เฉพาะ Facebook, ต่อยอดเรื่องที่ 106) รวมการส่งปุ่มเลือกรุ่นไว้ในฟังก์ชันเดียว —
+// เจอเคสจริง: ลูกค้าพิมพ์คำสั้นๆ ตรง keyword พอดี (เช่น "สนใจ", "ราคา") ถูก findExactMatch() ดักจับ
+// ตอบก่อนถึง generateReply() เลย ส่งผ่าน fbSend() ตรงๆ คนละจุดกับที่เรื่องที่ 106 แนบปุ่มไว้ (หลัง
+// generateReply() เท่านั้น) ทำให้ไม่ได้ปุ่มในเคสนี้ — ดึงรายชื่อปุ่มออกมาเป็นฟังก์ชันกลาง ให้ทั้ง
+// จุด exact match และจุด generateReply() เรียกใช้ร่วมกัน กันแก้รายชื่อรุ่นแล้วตกหล่นบางจุดในอนาคต
+// (รายชื่อรุ่นต้องอัปเดตเองเวลามีโฆษณาใหม่/เก่าหมดอายุ เหมือนที่เคยระบุไว้ในเรื่องที่ 106)
+async function sendModelQuickReplies(psid: string, text: string) {
+  await fbSendQuickReplies(psid, text, [
+    { title: 'TC-15HW', payload: 'MODEL_TC15HW' },
+    { title: 'TC-5M', payload: 'MODEL_TC5M' },
+    { title: 'TC-3M', payload: 'MODEL_TC3M' },
+    { title: 'TCM-400L', payload: 'MODEL_TCM400L' },
+    { title: 'รุ่นอื่นๆ', payload: 'MODEL_OTHER' },
+  ])
+}
+
 // ตรวจ Facebook signature
 function verifySignature(rawBody: string, sig: string | null): boolean {
   const secret = process.env.FACEBOOK_APP_SECRET
@@ -661,7 +677,15 @@ export async function POST(req: NextRequest) {
                 await redis.set(`last_bot_question:${userId}`, lastBotTurn ?? '', { ex: LAST_ANSWER_TTL })
                 await redis.del(`repeat_count:${userId}`)
               } catch { /* Redis ล่ม */ }
-              await fbSend(psid, exactMatch)
+              // (เรื่องที่ 107, เฉพาะ Facebook) เจอเคสจริง: ลูกค้าพิมพ์คำสั้นๆ ตรง keyword พอดี
+              // (เช่น "สนใจ", "ราคา") ถูก findExactMatch() ดักจับตอบตรงนี้เลย ไม่ทันถึง generateReply()
+              // ที่เรื่องที่ 106 แนบปุ่มไว้ — เพิ่มเช็คเดียวกันตรงนี้ด้วย ดูรายละเอียดที่คอมเมนต์ของ
+              // sendModelQuickReplies() ด้านบน
+              if (exactMatch.includes('ลูกค้าสนใจเป็นวิทยุรุ่นไหนคะ')) {
+                await sendModelQuickReplies(psid, exactMatch)
+              } else {
+                await fbSend(psid, exactMatch)
+              }
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
               log.info('fb.exact_match.sent', { userId, latencyMs: Date.now() - startTime })
               return
@@ -897,16 +921,11 @@ export async function POST(req: NextRequest) {
               // ไม่ระบุรุ่น แทนที่จะให้พิมพ์ชื่อรุ่นเอง แนบปุ่มเลือกรุ่นที่กำลังโฆษณาอยู่แทน (แก้ปัญหา
               // เดียวกับที่พยายามแก้ด้วยการดักจับ ad_id ในเรื่องที่ 102/103 แต่ไม่ต้องพึ่งความแม่นยำ
               // ของ referral/ad_id จาก Facebook เลย — ใช้ได้กับลูกค้าทุกคนไม่ว่าจะมาจากโฆษณาหรือไม่)
-              // รายชื่อรุ่นต้องอัปเดตเองเวลามีโฆษณาใหม่/เก่าหมดอายุ (ปัจจุบัน 4 รุ่น 2026-09-18) —
               // ปุ่มกดแล้วส่งชื่อรุ่นเข้า queryText ตรงๆ ผ่าน postback handler เดิม (title = ชื่อรุ่น
-              // ใช้ default queryText = title ที่มีอยู่แล้ว ไม่ต้องเพิ่ม payload mapping พิเศษ)
-              await fbSendQuickReplies(psid, finalReply, [
-                { title: 'TC-15HW', payload: 'MODEL_TC15HW' },
-                { title: 'TC-5M', payload: 'MODEL_TC5M' },
-                { title: 'TC-3M', payload: 'MODEL_TC3M' },
-                { title: 'TCM-400L', payload: 'MODEL_TCM400L' },
-                { title: 'รุ่นอื่นๆ', payload: 'MODEL_OTHER' },
-              ])
+              // ใช้ default queryText = title ที่มีอยู่แล้ว ไม่ต้องเพิ่ม payload mapping พิเศษ) —
+              // (เรื่องที่ 107) ดึงรายชื่อปุ่มออกเป็น sendModelQuickReplies() ใช้ร่วมกับจุด exact
+              // match ด้านบนด้วย ดูรายละเอียดที่คอมเมนต์ของฟังก์ชันนั้น
+              await sendModelQuickReplies(psid, finalReply)
             } else {
               await fbSendReply(psid, finalReply)
             }
