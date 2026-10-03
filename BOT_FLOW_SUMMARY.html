@@ -753,6 +753,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: ดึงโค้ดซ้ำเป็นฟังก์ชันกลาง + เพิ่มเช็คอีก 1 จุด <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ยังไม่ได้ทดสอบยิงจริงกับ Facebook</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: ข้อความอื่นพฤติกรรมเดิมทั้ง 2 จุด — ไม่แตะ LINE/Web Chat/Gemini/prompts.ts/sheet.ts — findExactMatch()/generateReply() เองไม่เปลี่ยน แค่เปลี่ยนวิธีส่งผลลัพธ์</div>
 
+<h2>9.73 ยกเลิกปุ่มเลือกรุ่น (เรื่องที่ 106/107) ชั่วคราว เพราะลูกค้าไม่ได้คำตอบเลย (เพิ่ม 2026-10-03 — เรื่องที่ 108, เฉพาะ Facebook)</h2>
+<p>หลัง deploy เรื่องที่ 106/107 เจอเคสจริง 2 ครั้ง (ลูกค้าพิมพ์ "สนใจ"/"ราคา" นอกเวลาทำการ) ได้แค่ข้อความต้อนรับ <strong>ไม่ได้คำตอบ FAQ เลยแม้แต่ตัวอักษรเดียว</strong> ไม่มี error log ใดๆ เกิดขึ้นเลย — พบว่า <code>fbSendQuickReplies()</code> ไม่เช็ค <code>res.ok</code> เลย ต่างจาก <code>fbSend()</code> ที่เช็คแล้ว throw — ถ้า Facebook ปฏิเสธ request (4xx) <code>fetch()</code> จะ resolve ปกติไม่ throw ทำให้ไม่มี log/fallback/แจ้งแอดมินเลย ลูกค้าไม่ได้อะไรเลยโดยไม่เหลือร่องรอย</p>
+<div class="ok">ยกเลิกเงื่อนไข <code>includes('ลูกค้าสนใจเป็นวิทยุรุ่นไหนคะ')</code> ทั้ง 2 จุด (findExactMatch() + หลัง generateReply()) ย้อนกลับไปส่งด้วย <code>fbSend()</code>/<code>fbSendReply()</code> ธรรมดาเหมือนก่อนเรื่องที่ 106 — <code>sendModelQuickReplies()</code> ยังอยู่ในโค้ดแต่ไม่มีจุดเรียกใช้แล้ว (เผื่อกลับมาเปิดใช้หลังแก้บั๊กต้นตอ)</div>
+<div class="tip">ทดสอบก่อน commit: ลบเงื่อนไข 2 จุด ไม่แตะฟังก์ชันอื่น <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ตรวจ git diff ยืนยันขอบเขตตรงตามตั้งใจ</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: ไม่แตะ fbSendQuickReplies()/fbSend()/fbSendReply()/findExactMatch()/generateReply() เอง — อีก 2 จุดที่ใช้ fbSendQuickReplies() ร่วม (ปุ่มถามกลุ่มเรื่องที่ 89/90, ปุ่มเมนูรูปเรื่องที่ 87) ไม่ถูกแตะเลย — ไม่แตะ LINE/Web Chat — เป็นการถอยกลับชั่วคราว ไม่ใช่แก้บั๊กต้นตอ</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

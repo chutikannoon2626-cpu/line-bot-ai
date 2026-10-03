@@ -677,15 +677,13 @@ export async function POST(req: NextRequest) {
                 await redis.set(`last_bot_question:${userId}`, lastBotTurn ?? '', { ex: LAST_ANSWER_TTL })
                 await redis.del(`repeat_count:${userId}`)
               } catch { /* Redis ล่ม */ }
-              // (เรื่องที่ 107, เฉพาะ Facebook) เจอเคสจริง: ลูกค้าพิมพ์คำสั้นๆ ตรง keyword พอดี
-              // (เช่น "สนใจ", "ราคา") ถูก findExactMatch() ดักจับตอบตรงนี้เลย ไม่ทันถึง generateReply()
-              // ที่เรื่องที่ 106 แนบปุ่มไว้ — เพิ่มเช็คเดียวกันตรงนี้ด้วย ดูรายละเอียดที่คอมเมนต์ของ
-              // sendModelQuickReplies() ด้านบน
-              if (exactMatch.includes('ลูกค้าสนใจเป็นวิทยุรุ่นไหนคะ')) {
-                await sendModelQuickReplies(psid, exactMatch)
-              } else {
-                await fbSend(psid, exactMatch)
-              }
+              // (ยกเลิกเรื่องที่ 106/107, เฉพาะ Facebook, 2026-10-03) เจอเคสจริง: ลูกค้าพิมพ์ "สนใจ"/
+              // "ราคา" แล้วไม่ได้คำตอบเลยแม้แต่ตัวอักษรเดียว (เงียบสนิท ไม่มี error log ด้วย) —
+              // ตรวจพบว่า sendModelQuickReplies()/fbSendQuickReplies() ไม่เช็ค res.ok เลย ถ้า Facebook
+              // ปฏิเสธ request (4xx) จะไม่ throw จึงไม่มีทาง fallback หรือ log อะไรเกิดขึ้นเลย — ย้อนกลับ
+              // มาใช้ fbSend() ธรรมดาที่มี res.ok check อยู่แล้วไปก่อน ระหว่างยังไม่ได้แก้
+              // fbSendQuickReplies() ให้เช็ค response จริง
+              await fbSend(psid, exactMatch)
               await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: exactMatch }])
               log.info('fb.exact_match.sent', { userId, latencyMs: Date.now() - startTime })
               return
@@ -915,18 +913,11 @@ export async function POST(req: NextRequest) {
                 { title: 'ลบกลุ่ม', payload: 'GROUP_REMOVE' },
                 { title: 'สอบเรื่องอื่นๆ', payload: 'GROUP_OTHER' },
               ])
-            } else if (finalReply.includes('ลูกค้าสนใจเป็นวิทยุรุ่นไหนคะ')) {
-              // (เรื่องที่ 106, เฉพาะ Facebook) ข้อความนี้เป็นคำตอบตายตัวจาก FAQ Sheet (แถว price-01/
-              // product-list-01 — ยืนยันแล้วจากการอ่านชีตจริง) เกิดตอนลูกค้าถามราคา/ดูสินค้าแบบกำกวม
-              // ไม่ระบุรุ่น แทนที่จะให้พิมพ์ชื่อรุ่นเอง แนบปุ่มเลือกรุ่นที่กำลังโฆษณาอยู่แทน (แก้ปัญหา
-              // เดียวกับที่พยายามแก้ด้วยการดักจับ ad_id ในเรื่องที่ 102/103 แต่ไม่ต้องพึ่งความแม่นยำ
-              // ของ referral/ad_id จาก Facebook เลย — ใช้ได้กับลูกค้าทุกคนไม่ว่าจะมาจากโฆษณาหรือไม่)
-              // ปุ่มกดแล้วส่งชื่อรุ่นเข้า queryText ตรงๆ ผ่าน postback handler เดิม (title = ชื่อรุ่น
-              // ใช้ default queryText = title ที่มีอยู่แล้ว ไม่ต้องเพิ่ม payload mapping พิเศษ) —
-              // (เรื่องที่ 107) ดึงรายชื่อปุ่มออกเป็น sendModelQuickReplies() ใช้ร่วมกับจุด exact
-              // match ด้านบนด้วย ดูรายละเอียดที่คอมเมนต์ของฟังก์ชันนั้น
-              await sendModelQuickReplies(psid, finalReply)
             } else {
+              // (ยกเลิกเรื่องที่ 106/107, เฉพาะ Facebook, 2026-10-03 — ดูรายละเอียดที่คอมเมนต์จุด
+              // exact match ด้านบน) เคยแนบปุ่มเลือกรุ่นที่นี่ด้วยเงื่อนไขเดียวกัน แต่เจอเคสจริงลูกค้า
+              // ไม่ได้คำตอบเลยเพราะ fbSendQuickReplies() ไม่เช็ค response — กลับมาใช้ fbSendReply()
+              // ธรรมดาแทนไปก่อน
               await fbSendReply(psid, finalReply)
             }
             await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: finalReply }])
