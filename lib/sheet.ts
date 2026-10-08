@@ -115,6 +115,11 @@ export async function findExactMatch(userMessage: string, lastBotTurn?: string):
   // ลูกค้าตอบแค่ชื่อรุ่นตรง keyword สินค้าพอดี หลุดเข้า exact match ไปตอบราคา/สเปคตัววิทยุเองแทนที่จะ
   // แนะนำอุปกรณ์เสริมตามที่ถามจริง — เพิ่มเช็คแบบเดียวกับ repair_protocol
   if (lastBotTurn && /รุ่นไหน/u.test(lastBotTurn) && /(ไมโครโฟน|ไมค์|อุปกรณ์เสริม|อะไหล่)/u.test(lastBotTurn)) return null
+  // เคสจริง: บอทขอให้ลูกค้าแจ้ง IMEI + ชื่อที่ต้องการตั้ง (ขั้นตอนตั้งชื่อเครื่อง/คอลไซน์ที่ไม่ได้ทำเอง
+  // ให้แอดมินช่วยตั้งแทน — ข้อความนี้เป็น dynamic จาก Gemini ไม่ใช่ค่าคงที่ จึงเช็คด้วยคำสำคัญ ไม่เทียบ
+  // ประโยคเป๊ะเหมือน 2 ข้อยกเว้นด้านบน) ลูกค้าพิมพ์ชื่อ+รุ่นตามที่ขอ (เช่น "Ak327 11hw") แต่ "11hw" ไป
+  // ตรง keyword สินค้า TC-11HW พอดี หลุดเข้า exact match ไปตอบขายสินค้าแทนที่จะรับข้อมูลตั้งชื่อ
+  if (lastBotTurn && /imei/i.test(lastBotTurn) && /ชื่อ/u.test(lastBotTurn)) return null
 
   try {
     const { rows, licenseMap } = await loadSheet()
