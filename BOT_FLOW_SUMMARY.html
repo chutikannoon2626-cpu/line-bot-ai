@@ -765,6 +765,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: เพิ่มเงื่อนไข 1 บรรทัด <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ทดสอบจริงกับชีตสดยืนยัน 3 กรณี: "Ak327 11hw"+บริบท IMEI/ชื่อ → null ตามต้องการ, "11hw" ไม่มีบริบทนี้ → ยัง match ปกติ, "สนใจ" → ยัง match price-01 ปกติ</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้ lib/sheet.ts ไฟล์เดียว ใช้ร่วมกันทั้ง LINE/Facebook อยู่แล้ว — เงื่อนไขแคบมาก ไม่ชนข้อยกเว้นเดิม 2 ข้อหรือ FAQ แถวอื่น — ไม่แตะ generateReply()/Gemini/prompts.ts เลย</div>
 
+<h2>9.75 เพิ่ม messaging_type + เก็บ response body ตอนส่งข้อความ Facebook ล้มเหลว (เพิ่ม 2026-10-20 — เรื่องที่ 110, เฉพาะ Facebook)</h2>
+<p>เคสจริงหลายครั้ง (ล่าสุด 19 ต.ค. 2569): <code>fbSend()</code> ส่งข้อความไม่สำเร็จด้วย 400 - Bad Request ซ้ำๆ — พบว่า <code>fbSendRequest()</code> ไม่เคยระบุ <code>messaging_type</code> เลยในทุก request (field ที่ Facebook ใช้ตัดสินเงื่อนไขการส่งข้อความ) — log เดิมก็มีแค่ status/statusText ทั่วไป ไม่พอฟันธงสาเหตุเจาะจง</p>
+<div class="ok">(1) เพิ่ม <code>messaging_type: 'RESPONSE'</code> ใน body ของทุก request ที่ fbSendRequest() ส่ง (2) fbSend() ตอน !res.ok อ่าน response body ของ Facebook เพิ่ม (res.text()) รวมเข้า error message ด้วย — ข้อ 2 เป็นแค่เก็บข้อมูลเพิ่มเพื่อสืบสาเหตุรอบหน้า ไม่ใช่การแก้ปัญหา</div>
+<div class="tip">ทดสอบก่อน commit: แก้ 2 จุดตามที่ตั้งใจ <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ยังไม่ได้ทดสอบยิงจริงกับ Facebook ต้องรอดูผลจาก log จริงหลัง deploy</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: แก้เฉพาะ fbSendRequest()/fbSend() เท่านั้น — fbSendQuickReplies()/fbSendProductCard() ยังไม่ได้แก้ไปด้วย — response body ที่เก็บเพิ่มเป็น error ของ Facebook เอง ไม่ใช่เนื้อหาลูกค้า — ไม่แตะ LINE/Gemini/findExactMatch() เลย</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>

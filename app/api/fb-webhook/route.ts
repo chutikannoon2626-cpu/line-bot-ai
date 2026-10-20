@@ -166,13 +166,17 @@ function isStickerAttachment(attachments?: Array<{ type: string; payload: { url?
 // ครั้ง (2026-08-04)
 const FB_SEND_RETRY_DELAYS_MS = [800, 1500]
 
+// เจอเคสจริง (2026-10-20): ส่งข้อความไม่สำเร็จ 400 - Bad Request ซ้ำหลายครั้ง — ไม่เคยระบุ
+// messaging_type มาก่อนเลย (field ที่ Facebook ใช้ตัดสินเงื่อนไขการส่งข้อความ) เพิ่ม 'RESPONSE'
+// ให้ถูกต้องตามสเปก ลดโอกาสโดนปฏิเสธจากการไม่ระบุ field นี้ — ข้อความที่บอทส่งเป็นการตอบกลับ
+// ทันทีหลังลูกค้าทักมาเสมอ จึงอยู่ในเงื่อนไขของ RESPONSE อยู่แล้วโดยธรรมชาติ
 async function fbSendRequest(psid: string, text: string): Promise<Response> {
   return fetch(
     `https://graph.facebook.com/v19.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? ''}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient: { id: psid }, message: { text } }),
+      body: JSON.stringify({ recipient: { id: psid }, messaging_type: 'RESPONSE', message: { text } }),
       signal: AbortSignal.timeout(5000),
     }
   )
@@ -189,7 +193,14 @@ async function fbSend(psid: string, text: string) {
         await new Promise((r) => setTimeout(r, delay))
         res = await fbSendRequest(psid, text)
       }
-      if (!res.ok) throw new Error(`${res.status} - ${res.statusText}`)
+      // เจอเคสจริง (2026-10-20): log เดิมมีแค่ status/statusText ทั่วไป ไม่พอฟันธงสาเหตุเจาะจง —
+      // อ่าน response body ของ Facebook เพิ่ม (มี error.code/error.message ละเอียดกว่า) เป็นแค่การ
+      // เก็บข้อมูลเพิ่มเพื่อสืบสาเหตุรอบหน้า ไม่ใช่การแก้ปัญหา ไม่ใช่เนื้อหาลูกค้าจึงไม่ขัดกฎห้าม log
+      // เนื้อหาลูกค้า
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        throw new Error(`${res.status} - ${res.statusText} - ${body}`)
+      }
       logChat({ userId: `fb:${psid}`, channel: 'Facebook', role: 'bot', message: text, ts: Date.now() })
     } catch (err) {
       log.error('fb.send_failed', { psid, err: (err as Error).message })
