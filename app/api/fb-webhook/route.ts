@@ -859,6 +859,22 @@ export async function POST(req: NextRequest) {
             }
 
             if (reply === NOT_FOUND) {
+              // เจอเคสจริง (2026-10-22): ลูกค้าถามคำถามเดิมซ้ำเป๊ะทันทีหลังเพิ่งตอบสำเร็จไปแล้ว (เช่น
+              // กดปุ่มจากโฆษณาซ้ำ) Gemini กลับตอบ [NOT_FOUND] อย่างไม่คงที่ (non-deterministic) ทั้งที่
+              // เพิ่งตอบถูกไปหมาดๆ ทำให้ไหลไป retry/handoff ลูกค้าสับสนทั้งที่คำตอบมีอยู่แล้ว — last_question
+              // เก็บคำถามล่าสุดที่เคยตอบสำเร็จไว้อยู่แล้ว (ไม่ต้องสร้างคีย์ใหม่) เช็คตรงนี้ก่อนเพื่อสกัดเคสนี้
+              // ออกก่อนเข้า retry/handoff เดิม — ไม่กระทบ NOT_FOUND ที่ไม่เคยตอบสำเร็จมาก่อนเลย
+              try {
+                const lastSuccessQuestion = await redis.get<string>(`last_question:${userId}`)
+                if (lastSuccessQuestion && lastSuccessQuestion === userMessage) {
+                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                  await fbSend(psid, reminder)
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                  log.info('fb.not_found.repeat_of_success_suppressed', { userId })
+                  return
+                }
+              } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
+
               // ค้นชีต + ค้นเว็บไม่เจอ (NOT_FOUND) + ข้อความมี deferred handoff trigger
               // → ขอรายละเอียดก่อน 1 รอบแล้วค่อย handoff (ข้าม retry 2 รอบปกติ)
               if (shouldHandoffDeferred(userMessage)) {
