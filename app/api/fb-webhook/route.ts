@@ -867,10 +867,20 @@ export async function POST(req: NextRequest) {
               try {
                 const lastSuccessQuestion = await redis.get<string>(`last_question:${userId}`)
                 if (lastSuccessQuestion && lastSuccessQuestion === userMessage) {
-                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-                  await fbSend(psid, reminder)
-                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
-                  log.info('fb.not_found.repeat_of_success_suppressed', { userId })
+                  // (2026-10-25) กันตอบซ้ำวนลูปถ้าลูกค้าถามซ้ำหลายรอบติดกัน — ใช้ repeat_count ร่วมกับ
+                  // เรื่องที่ 93 (คีย์เดียวกัน ไม่ชนกันเพราะคนละเงื่อนไขเข้าเคสนี้) ครั้งแรกส่งเตือน ครั้งต่อไปเงียบ
+                  const [repeatCount] = await redis.pipeline()
+                    .incr(`repeat_count:${userId}`)
+                    .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                    .exec() as [number, number]
+                  if (repeatCount === 1) {
+                    const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                    await fbSend(psid, reminder)
+                    await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                    log.info('fb.not_found.repeat_of_success_suppressed', { userId })
+                  } else {
+                    log.info('fb.not_found.repeat_of_success_silent', { userId, repeatCount })
+                  }
                   return
                 }
               } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
@@ -922,10 +932,20 @@ export async function POST(req: NextRequest) {
               try {
                 const lastSuccessQuestion = await redis.get<string>(`last_question:${userId}`)
                 if (lastSuccessQuestion && lastSuccessQuestion === userMessage) {
-                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
-                  await fbSend(psid, reminder)
-                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
-                  log.info('fb.handoff.repeat_of_success_suppressed', { userId })
+                  // (2026-10-25) กันตอบซ้ำวนลูปถ้าลูกค้าถามซ้ำหลายรอบติดกัน — ใช้ repeat_count ร่วมกับ
+                  // เรื่องที่ 93 (คีย์เดียวกัน ไม่ชนกันเพราะคนละเงื่อนไขเข้าเคสนี้) ครั้งแรกส่งเตือน ครั้งต่อไปเงียบ
+                  const [repeatCount] = await redis.pipeline()
+                    .incr(`repeat_count:${userId}`)
+                    .expire(`repeat_count:${userId}`, LAST_ANSWER_TTL)
+                    .exec() as [number, number]
+                  if (repeatCount === 1) {
+                    const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                    await fbSend(psid, reminder)
+                    await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                    log.info('fb.handoff.repeat_of_success_suppressed', { userId })
+                  } else {
+                    log.info('fb.handoff.repeat_of_success_silent', { userId, repeatCount })
+                  }
                   return
                 }
               } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
