@@ -912,6 +912,25 @@ export async function POST(req: NextRequest) {
               return
             }
 
+            // เจอเคสจริง (2026-10-24, sync กับเรื่องที่ 111) — คนละเส้นทางกับ NOT_FOUND: Gemini ตอบ
+            // handoffMsg ตรงๆ ผ่าน <out_of_scope_triggers> อย่างไม่คงที่ (non-deterministic) ให้คำถามที่
+            // เพิ่งตอบสำเร็จไปแล้ว (ยืนยันจากรายงานจริง: ถามซ้ำครั้งที่ 2 ได้ handoffMsg ครั้งที่ 3 ได้
+            // "รับทราบค่ะ" จากกลไก last_bot_reply dedup ด้านล่าง ซึ่งทำงานได้เฉพาะตอน reply ไม่ใช่
+            // NOT_FOUND เท่านั้น ยืนยันว่า reply ของทั้ง 2 ครั้งไม่ใช่ NOT_FOUND) — เช็คแบบเดียวกับเรื่องที่
+            // 111 ก่อน last_question ถูกเขียนทับด้วยคำถามรอบนี้
+            if (reply === handoffMsg) {
+              try {
+                const lastSuccessQuestion = await redis.get<string>(`last_question:${userId}`)
+                if (lastSuccessQuestion && lastSuccessQuestion === userMessage) {
+                  const reminder = 'ข้อมูลเดิมตามที่แจ้งไปนะคะ ไม่ทราบว่ามีอะไรให้น้องใจดีช่วยเพิ่มเติมไหมคะ 😊'
+                  await fbSend(psid, reminder)
+                  await saveHistoryExtended(userId, [...history, { role: 'user', text: userMessage }, { role: 'model', text: reminder }])
+                  log.info('fb.handoff.repeat_of_success_suppressed', { userId })
+                  return
+                }
+              } catch { /* Redis ล่ม — ดำเนินการต่อปกติ */ }
+            }
+
             // จำคำถามล่าสุดไว้เทียบซ้ำรอบหน้า (เฉพาะตอบสำเร็จ — HANDOFF/NOT_FOUND ฯลฯ ไม่นับ)
             try {
               await redis.set(`last_question:${userId}`, userMessage, { ex: LAST_ANSWER_TTL })

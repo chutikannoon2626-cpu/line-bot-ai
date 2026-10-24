@@ -777,6 +777,12 @@ UserID: U90fcb65b2a3ca8cb6bac22a3cd6ef26f
 <div class="tip">ทดสอบก่อน commit: เพิ่ม block เดียวกัน 1 จุดต่อไฟล์ (2 ไฟล์) <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ยังไม่ได้ทดสอบยิงจริง (ต้องพึ่ง Gemini ตอบ NOT_FOUND ให้คำถามซ้ำ จำลองในเครื่องไม่ได้)</div>
 <div class="tip">ทำไมไม่กระทบอย่างอื่น: ทำงานเฉพาะ reply === NOT_FOUND + คำถามตรงกับ last_question เป๊ะเท่านั้น — NOT_FOUND ที่ไม่เคยตอบสำเร็จมาก่อนยังไหล retry/handoff เดิมทุกประการ — ไม่แตะกลไกกันถามซ้ำเดิม 2 ชั้นเลย เป็นตาข่ายรองรับเพิ่มคนละจุด — ไม่แตะ Web Chat/Gemini/lib/sheet.ts/lib/prompts.ts เลย</div>
 
+<h2>9.77 ตาข่ายรองรับรอบ 2: กันถามคำถามเดิมซ้ำเป๊ะได้ handoffMsg แทน (เพิ่ม 2026-10-24 — เรื่องที่ 112, LINE + Facebook)</h2>
+<p>หลังเรื่องที่ 111 เจอเคสจริงอีกรอบ: ถามซ้ำครั้งที่ 2 ได้ "ขณะนี้อยู่นอกเวลาทำการ..." ครั้งที่ 3 ได้ "รับทราบค่ะ" จากกลไก last_bot_reply dedup ซึ่งทำงานได้เฉพาะตอน reply ไม่ใช่ NOT_FOUND — ยืนยันว่าเป็นคนละเส้นทาง: Gemini ตอบ handoffMsg ตรงๆ ผ่าน &lt;out_of_scope_triggers&gt; อย่างไม่คงที่ ให้คำถามที่เพิ่งตอบสำเร็จ ไม่ใช่ NOT_FOUND ที่แก้ไปแล้วในเรื่องที่ 111</p>
+<div class="ok">เพิ่มเช็คแบบเดียวกับเรื่องที่ 111 อีกจุด หลัง branch NOT_FOUND: ถ้า reply === handoffMsg และคำถามตรงกับ last_question เป๊ะ ไม่เชื่อผล handoffMsg ส่ง "ข้อมูลเดิมตามที่แจ้งไปนะคะ..." แทน — ยังคง code-level (deterministic) ไม่แตะ lib/prompts.ts</div>
+<div class="tip">ทดสอบก่อน commit: เพิ่ม block เดียวกัน 1 จุดต่อไฟล์ (2 ไฟล์) <code>tsc --noEmit</code> ผ่านสมบูรณ์ — ยังไม่ได้ทดสอบยิงจริง (ต้องพึ่ง Gemini ตอบ handoffMsg ไม่คงที่ให้คำถามซ้ำ จำลองในเครื่องไม่ได้)</div>
+<div class="tip">ทำไมไม่กระทบอย่างอื่น: เงื่อนไขแคบมาก ต้องมีทั้ง reply === handoffMsg และคำถามตรงกับ last_question พร้อมกัน — เคส handoff จริงไม่เคยตอบสำเร็จมาก่อนจึงไม่เข้าเงื่อนไข ยังส่ง handoff ปกติ — ไม่กระทบจุดอื่นที่ส่ง handoffMsg ตรงๆ (pendingTrigger, shouldHandoffImmediate) เพราะคนละจุดโค้ด — ไม่ชนเรื่องที่ 111/last_bot_reply dedup — ไม่แตะ Web Chat/Gemini/lib/prompts.ts เลย</div>
+
 <h3>วิธีคืนบอทให้ดูแลลูกค้าต่อ</h3>
 <p>หลังแอดมินดูแลลูกค้าเสร็จ ส่งข้อความนี้ใน chat เดิม:</p>
 <div class="box">คืนบอท:U90fcb65b2a3ca8cb6bac22a3cd6ef26f</div>
