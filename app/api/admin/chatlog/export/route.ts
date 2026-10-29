@@ -44,8 +44,13 @@ export async function GET(req: NextRequest) {
       .reverse()
     filename = `chat_${userId.slice(-8)}_${new Date().toISOString().slice(0, 10)}.xlsx`
   } else if (all) {
-    // ── ทุกบทสนทนา ทุกวัน (จำกัดตาม TTL 30 วัน + 200 ข้อความ/user ที่ lib/chatlog.ts เก็บไว้) ──
-    const rawUsers = await redis.zrange('chatlog:convs', 0, -1) as unknown[]
+    // เจอเคสจริง (เรื่องที่ 114, 2026-10-29): ดึงเต็ม 30 วันใช้เวลาเกิน maxDuration=60s (เพดานสูงสุด
+    // ของ Vercel Hobby tier ขยับเพิ่มไม่ได้แล้ว) จน 504 FUNCTION_INVOCATION_TIMEOUT — ลดขอบเขตเหลือ
+    // 7 วันล่าสุดแทน 30 วันเต็ม ลดปริมาณข้อมูลลงเหลือ ~23% ลดโอกาส timeout — ข้อมูลเก่ากว่านี้ยังดึงได้
+    // ผ่านปุ่ม "ดาวน์โหลดรายวัน" (เลือกวันที่ต้องการ) ซึ่งข้อมูลต่อวันน้อยกว่ามากจึงไม่ timeout
+    const ALL_WINDOW_DAYS = 7
+    const from = Date.now() - ALL_WINDOW_DAYS * 24 * 3600 * 1000
+    const rawUsers = await redis.zrange('chatlog:convs', from, Date.now(), { byScore: true }) as unknown[]
     const userArr: string[] = Array.isArray(rawUsers)
       ? rawUsers.filter(x => typeof x === 'string').map(String)
       : []
@@ -59,12 +64,12 @@ export async function GET(req: NextRequest) {
         if (!list) continue
         const entries = list
           .map(s => { try { return (typeof s === 'string' ? JSON.parse(s) : s) as ChatLogEntry } catch { return null } })
-          .filter((e): e is ChatLogEntry => e !== null)
+          .filter((e): e is ChatLogEntry => e !== null && e.ts >= from)
         rows.push(...entries)
       }
       rows.sort((a, b) => a.ts - b.ts)
     }
-    filename = `chat_all_${new Date().toISOString().slice(0, 10)}.xlsx`
+    filename = `chat_last7days_${new Date().toISOString().slice(0, 10)}.xlsx`
   } else {
     // ── All conversations for date (default = today Bangkok) ──
     const dateStr = date ?? new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)

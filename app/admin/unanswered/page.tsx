@@ -305,7 +305,7 @@ export default function AdminPage() {
                 disabled={chatConvs.length === 0}
                 style={{ ...btn('#1a5c9e'), display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
               >
-                ⬇ ดาวน์โหลดทั้งหมด
+                ⬇ ดาวน์โหลด 7 วันล่าสุด
               </button>
             </div>
           </div>
